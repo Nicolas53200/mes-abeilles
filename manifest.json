@@ -1,0 +1,31 @@
+{
+  "name": "Mes Abeilles",
+  "short_name": "Mes Abeilles",
+  "description": "Carnet de rucher numérique — gérez vos ruches, visites et conformité",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#071225",
+  "theme_color": "#071225",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "productivity",
+    "agriculture"
+  ],
+  "screenshots": []
+}
