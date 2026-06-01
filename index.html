@@ -979,6 +979,57 @@
     .export-btn.dl{background:var(--grad-orange);color:#120d05}
     .export-btn.imp{background:#fff;border:1px solid var(--line);color:#0b1328}
 
+
+    /* v11 — Visites dynamiques */
+    .new-visit-btn{
+      background:var(--grad-orange) !important;
+      color:#120d05 !important;
+      box-shadow:0 12px 28px rgba(255,122,24,.28);
+    }
+    .visit-form-card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:14px;
+      margin-top:12px;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+    }
+    .visit-form-head{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      margin-bottom:12px;
+    }
+    .close-small{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:12px;
+      padding:8px 10px;
+      font-weight:950;
+      color:#64748b;
+    }
+    .empty-history{
+      background:#f8fafc;
+      border:1px dashed #cbd5e1;
+      color:#64748b;
+      border-radius:18px;
+      padding:18px;
+      text-align:center;
+      margin-bottom:12px;
+    }
+
+
+    /* v12 — Reine dynamique */
+    .queen-form-card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:14px;
+      margin-top:12px;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+    }
+
     @media print{
       body *{visibility:hidden}
       .print-only,.print-only *{visibility:visible}
@@ -1115,6 +1166,8 @@
 const state = {
   page: "home",
   hiveSection: "resume",
+  visitFormOpen: false,
+  queenFormOpen: false,
   profil: {},
   hives: [],
   onboardingDone: false,
@@ -1494,6 +1547,8 @@ function tabButton(section, icon, label){
 
 function setHiveSection(section){
   state.hiveSection = section;
+  if(section !== "visites") state.visitFormOpen = false;
+  if(section !== "reine") state.queenFormOpen = false;
   if(!state.currentHive) state.currentHive = state.hives[0];
   const h = state.currentHive;
   document.getElementById("content").innerHTML = hiveDetail(h.code);
@@ -1502,6 +1557,285 @@ function setHiveSection(section){
     const active = document.querySelector(".hive-tab.active");
     if(active) active.scrollIntoView({behavior:"smooth", inline:"center", block:"nearest"});
   }, 20);
+}
+
+function ensureHiveArrays(h){
+  if(!h.visites) h.visites = [];
+  if(!h.alertList && Array.isArray(h.alertes)) h.alertList = h.alertes;
+  return h;
+}
+
+function openNewVisit(){
+  state.hiveSection = "visites";
+  state.visitFormOpen = true;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+    setTimeout(()=>{
+      const form = document.getElementById("newVisitForm");
+      if(form) form.scrollIntoView({behavior:"smooth", block:"start"});
+    }, 30);
+  }
+}
+
+function closeNewVisit(){
+  state.visitFormOpen = false;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+  }
+}
+
+function todayISO(){
+  return new Date().toISOString().slice(0,10);
+}
+
+function formatDateFr(iso){
+  if(!iso) return new Date().toLocaleDateString("fr-FR");
+  if(/^\d{4}-\d{2}-\d{2}$/.test(iso)){
+    const [y,m,d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  }
+  return iso;
+}
+
+function visitHistoryHTML(h){
+  ensureHiveArrays(h);
+  if(!h.visites.length){
+    return '<div class="empty-history">Aucune visite enregistrée pour cette ruche.</div>';
+  }
+  return h.visites.map(v => record(
+    formatDateFr(v.date),
+    v.title || "Inspection",
+    [
+      "Reine : " + (v.reine || "—"),
+      "Couvain : " + (v.couvain || "—"),
+      "Réserves : " + (v.reserves || "—"),
+      "Varroa : " + (v.varroa || "—"),
+      v.notes ? "Notes : " + v.notes : ""
+    ].filter(Boolean).join(" · ")
+  )).join("");
+}
+
+function visitFormHTML(h){
+  const d = todayISO();
+  return `
+    <div class="visit-form-card" id="newVisitForm">
+      <div class="visit-form-head">
+        <h3 style="margin:0">Nouvelle visite</h3>
+        <button class="close-small" onclick="closeNewVisit()">Fermer</button>
+      </div>
+
+      <div class="field"><label>Date</label><input id="visitDate" type="date" value="${d}"></div>
+      <div class="field"><label>Reine présente</label><select id="visitReine"><option>Oui</option><option>Non</option><option>Incertain</option></select></div>
+      <div class="field"><label>Reine vue</label><select id="visitReineVue"><option>Non</option><option>Oui</option></select></div>
+      <div class="field"><label>Ponte</label><select id="visitPonte"><option>Normale</option><option>Faible</option><option>Absente</option><option>À vérifier</option></select></div>
+      <div class="field"><label>Couvain</label><select id="visitCouvain"><option>Normal</option><option>Abondant</option><option>Faible</option><option>Absent</option></select></div>
+      <div class="field"><label>Cellules royales</label><select id="visitCellules"><option>Non</option><option>Oui</option><option>À surveiller</option></select></div>
+      <div class="field"><label>Réserves miel</label><select id="visitReserves"><option>Bonnes</option><option>Moyennes</option><option>Faibles</option></select></div>
+      <div class="field"><label>Pollen</label><select id="visitPollen"><option>Normal</option><option>Abondant</option><option>Faible</option></select></div>
+      <div class="field"><label>Varroa</label><select id="visitVarroa"><option>Non contrôlé</option><option>Comptage OK</option><option>Présence faible</option><option>Présence forte</option><option>Traitement à prévoir</option></select></div>
+      <div class="field"><label>Frelons</label><select id="visitFrelons"><option>Non</option><option>Quelques-uns</option><option>Forte pression</option><option>Piège à poser</option><option>Piège posé</option></select></div>
+      <div class="field"><label>Notes</label><textarea id="visitNotes" placeholder="Observations, cadres vus, actions à prévoir…"></textarea></div>
+
+      <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px" onclick="saveVisit()">Enregistrer la visite</button>
+    </div>
+  `;
+}
+
+function saveVisit(){
+  const h = state.currentHive || state.hives[0];
+  if(!h) return;
+  ensureHiveArrays(h);
+
+  const visit = {
+    id: "visit_" + Date.now(),
+    date: document.getElementById("visitDate")?.value || todayISO(),
+    title: "Inspection complète",
+    reine: document.getElementById("visitReine")?.value || "Oui",
+    reineVue: document.getElementById("visitReineVue")?.value || "Non",
+    ponte: document.getElementById("visitPonte")?.value || "Normale",
+    couvain: document.getElementById("visitCouvain")?.value || "Normal",
+    cellules: document.getElementById("visitCellules")?.value || "Non",
+    reserves: document.getElementById("visitReserves")?.value || "Bonnes",
+    pollen: document.getElementById("visitPollen")?.value || "Normal",
+    varroa: document.getElementById("visitVarroa")?.value || "Non contrôlé",
+    frelons: document.getElementById("visitFrelons")?.value || "Non",
+    notes: document.getElementById("visitNotes")?.value.trim() || ""
+  };
+
+  h.visites.unshift(visit);
+  h.date = formatDateFr(visit.date);
+
+  const alerts = [];
+  if(visit.reine !== "Oui") alerts.push("Vérifier présence de reine");
+  if(visit.ponte === "Absente" || visit.ponte === "À vérifier") alerts.push("Contrôler la ponte");
+  if(visit.reserves === "Faibles") alerts.push("Prévoir nourrissement");
+  if(visit.varroa === "Présence forte" || visit.varroa === "Traitement à prévoir") alerts.push("Traitement varroa à prévoir");
+  if(visit.frelons === "Forte pression" || visit.frelons === "Piège à poser") alerts.push("Surveiller / piéger les frelons");
+
+  h.alerts = alerts.length;
+  h.status = alerts.length ? "À surveiller" : "Bonne activité";
+  h.alertList = alerts;
+
+  state.visitFormOpen = false;
+  saveState();
+
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+  showToast("✓ Visite enregistrée");
+}
+
+
+
+function ensureQueenArrays(h){
+  if(!h.reines) h.reines = [];
+  return h;
+}
+
+function queenCurrentHTML(h){
+  ensureQueenArrays(h);
+  const q = h.reines[0] || {
+    annee:"2026",
+    couleur:"Blanc",
+    race:"Buckfast",
+    origine:"Division",
+    marquee:"Oui",
+    statut:"En ponte",
+    date:""
+  };
+  return `
+    <div class="info-grid">
+      ${infoBox("Année", q.annee || "—")}
+      ${infoBox("Couleur", q.couleur || "—")}
+      ${infoBox("Race", q.race || "—")}
+      ${infoBox("Origine", q.origine || "—")}
+      ${infoBox("Marquée", q.marquee || "—")}
+      ${infoBox("Statut", q.statut || "—")}
+    </div>
+  `;
+}
+
+function queenHistoryHTML(h){
+  ensureQueenArrays(h);
+  if(!h.reines.length){
+    return '<div class="empty-history">Aucune reine enregistrée. Ajoute ou remplace une reine pour créer l’historique.</div>';
+  }
+  return h.reines.map(q => record(
+    formatDateFr(q.date),
+    "Reine " + (q.annee || "—") + " · " + (q.couleur || "Sans couleur"),
+    [
+      "Race : " + (q.race || "—"),
+      "Origine : " + (q.origine || "—"),
+      "Marquée : " + (q.marquee || "—"),
+      "Statut : " + (q.statut || "—"),
+      q.notes ? "Notes : " + q.notes : ""
+    ].filter(Boolean).join(" · ")
+  )).join("");
+}
+
+function openQueenForm(){
+  state.hiveSection = "reine";
+  state.queenFormOpen = true;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+    setTimeout(()=>{
+      const form = document.getElementById("queenForm");
+      if(form) form.scrollIntoView({behavior:"smooth", block:"start"});
+    }, 30);
+  }
+}
+
+function closeQueenForm(){
+  state.queenFormOpen = false;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+  }
+}
+
+function queenFormHTML(h){
+  return `
+    <div class="queen-form-card" id="queenForm">
+      <div class="visit-form-head">
+        <h3 style="margin:0">Ajouter / remplacer reine</h3>
+        <button class="close-small" onclick="closeQueenForm()">Fermer</button>
+      </div>
+
+      <div class="field"><label>Date introduction / remplacement</label><input id="queenDate" type="date" value="${todayISO()}"></div>
+      <div class="field"><label>Année naissance</label><input id="queenYear" type="number" value="${new Date().getFullYear()}"></div>
+      <div class="field"><label>Couleur marquage</label>
+        <select id="queenColor">
+          <option>Blanc</option><option>Jaune</option><option>Rouge</option><option>Vert</option><option>Bleu</option><option>Non marquée</option>
+        </select>
+      </div>
+      <div class="field"><label>Race</label>
+        <select id="queenRace">
+          <option>Buckfast</option>
+          <option>Abeille noire locale</option>
+          <option>Carnica</option>
+          <option>Italienne / Ligustica</option>
+          <option>Caucasienne</option>
+          <option>Hybride</option>
+          <option>Inconnue</option>
+          <option>Autre</option>
+        </select>
+      </div>
+      <div class="field"><label>Origine</label>
+        <select id="queenOrigin">
+          <option>Division</option><option>Achat</option><option>Élevage maison</option><option>Essaim naturel</option><option>Remérage naturel</option><option>Introduction cellule royale</option>
+        </select>
+      </div>
+      <div class="field"><label>Marquée</label><select id="queenMarked"><option>Oui</option><option>Non</option></select></div>
+      <div class="field"><label>Statut</label>
+        <select id="queenStatus">
+          <option>En ponte</option><option>À vérifier</option><option>Remérage</option><option>Absente</option><option>Remplacée</option>
+        </select>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="queenNotes" placeholder="Ex : reine douce, bonne ponte, remplacement suite à essaimage…"></textarea></div>
+
+      <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px" onclick="saveQueen()">Enregistrer la reine</button>
+    </div>
+  `;
+}
+
+function saveQueen(){
+  const h = state.currentHive || state.hives[0];
+  if(!h) return;
+  ensureQueenArrays(h);
+
+  const q = {
+    id: "queen_" + Date.now(),
+    date: document.getElementById("queenDate")?.value || todayISO(),
+    annee: document.getElementById("queenYear")?.value || String(new Date().getFullYear()),
+    couleur: document.getElementById("queenColor")?.value || "Non renseignée",
+    race: document.getElementById("queenRace")?.value || "Inconnue",
+    origine: document.getElementById("queenOrigin")?.value || "Non renseignée",
+    marquee: document.getElementById("queenMarked")?.value || "Non",
+    statut: document.getElementById("queenStatus")?.value || "À vérifier",
+    notes: document.getElementById("queenNotes")?.value.trim() || ""
+  };
+
+  h.reines.unshift(q);
+
+  if(q.statut === "Absente" || q.statut === "À vérifier"){
+    h.status = "À surveiller";
+    h.alerts = Math.max(Number(h.alerts || 0), 1);
+    if(!h.alertList) h.alertList = [];
+    if(!h.alertList.includes("Vérifier la reine")) h.alertList.push("Vérifier la reine");
+  }
+
+  state.queenFormOpen = false;
+  saveState();
+
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+  showToast("✓ Reine enregistrée");
 }
 
 function hiveSectionContent(h){
@@ -1531,7 +1865,7 @@ function hiveSectionContent(h){
       </button>
       <div style="font-size:12px;color:#64748b;text-align:center;margin-top:8px">La colonie est prête ? Convertis cette ruchette en ruche.</div>
     ` : ''}
-    <button class="big-action primary" style="width:100%;min-height:76px;margin-top:12px" onclick="setHiveSection('visites')">＋ Nouvelle visite</button>
+    <button class="big-action primary new-visit-btn" style="width:100%;min-height:76px;margin-top:12px" onclick="openNewVisit()">＋ Nouvelle visite</button>
   `;
 
   if(s === "ruchette") return `
@@ -1568,45 +1902,33 @@ function hiveSectionContent(h){
   if(s === "visites") return `
     <h2 class="detail-title">Visites</h2>
     <div class="detail-sub">Historique et nouvelle inspection</div>
-    ${record("10/03/2026","Inspection complète","Reine vue, ponte OK, réserves correctes, colonie forte.")}
-    ${record("20/01/2026","Visite rapide","Force moyenne, peu de couvain, réserves basses.")}
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Nouvelle visite</h3>
-      ${fieldInput("Date","date")}
-      ${fieldSelect("Reine présente",["Oui","Non","Incertain"])}
-      ${fieldSelect("Reine vue",["Oui","Non"])}
-      ${fieldSelect("Ponte",["Normale","Faible","Absente","À vérifier"])}
-      ${fieldSelect("Couvain",["Absent","Faible","Normal","Abondant"])}
-      ${fieldSelect("Cellules royales",["Non","Oui","À surveiller"])}
-      ${fieldSelect("Réserves miel",["Faibles","Moyennes","Bonnes"])}
-      ${fieldSelect("Pollen",["Faible","Normal","Abondant"])}
-      ${fieldSelect("Varroa",["Non contrôlé","Comptage OK","Présence faible","Présence forte","Traitement à prévoir"])}
-      ${fieldSelect("Frelons",["Non","Quelques-uns","Forte pression","Piège à poser","Piège posé"])}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Visite')">Enregistrer</button>
+
+    <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openNewVisit()">＋ Nouvelle visite</button>
+
+    ${state.visitFormOpen ? visitFormHTML(h) : ""}
+
+    <div id="visitesHistory">
+      ${visitHistoryHTML(h)}
     </div>
   `;
-  if(s === "reine") return `
+    if(s === "reine") return `
     <h2 class="detail-title">Reine</h2>
-    <div class="info-grid">
-      ${infoBox("Année", "2026")}
-      ${infoBox("Couleur", "Blanc")}
-      ${infoBox("Race", "Buckfast")}
-      ${infoBox("Origine", "Division")}
-      ${infoBox("Marquée", "Oui")}
-      ${infoBox("Statut", "En ponte")}
-    </div>
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Ajouter / remplacer reine</h3>
-      ${fieldInput("Année naissance","number","2026")}
-      ${fieldSelect("Couleur marquage",["Blanc","Jaune","Rouge","Vert","Bleu"])}
-      ${fieldInput("Race","text","Buckfast, noire locale, carnica...")}
-      ${fieldSelect("Origine",["Division","Achat","Élevage maison","Essaim naturel","Remérage naturel"])}
-      ${fieldSelect("Marquée",["Oui","Non"])}
-      ${fieldInput("Date introduction","date")}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Reine')">Enregistrer</button>
+    <div class="detail-sub">Fiche reine actuelle et historique des remplacements</div>
+
+    ${queenCurrentHTML(h)}
+
+    <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px;margin:12px 0" onclick="openQueenForm()">
+      ♛ Ajouter / remplacer la reine
+    </button>
+
+    ${state.queenFormOpen ? queenFormHTML(h) : ""}
+
+    <h3 style="margin:18px 0 10px">Historique reine</h3>
+    <div id="queenHistory">
+      ${queenHistoryHTML(h)}
     </div>
   `;
-  if(s === "divisions") return `
+    if(s === "divisions") return `
     <h2 class="detail-title">Divisions</h2>
     ${record("12/04/2026","Division effectuée","3 cadres de couvain, 1 cadre de miel, cellule royale présente.")}
     <div class="record" style="background:#fff">
@@ -1858,6 +2180,17 @@ function fieldInput(label, type="text", placeholder=""){
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_v9";
 
+
+function normalizeHives(){
+  if(!Array.isArray(state.hives)) state.hives = [];
+  state.hives.forEach(h=>{
+    if(!h.visites) h.visites = [];
+    if(!h.reines) h.reines = [];
+    if(typeof h.alerts !== "number") h.alerts = Number(h.alerts || 0);
+    if(!h.status) h.status = "Bonne activité";
+  });
+}
+
 function saveState(){
   try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){}
 }
@@ -1873,6 +2206,7 @@ function loadState(){
       if(saved.hiveTourDone) state.hiveTourDone = saved.hiveTourDone;
     }
   } catch(e){}
+  normalizeHives();
 }
 
 function showToast(msg){
@@ -2060,7 +2394,7 @@ function createHiveDemo(){
     date: new Date().toLocaleDateString("fr-FR"),
     theme: type === "ruchette" ? "lavender" : "acacia",
     tag: type === "ruchette" ? "purple" : "orange",
-    alerts: 0, honey: 0
+    alerts: 0, honey: 0, visites: [], reines: []
   });
   saveState();
   showToast("✓ " + (type === "ruchette" ? "Ruchette" : "Ruche") + " " + code + " créée");
@@ -2653,6 +2987,8 @@ function openHive(code){
     return;
   }
   state.hiveSection = "resume";
+  state.visitFormOpen = false;
+  state.queenFormOpen = false;
   state.currentHive = h;
   setHero("", "", true);
   setNav("ruchers");

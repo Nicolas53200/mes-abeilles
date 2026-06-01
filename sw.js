@@ -1,7 +1,7 @@
 // Service Worker — Mes Abeilles
 // Permet le fonctionnement hors ligne
 
-const CACHE_NAME = 'mes-abeilles-v1';
+const CACHE_NAME = 'mes-abeilles-v12';
 const FILES_TO_CACHE = [
   './index.html',
   './manifest.json',
