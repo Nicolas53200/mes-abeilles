@@ -1079,6 +1079,14 @@
     .score-scale{display:grid;gap:7px;margin-top:14px;font-size:13px;color:#475569}
     .score-scale div{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:8px 10px}
 
+
+    /* v17 — Finalisation audit */
+    .media-thumb{width:100%;max-height:160px;object-fit:cover;border-radius:16px;border:1px solid var(--line);margin-top:10px}
+    .doc-chip{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-top:8px;font-weight:850}
+    .alert-hive-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:14px;margin-bottom:12px;box-shadow:0 8px 20px rgba(15,23,42,.06)}
+    .alert-list{display:grid;gap:8px;margin-top:10px}
+    .alert-item{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:14px;padding:10px;font-weight:850;font-size:14px}
+
     @media print{
       body *{visibility:hidden}
       .print-only,.print-only *{visibility:visible}
@@ -1425,18 +1433,34 @@ function toggleNewHiveFields(type){
   document.getElementById("champsRuchette").style.display  = type === "ruchette"  ? "block" : "none";
 }
 function alerts(){
+  const items = state.hives
+    .map(h=>{
+      const list = [];
+      if(Array.isArray(h.alertList)) list.push(...h.alertList);
+      if(Number(h.alerts || 0) > 0 && !list.length) list.push(h.status || "À surveiller");
+      return {h, list:[...new Set(list.filter(Boolean))]};
+    })
+    .filter(x=>x.list.length);
+
+  if(!items.length){
+    return `<section class="panel"><h2>Alertes</h2><div class="empty-history">Aucune alerte active pour le moment.</div></section>`;
+  }
+
   return `
     <section class="panel">
       <h2>Alertes</h2>
-      <div class="hive-status warn" style="margin-bottom:12px">Ruche Tournesol · 3 alertes</div>
-      <p>⚠️ Traitement varroa à prévoir</p>
-      <p>⚠️ Vérifier les réserves</p>
-      <p>⚠️ Forte pression de frelons</p>
+      ${items.map(({h,list})=>`
+        <div class="alert-hive-card" onclick="openHive('${h.code}')" style="cursor:pointer">
+          <div class="record-head"><span>${h.type === "ruchette" ? "Ruchette" : "Ruche"} ${h.name}</span><span>${list.length} alerte(s)</span></div>
+          <div class="record-body">${h.apiary} · ${h.code}</div>
+          <div class="alert-list">${list.map(a=>`<div class="alert-item">⚠️ ${a}</div>`).join("")}</div>
+        </div>
+      `).join("")}
     </section>
   `;
 }
-
 function admin(){
+  const p = state.profil || {};
   return `
     <section class="panel">
       <h2>Administration</h2>
@@ -1448,63 +1472,56 @@ function admin(){
           <input type="file" accept=".json" class="file-hidden" onchange="importData(this)">
         </label>
       </div>
-      <div class="notice" style="margin-bottom:16px">L'export génère un fichier <strong>.json</strong> que tu peux sauvegarder sur PC ou partager. L'import restaure toutes tes données depuis ce fichier.</div>
+      <div class="notice" style="margin-bottom:16px">L'export génère un fichier <strong>.json</strong> que tu peux sauvegarder sur PC ou partager.</div>
 
-      <div class="field"><label>Prénom</label><input value="" placeholder="Ton prénom"></div>
-      <div class="field"><label>Nom</label><input value="" placeholder="Ton nom"></div>
-      <div class="field"><label>Entreprise</label><input value="" placeholder="Ex : Rucher des Collines"></div>
-      <div class="field"><label>SIRET</label><input placeholder="Numéro SIRET"></div>
-      <div class="field"><label>Adresse</label><input placeholder="Adresse de l'entreprise"></div>
+      <div class="field"><label>Prénom</label><input id="adminPrenom" value="${p.prenom || ""}" placeholder="Ton prénom"></div>
+      <div class="field"><label>Nom</label><input id="adminNom" value="${p.nom || ""}" placeholder="Ton nom"></div>
+      <div class="field"><label>Entreprise</label><input id="adminEntreprise" value="${p.entreprise || ""}" placeholder="Ex : Rucher des Collines"></div>
+      <div class="field"><label>NAPI</label><input id="adminNapi" value="${p.napi || ""}" placeholder="Numéro d'apiculteur"></div>
+      <div class="field"><label>SIRET</label><input id="adminSiret" value="${p.siret || ""}" placeholder="Numéro SIRET"></div>
+      <div class="field"><label>Adresse</label><input id="adminAdresse" value="${p.adresse || ""}" placeholder="Adresse de l'entreprise"></div>
+      <div class="field"><label>Téléphone</label><input id="adminTelephone" value="${p.telephone || ""}" placeholder="Téléphone"></div>
+      <div class="field"><label>Email</label><input id="adminEmail" value="${p.email || ""}" placeholder="Email"></div>
+
       <div class="field"><label>Logo</label>
         <input type="file" accept="image/*" id="adminLogo" class="file-hidden" onchange="onFileSelected('adminLogo','adminLogoLabel')">
-        <div id="adminLogoLabel" class="mini-help" style="margin-bottom:6px">Aucun fichier</div>
+        <div id="adminLogoLabel" class="mini-help" style="margin-bottom:6px">${p.logoName || "Aucun fichier"}</div>
         <div class="file-actions">
           <button class="file-btn" onclick="fileUpload('adminLogo')">📁 Choisir</button>
           <button class="file-btn primary" onclick="scanDocument('adminLogo')">📷 Scanner</button>
         </div>
       </div>
+
       <button class="big-action primary" style="width:100%;min-height:78px" onclick="saveAdmin()">Enregistrer</button>
     </section>
 
     <section class="panel" style="margin-top:0">
       <h2 style="display:flex;align-items:center;gap:10px">💬 <span>Proposer une idée</span></h2>
       <p style="color:#64748b;font-size:14px;margin:0 0 16px">Tu as une suggestion, un bug à signaler ou une amélioration à proposer ? Envoie-la directement au concepteur.</p>
-
-      <div class="field">
-        <label for="fbType">Type de message</label>
-        <select id="fbType">
-          <option value="idee">💡 Idée / nouvelle fonctionnalité</option>
-          <option value="bug">🐛 Bug ou problème</option>
-          <option value="amelioration">✏️ Amélioration d'une fonction existante</option>
-          <option value="autre">💬 Autre</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="fbSujet">Sujet</label>
-        <input id="fbSujet" placeholder="En une phrase, de quoi s'agit-il ?">
-      </div>
-
-      <div class="field">
-        <label for="fbMessage">Description</label>
-        <textarea id="fbMessage" placeholder="Décris ton idée ou le problème rencontré en détail…" style="min-height:120px"></textarea>
-      </div>
-
-      <div class="field">
-        <label for="fbEmail">Ton e-mail (facultatif)</label>
-        <input id="fbEmail" type="email" placeholder="Pour qu'on puisse te répondre">
-      </div>
-
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="sendFeedback()">
-        Envoyer au concepteur 📨
-      </button>
+      <div class="field"><label for="fbType">Type de message</label><select id="fbType"><option value="idee">💡 Idée / nouvelle fonctionnalité</option><option value="bug">🐛 Bug ou problème</option><option value="amelioration">✏️ Amélioration</option><option value="autre">💬 Autre</option></select></div>
+      <div class="field"><label for="fbSujet">Sujet</label><input id="fbSujet" placeholder="En une phrase, de quoi s'agit-il ?"></div>
+      <div class="field"><label for="fbMessage">Description</label><textarea id="fbMessage" placeholder="Décris ton idée ou le problème rencontré en détail…" style="min-height:120px"></textarea></div>
+      <div class="field"><label for="fbEmail">Ton e-mail (facultatif)</label><input id="fbEmail" placeholder="Pour pouvoir te répondre si besoin"></div>
+      <button class="big-action primary" style="width:100%;min-height:72px" onclick="sendFeedback()">Envoyer l'idée</button>
     </section>
   `;
 }
-
 function saveAdmin(){
-  const inputs = document.querySelectorAll("#content .field input, #content .field select");
-  fakeSave("Administration");
+  if(!state.profil) state.profil = {};
+  state.profil.prenom = document.getElementById("adminPrenom")?.value || "";
+  state.profil.nom = document.getElementById("adminNom")?.value || "";
+  state.profil.entreprise = document.getElementById("adminEntreprise")?.value || "";
+  state.profil.napi = document.getElementById("adminNapi")?.value || "";
+  state.profil.siret = document.getElementById("adminSiret")?.value || "";
+  state.profil.adresse = document.getElementById("adminAdresse")?.value || "";
+  state.profil.telephone = document.getElementById("adminTelephone")?.value || "";
+  state.profil.email = document.getElementById("adminEmail")?.value || "";
+  const logoInput = document.getElementById("adminLogo");
+  if(logoInput && logoInput.files && logoInput.files[0]){
+    state.profil.logoName = logoInput.files[0].name;
+  }
+  saveState();
+  showToast("✓ Administration enregistrée");
   const hasHives = state.hives.length > 0;
   if(!hasHives){
     setTimeout(()=>{
@@ -1513,7 +1530,6 @@ function saveAdmin(){
     }, 800);
   }
 }
-
 function sendFeedback(){
   const type  = document.getElementById("fbType")?.value || "";
   const sujet = document.getElementById("fbSujet")?.value.trim() || "";
@@ -2262,6 +2278,49 @@ function updateHiveStatusFromScore(h, scoreResult){
 }
 
 
+
+function saveHiveFile(kind){
+  const h = state.currentHive || state.hives[0];
+  if(!h) return;
+  ensureModuleArrays(h);
+
+  const isPhoto = kind === "photos";
+  const fileInput = document.getElementById(isPhoto ? "photoFile" : "docFile");
+  const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+  const desc = document.getElementById(isPhoto ? "photoDesc" : "docDesc")?.value || "";
+  const category = isPhoto ? "Photo" : (document.getElementById("docCategory")?.value || "Document");
+
+  if(!file){
+    showToast("⚠️ Sélectionne un fichier");
+    return;
+  }
+
+  const item = {id: kind + "_" + Date.now(), date: todayISO(), name: file.name, size: Math.round(file.size / 1024) + " Ko", desc: desc, category: category};
+
+  if(isPhoto && file.type && file.type.startsWith("image/")){
+    const reader = new FileReader();
+    reader.onload = function(){
+      item.dataUrl = reader.result;
+      h.photos.unshift(item);
+      saveState();
+      document.getElementById("content").innerHTML = hiveDetail(h.code);
+      drawAllQr(h.code);
+      showToast("✓ Photo enregistrée");
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
+
+  if(kind === "documents"){
+    h.documents.unshift(item);
+    saveState();
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+    showToast("✓ Document enregistré");
+  }
+}
+
+
 function hiveSectionContent(h){
   const s = state.hiveSection;
   const isRuchette = h.type === "ruchette";
@@ -2528,9 +2587,20 @@ function hiveSectionContent(h){
   if(s === "photos") return `
     <h2 class="detail-title">Photos</h2>
     <p style="color:#64748b">Ajoute des photos de couvain, reine, hausses ou entrée de ruche.</p>
-    <input type="file" accept="image/*">
+    <div class="module-form-card">
+      <div class="field"><label>Photo</label><input id="photoFile" type="file" accept="image/*"></div>
+      <div class="field"><label>Description</label><input id="photoDesc" placeholder="Ex : couvain, reine, entrée de ruche…"></div>
+      <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveHiveFile('photos')">Enregistrer la photo</button>
+    </div>
+    ${moduleHistoryHTML(h,"photos","Aucune photo enregistrée.", p => `
+      <div class="record">
+        <div class="record-head"><span>${p.desc || "Photo"}</span><span>${formatDateFr(p.date)}</span></div>
+        <div class="record-body">${p.name || "Fichier image"}</div>
+        ${p.dataUrl ? `<img class="media-thumb" src="${p.dataUrl}" alt="${p.desc || "Photo ruche"}">` : ""}
+      </div>
+    `)}
   `;
-  if(s === "conformite") return `
+    if(s === "conformite") return `
     <h2 class="detail-title">Conformité apiculteur</h2>
     <div class="detail-sub">Champs et documents selon ton profil.</div>
 
@@ -2588,15 +2658,21 @@ function hiveSectionContent(h){
   if(s === "documents") return `
     <h2 class="detail-title">Documents</h2>
     <div class="detail-sub">Classe tes justificatifs par catégorie.</div>
-
-    ${documentBucket("Déclaration de ruches / NAPI","Récépissé annuel, attestation NAPI, déclaration de colonies.")}
-    ${documentBucket("Registre sanitaire","Ordonnances, traitements varroa, suivi sanitaire, mortalités.")}
-    ${documentBucket("Vente & étiquetage","SIRET, étiquettes miel, lots, analyses, traçabilité.")}
-    ${documentBucket("Assurances & adhésions","RC, assurance pro, GDSA, syndicats apicoles.")}
-    ${documentBucket("Factures","Matériel, ruches, essaims, reines, nourrissement.")}
-    ${documentBucket("Transhumance","Déplacements de ruches, emplacements, GPS, autorisations éventuelles.")}
+    <div class="module-form-card">
+      <div class="field"><label>Catégorie</label><select id="docCategory"><option>Déclaration de ruches / NAPI</option><option>Registre sanitaire</option><option>Vente & étiquetage</option><option>Assurances & adhésions</option><option>Factures</option><option>Transhumance</option><option>Autre</option></select></div>
+      <div class="field"><label>Document</label><input id="docFile" type="file" accept="image/*,.pdf"></div>
+      <div class="field"><label>Description</label><input id="docDesc" placeholder="Ex : récépissé déclaration, facture, analyse…"></div>
+      <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveHiveFile('documents')">Enregistrer le document</button>
+    </div>
+    ${moduleHistoryHTML(h,"documents","Aucun document enregistré.", d => `
+      <div class="record">
+        <div class="record-head"><span>${d.category || "Document"}</span><span>${formatDateFr(d.date)}</span></div>
+        <div class="record-body">${d.desc || ""}</div>
+        <div class="doc-chip"><span>📄 ${d.name || "Fichier"}</span><span>${d.size || ""}</span></div>
+      </div>
+    `)}
   `;
-  if(s === "qrcode") return `
+    if(s === "qrcode") return `
     <h2 class="detail-title">QR Code</h2>
     <div class="detail-sub">Imprime ce QR code et colle-le sur la ruche.</div>
     <div class="notice" style="margin-bottom:14px">⚠️ <strong>Démo :</strong> ce QR code est <strong>décoratif</strong> et ne peut pas être scanné par une caméra. En production, utiliser une vraie librairie QR (ex : qrcode.js).</div>
