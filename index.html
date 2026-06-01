@@ -1030,6 +1030,28 @@
       box-shadow:0 8px 20px rgba(15,23,42,.06);
     }
 
+
+    /* v13 — Modules dynamiques */
+    .module-form-card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:14px;
+      margin-top:12px;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+    }
+    .module-actions{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:10px;
+      margin:12px 0;
+    }
+    .module-save-btn{
+      background:var(--grad-orange) !important;
+      color:#120d05 !important;
+      box-shadow:0 12px 28px rgba(255,122,24,.28);
+    }
+
     @media print{
       body *{visibility:hidden}
       .print-only,.print-only *{visibility:visible}
@@ -1168,6 +1190,7 @@ const state = {
   hiveSection: "resume",
   visitFormOpen: false,
   queenFormOpen: false,
+  moduleFormOpen: null,
   profil: {},
   hives: [],
   onboardingDone: false,
@@ -1549,6 +1572,7 @@ function setHiveSection(section){
   state.hiveSection = section;
   if(section !== "visites") state.visitFormOpen = false;
   if(section !== "reine") state.queenFormOpen = false;
+  if(state.moduleFormOpen !== section) state.moduleFormOpen = null;
   if(!state.currentHive) state.currentHive = state.hives[0];
   const h = state.currentHive;
   document.getElementById("content").innerHTML = hiveDetail(h.code);
@@ -1680,15 +1704,20 @@ function saveVisit(){
   h.status = alerts.length ? "À surveiller" : "Bonne activité";
   h.alertList = alerts;
 
+  state.hiveSection = "visites";
   state.visitFormOpen = false;
   saveState();
 
   document.getElementById("content").innerHTML = hiveDetail(h.code);
   drawAllQr(h.code);
+
+  setTimeout(()=>{
+    const history = document.getElementById("visitesHistory");
+    if(history) history.scrollIntoView({behavior:"smooth", block:"start"});
+  }, 30);
+
   showToast("✓ Visite enregistrée");
 }
-
-
 
 function ensureQueenArrays(h){
   if(!h.reines) h.reines = [];
@@ -1698,12 +1727,12 @@ function ensureQueenArrays(h){
 function queenCurrentHTML(h){
   ensureQueenArrays(h);
   const q = h.reines[0] || {
-    annee:"2026",
-    couleur:"Blanc",
-    race:"Buckfast",
-    origine:"Division",
-    marquee:"Oui",
-    statut:"En ponte",
+    annee:"—",
+    couleur:"—",
+    race:"—",
+    origine:"—",
+    marquee:"—",
+    statut:"Non renseignée",
     date:""
   };
   return `
@@ -1830,13 +1859,227 @@ function saveQueen(){
     if(!h.alertList.includes("Vérifier la reine")) h.alertList.push("Vérifier la reine");
   }
 
+  state.hiveSection = "reine";
   state.queenFormOpen = false;
   saveState();
 
   document.getElementById("content").innerHTML = hiveDetail(h.code);
   drawAllQr(h.code);
+
+  setTimeout(()=>{
+    const history = document.getElementById("queenHistory");
+    if(history) history.scrollIntoView({behavior:"smooth", block:"start"});
+  }, 30);
+
   showToast("✓ Reine enregistrée");
 }
+
+
+function ensureModuleArrays(h){
+  ensureHiveArrays(h);
+  ensureQueenArrays(h);
+  ["divisions","hausses","recoltes","traitements","frelons","nourrissements","pesees","transhumances","photos","documents"].forEach(k=>{
+    if(!h[k]) h[k] = [];
+  });
+  return h;
+}
+
+function openModuleForm(section){
+  state.hiveSection = section;
+  state.moduleFormOpen = section;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+    setTimeout(()=>{
+      const form = document.getElementById("moduleForm");
+      if(form) form.scrollIntoView({behavior:"smooth", block:"start"});
+    }, 30);
+  }
+}
+
+function closeModuleForm(){
+  state.moduleFormOpen = null;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+  }
+}
+
+function val(id, fallback=""){
+  return document.getElementById(id)?.value || fallback;
+}
+
+function moduleHistoryHTML(h, key, emptyText, formatter){
+  ensureModuleArrays(h);
+  const arr = h[key] || [];
+  if(!arr.length) return `<div class="empty-history">${emptyText}</div>`;
+  return arr.map(formatter).join("");
+}
+
+function saveModule(section){
+  const h = state.currentHive || state.hives[0];
+  if(!h) return;
+  ensureModuleArrays(h);
+
+  if(section === "divisions"){
+    const newCode = val("divisionQrCode", nextHiveCode());
+    const item = {
+      id:"division_" + Date.now(),
+      date: val("divisionDate", todayISO()),
+      newName: val("divisionName", h.name + "-2"),
+      newCode,
+      couvain: val("divisionCouvain","3"),
+      miel: val("divisionMiel","1"),
+      cellule: val("divisionCellule","Oui"),
+      reine: val("divisionReine","Non"),
+      notes: val("divisionNotes","")
+    };
+    h.divisions.unshift(item);
+    if(!state.hives.some(x => x.code === newCode)){
+      state.hives.push({
+        code:newCode,
+        name:item.newName,
+        apiary:h.apiary,
+        type:"ruchette",
+        status:"En cours d'établissement",
+        date:formatDateFr(item.date),
+        theme:"lavender",
+        tag:"purple",
+        alerts:1,
+        honey:0,
+        origine:"Division de " + h.name,
+        rucheOrigine:h.code,
+        datePeuplement:item.date,
+        taille:"5 cadres",
+        visites:[], reines:[], divisions:[], hausses:[], recoltes:[], traitements:[], frelons:[], nourrissements:[], pesees:[], transhumances:[], photos:[], documents:[]
+      });
+    }
+  }
+
+  if(section === "hausses"){
+    const item = {
+      id:"hausse_" + Date.now(),
+      date: val("hausseDate", todayISO()),
+      action: val("hausseAction","Hausse posée"),
+      nombre: Number(val("hausseNombre","1")),
+      retrait: val("hausseRetrait",""),
+      notes: val("hausseNotes","")
+    };
+    h.hausses.unshift(item);
+  }
+
+  if(section === "miel"){
+    const item = {
+      id:"recolte_" + Date.now(),
+      date: val("mielDate", todayISO()),
+      kilos: Number(val("mielKilos","0")),
+      type: val("mielType","Miel de printemps"),
+      butinage: val("mielButinage","Lavande"),
+      notes: val("mielNotes","")
+    };
+    h.recoltes.unshift(item);
+    h.honey = (h.recoltes || []).reduce((s,r)=>s+Number(r.kilos||0),0);
+  }
+
+  if(section === "traitements"){
+    const item = {
+      id:"traitement_" + Date.now(),
+      date: val("traitementDate", todayISO()),
+      type: val("traitementType","Apivar (lanières)"),
+      retrait: val("traitementRetrait",""),
+      quantite: val("traitementQuantite","2 lanières"),
+      notes: val("traitementNotes","")
+    };
+    h.traitements.unshift(item);
+    if(item.type.toLowerCase().includes("varroa") || item.type.includes("Apivar") || item.type.includes("Apitraz") || item.type.includes("Apistan")){
+      if(!h.alertList) h.alertList = [];
+      if(item.retrait && !h.alertList.includes("Retrait traitement prévu : " + item.retrait)){
+        h.alertList.push("Retrait traitement prévu : " + item.retrait);
+      }
+    }
+  }
+
+  if(section === "frelons"){
+    const item = {
+      id:"frelon_" + Date.now(),
+      date: val("frelonDate", todayISO()),
+      observation: val("frelonObservation","Aucun"),
+      piege: val("frelonPiege","Non posé"),
+      captures: val("frelonCaptures","0"),
+      notes: val("frelonNotes","")
+    };
+    h.frelons.unshift(item);
+    if(item.observation === "Forte pression" || item.observation === "Nid signalé à proximité"){
+      h.status = "À surveiller";
+      h.alerts = Math.max(Number(h.alerts||0),1);
+      if(!h.alertList) h.alertList = [];
+      if(!h.alertList.includes("Surveiller les frelons")) h.alertList.push("Surveiller les frelons");
+    }
+  }
+
+  if(section === "nourrissement"){
+    const item = {
+      id:"nourrissement_" + Date.now(),
+      date: val("nourrissementDate", todayISO()),
+      type: val("nourrissementType","Sirop 50/50"),
+      quantite: val("nourrissementQuantite","2 L"),
+      notes: val("nourrissementNotes","")
+    };
+    h.nourrissements.unshift(item);
+  }
+
+  if(section === "pesees"){
+    const item = {
+      id:"pesee_" + Date.now(),
+      date: val("peseeDate", todayISO()),
+      total: val("peseeTotal",""),
+      gauche: val("peseeGauche",""),
+      droite: val("peseeDroite",""),
+      notes: val("peseeNotes","")
+    };
+    h.pesees.unshift(item);
+  }
+
+  if(section === "transhumance"){
+    const item = {
+      id:"transhumance_" + Date.now(),
+      date: val("transDate", todayISO()),
+      depart: val("transDepart", h.apiary),
+      arrivee: val("transArrivee",""),
+      gps: val("transhumanceGps",""),
+      nb: val("transNb","1"),
+      floraison: val("transFloraison","Lavande"),
+      notes: val("transNotes","")
+    };
+    h.transhumances.unshift(item);
+  }
+
+  state.moduleFormOpen = null;
+  saveState();
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+  showToast("✓ " + sectionLabel(section) + " enregistré");
+}
+
+function sectionLabel(section){
+  return {
+    divisions:"Division",
+    hausses:"Hausse",
+    miel:"Récolte",
+    traitements:"Traitement",
+    frelons:"Frelons",
+    nourrissement:"Nourrissement",
+    pesees:"Pesée",
+    transhumance:"Transhumance"
+  }[section] || "Élément";
+}
+
+function moduleFormHeader(title){
+  return `<div class="visit-form-head"><h3 style="margin:0">${title}</h3><button class="close-small" onclick="closeModuleForm()">Fermer</button></div>`;
+}
+
 
 function hiveSectionContent(h){
   const s = state.hiveSection;
@@ -1865,7 +2108,6 @@ function hiveSectionContent(h){
       </button>
       <div style="font-size:12px;color:#64748b;text-align:center;margin-top:8px">La colonie est prête ? Convertis cette ruchette en ruche.</div>
     ` : ''}
-    <button class="big-action primary new-visit-btn" style="width:100%;min-height:76px;margin-top:12px" onclick="openNewVisit()">＋ Nouvelle visite</button>
   `;
 
   if(s === "ruchette") return `
@@ -1903,7 +2145,11 @@ function hiveSectionContent(h){
     <h2 class="detail-title">Visites</h2>
     <div class="detail-sub">Historique et nouvelle inspection</div>
 
-    <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openNewVisit()">＋ Nouvelle visite</button>
+    ${!state.visitFormOpen ? `
+      <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openNewVisit()">
+        ＋ Nouvelle visite
+      </button>
+    ` : ""}
 
     ${state.visitFormOpen ? visitFormHTML(h) : ""}
 
@@ -1930,26 +2176,32 @@ function hiveSectionContent(h){
   `;
     if(s === "divisions") return `
     <h2 class="detail-title">Divisions</h2>
-    ${record("12/04/2026","Division effectuée","3 cadres de couvain, 1 cadre de miel, cellule royale présente.")}
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Créer une division</h3>
-      ${fieldInput("Date division","date")}
-      ${fieldInput("Nom nouvelle ruche","text","Lavande-2")}
-      <div class="field">
-        <label>Code QR nouvelle ruche</label>
-        <div class="qr-proposal">
-          <input id="divisionQrCode" value="${nextHiveCode()}" placeholder="Ex : RUCHE-004">
-          <button class="see-all" type="button" onclick="proposeDivisionQr()">Proposer</button>
+    <div class="detail-sub">Créer une division et générer automatiquement la nouvelle ruchette.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('divisions')">＋ Créer une division</button>
+    ${state.moduleFormOpen === "divisions" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Créer une division")}
+        <div class="field"><label>Date division</label><input id="divisionDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Nom nouvelle ruche / ruchette</label><input id="divisionName" placeholder="Ex : ${h.name}-2"></div>
+        <div class="field">
+          <label>Code QR proposé</label>
+          <div class="qr-proposal">
+            <input id="divisionQrCode" value="${nextHiveCode()}" placeholder="Ex : RUCHE-004">
+            <button class="see-all" type="button" onclick="proposeDivisionQr()">Proposer</button>
+          </div>
+          <div class="mini-help">La division créera une nouvelle ruchette avec ce QR code.</div>
         </div>
-        <div class="mini-help">L'application propose le prochain code disponible. Il servira à générer le QR code imprimable de la nouvelle ruche.</div>
+        <div class="field"><label>Cadres de couvain</label><input id="divisionCouvain" type="number" value="3"></div>
+        <div class="field"><label>Cadres de miel</label><input id="divisionMiel" type="number" value="1"></div>
+        <div class="field"><label>Cellule royale</label><select id="divisionCellule"><option>Oui</option><option>Non</option></select></div>
+        <div class="field"><label>Reine fécondée</label><select id="divisionReine"><option>Non</option><option>Oui</option></select></div>
+        <div class="field"><label>Notes</label><textarea id="divisionNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('divisions')">Enregistrer la division</button>
       </div>
-      ${fieldInput("Cadres de couvain","number","3")}
-      ${fieldInput("Cadres de miel","number","1")}
-      ${fieldSelect("Cellule royale",["Oui","Non"])}
-      ${fieldSelect("Reine fécondée",["Non","Oui"])}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Division')">Enregistrer</button>
-    </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"divisions","Aucune division enregistrée.", d => record(formatDateFr(d.date), "Division → " + d.newName, `${d.couvain} cadres couvain · ${d.miel} cadres miel · QR : ${d.newCode} · Cellule royale : ${d.cellule} · Reine fécondée : ${d.reine}`))}
   `;
+  
   if(s === "actions") return `
     <h2 class="detail-title">Actions</h2>
     ${record("À faire","Contrôle varroa","Contrôler chute naturelle ou prévoir traitement.")}
@@ -1957,99 +2209,141 @@ function hiveSectionContent(h){
   `;
   if(s === "hausses") return `
     <h2 class="detail-title">Hausses</h2>
-    ${record("05/03/2026","Hausse posée","+1 hausse posée.")}
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Ajouter / retirer hausse</h3>
-      ${fieldSelect("Action",["Hausse posée","Hausse retirée"])}
-      ${fieldInput("Nombre","number","1")}
-      ${fieldInput("Date de pose","date")}
-      ${fieldInput("Date de retrait","date")}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Hausse')">Enregistrer</button>
-    </div>
+    <div class="detail-sub">Pose, retrait et suivi des hausses.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('hausses')">＋ Ajouter une action hausse</button>
+    ${state.moduleFormOpen === "hausses" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Ajouter / retirer hausse")}
+        <div class="field"><label>Action</label><select id="hausseAction"><option>Hausse posée</option><option>Hausse retirée</option></select></div>
+        <div class="field"><label>Date</label><input id="hausseDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Nombre</label><input id="hausseNombre" type="number" value="1"></div>
+        <div class="field"><label>Date de retrait prévue / réelle</label><input id="hausseRetrait" type="date"></div>
+        <div class="field"><label>Notes</label><textarea id="hausseNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('hausses')">Enregistrer</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"hausses","Aucune hausse enregistrée.", x => record(formatDateFr(x.date), x.action, `${x.nombre} hausse(s)` + (x.retrait ? ` · Retrait : ${formatDateFr(x.retrait)}` : "") + (x.notes ? ` · ${x.notes}` : "")))}
   `;
+  
   if(s === "miel") return `
     <h2 class="detail-title">Miel</h2>
-    ${infoBox("Total récolté", h.honey + " kg")}
-    ${record("20/06/2026","Miel de printemps","12 kg · lavande, acacia, ronces.")}
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Nouvelle récolte</h3>
-      ${fieldInput("Date récolte","date")}
-      ${fieldInput("Kilos récoltés","number","12")}
-      ${fieldSelect("Type de miel",["Miel de printemps","Miel d’été","Miel toutes fleurs","Miel de lavande","Miel de châtaignier","Miel de forêt","Autre"])}
-      ${fieldSelect("Butinage principal",["Lavande","Acacia","Châtaignier","Tilleul","Tournesol","Colza","Ronces","Trèfle","Bruyère","Forêt","Prairie","Miellat"])}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Récolte')">Enregistrer</button>
-    </div>
+    <div class="detail-sub">Récoltes et types de miel.</div>
+    ${infoBox("Total récolté", (h.honey || 0) + " kg")}
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin:12px 0" onclick="openModuleForm('miel')">＋ Nouvelle récolte</button>
+    ${state.moduleFormOpen === "miel" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Nouvelle récolte")}
+        <div class="field"><label>Date récolte</label><input id="mielDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Kilos récoltés</label><input id="mielKilos" type="number" step="0.1" placeholder="Ex : 12"></div>
+        <div class="field"><label>Type de miel</label><select id="mielType"><option>Miel de printemps</option><option>Miel d’été</option><option>Miel toutes fleurs</option><option>Miel de lavande</option><option>Miel de châtaignier</option><option>Miel de forêt</option><option>Autre</option></select></div>
+        <div class="field"><label>Butinage principal</label><select id="mielButinage"><option>Lavande</option><option>Acacia</option><option>Châtaignier</option><option>Tilleul</option><option>Tournesol</option><option>Colza</option><option>Ronces</option><option>Trèfle</option><option>Bruyère</option><option>Forêt</option><option>Prairie</option><option>Miellat</option></select></div>
+        <div class="field"><label>Notes</label><textarea id="mielNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('miel')">Enregistrer la récolte</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"recoltes","Aucune récolte enregistrée.", r => record(formatDateFr(r.date), r.type + " · " + r.kilos + " kg", `Butinage : ${r.butinage}` + (r.notes ? ` · ${r.notes}` : "")))}
   `;
+  
   if(s === "traitements") return `
     <h2 class="detail-title">Traitements</h2>
-    ${record("20/02/2026","Apivar (lanières)","2 lanières posées · retrait prévu.")}
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Ajouter traitement</h3>
-      ${fieldSelect("Type",["Apivar (lanières)","Apitraz (lanières)","Apistan (lanières)","Acide oxalique","Acide formique","Thymol","Comptage varroa","Désinfection matériel","Contrôle maladie","Contrôle fausse teigne"])}
-      ${fieldInput("Date pose / action","date")}
-      ${fieldInput("Retrait prévu","date")}
-      ${fieldInput("Quantité / dose","text","2 lanières")}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Traitement')">Enregistrer</button>
-    </div>
+    <div class="detail-sub">Varroa, contrôles sanitaires et dates de retrait.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('traitements')">＋ Ajouter traitement</button>
+    ${state.moduleFormOpen === "traitements" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Ajouter traitement")}
+        <div class="field"><label>Type</label><select id="traitementType"><option>Apivar (lanières)</option><option>Apitraz (lanières)</option><option>Apistan (lanières)</option><option>VarroMed</option><option>Api-Bioxal</option><option>Acide oxalique</option><option>Acide formique</option><option>Thymol</option><option>MAQS</option><option>Comptage varroa</option><option>Désinfection matériel</option><option>Contrôle maladie</option><option>Contrôle fausse teigne</option></select></div>
+        <div class="field"><label>Date pose / action</label><input id="traitementDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Retrait prévu</label><input id="traitementRetrait" type="date"></div>
+        <div class="field"><label>Quantité / dose</label><input id="traitementQuantite" placeholder="Ex : 2 lanières"></div>
+        <div class="field"><label>Notes</label><textarea id="traitementNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('traitements')">Enregistrer le traitement</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"traitements","Aucun traitement enregistré.", t => record(formatDateFr(t.date), t.type, `${t.quantite || "—"}` + (t.retrait ? ` · Retrait prévu : ${formatDateFr(t.retrait)}` : "") + (t.notes ? ` · ${t.notes}` : "")))}
   `;
+  
   if(s === "frelons") return `
     <h2 class="detail-title">Frelons</h2>
-    ${record("Observation","Quelques frelons","Pression faible autour de la ruche.")}
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Suivi frelons</h3>
-      ${fieldSelect("Observation",["Aucun","Quelques frelons","Forte pression","Nid signalé à proximité"])}
-      ${fieldSelect("Piège",["Non posé","Piège installé","Piège retiré","Piège à contrôler"])}
-      ${fieldInput("Date","date")}
-      ${fieldInput("Nombre de pièges","number","1")}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Frelons')">Enregistrer</button>
-    </div>
+    <div class="detail-sub">Pression frelons, pièges et captures.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('frelons')">＋ Ajouter observation</button>
+    ${state.moduleFormOpen === "frelons" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Suivi frelons")}
+        <div class="field"><label>Date</label><input id="frelonDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Observation</label><select id="frelonObservation"><option>Aucun</option><option>Quelques frelons</option><option>Forte pression</option><option>Nid signalé à proximité</option></select></div>
+        <div class="field"><label>Piège</label><select id="frelonPiege"><option>Non posé</option><option>Piège installé</option><option>Piège retiré</option><option>Piège à contrôler</option></select></div>
+        <div class="field"><label>Captures estimées</label><input id="frelonCaptures" type="number" value="0"></div>
+        <div class="field"><label>Notes</label><textarea id="frelonNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('frelons')">Enregistrer</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"frelons","Aucune observation frelons.", f => record(formatDateFr(f.date), f.observation, `${f.piege} · Captures : ${f.captures}` + (f.notes ? ` · ${f.notes}` : "")))}
   `;
+  
   if(s === "nourrissement") return `
     <h2 class="detail-title">Nourrissement</h2>
-    ${record("01/02/2026","Sirop 1:1","2 litres distribués.")}
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Ajouter nourrissement</h3>
-      ${fieldSelect("Type",["Sirop 50/50","Sirop 70/30","Candi","Protéines"])}
-      ${fieldInput("Quantité","text","2 L")}
-      ${fieldInput("Date","date")}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Nourrissement')">Enregistrer</button>
-    </div>
+    <div class="detail-sub">Sirop, candi, protéines.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('nourrissement')">＋ Ajouter nourrissement</button>
+    ${state.moduleFormOpen === "nourrissement" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Ajouter nourrissement")}
+        <div class="field"><label>Date</label><input id="nourrissementDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Type</label><select id="nourrissementType"><option>Sirop 50/50</option><option>Sirop 70/30</option><option>Candi</option><option>Protéines</option></select></div>
+        <div class="field"><label>Quantité</label><input id="nourrissementQuantite" placeholder="Ex : 2 L, 1 kg"></div>
+        <div class="field"><label>Notes</label><textarea id="nourrissementNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('nourrissement')">Enregistrer</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"nourrissements","Aucun nourrissement enregistré.", n => record(formatDateFr(n.date), n.type, `${n.quantite || "—"}` + (n.notes ? ` · ${n.notes}` : "")))}
   `;
+  
   if(s === "transhumance") return `
     <h2 class="detail-title">Transhumance</h2>
-    ${record("20/06/2026","Déplacement prévu","Rucher du Verger → Plateau de Lavande · 15 ruches")}
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Nouveau déplacement</h3>
-      ${fieldInput("Date déplacement","date")}
-      ${fieldInput("Départ","text","Rucher du Verger")}
-      ${fieldInput("Arrivée","text","Plateau de Lavande")}
-      <div class="assist-card">
-        <div class="assist-row">
-          <div class="field" style="margin-bottom:0">
-            <label>GPS arrivée</label>
-            <input id="transhumanceGps" placeholder="Latitude, longitude" oninput="updateMapLink('transhumance')">
+    <div class="detail-sub">Déplacements, coordonnées GPS et floraisons recherchées.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('transhumance')">＋ Nouveau déplacement</button>
+    ${state.moduleFormOpen === "transhumance" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Nouveau déplacement")}
+        <div class="field"><label>Date déplacement</label><input id="transDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Départ</label><input id="transDepart" value="${h.apiary || ""}"></div>
+        <div class="field"><label>Arrivée</label><input id="transArrivee" placeholder="Ex : Plateau de Lavande"></div>
+        <div class="assist-card">
+          <div class="assist-row">
+            <div class="field" style="margin-bottom:0">
+              <label>GPS arrivée</label>
+              <input id="transhumanceGps" placeholder="Latitude, longitude" oninput="updateMapLink('transhumance')">
+            </div>
+            <button class="assist-btn" onclick="getGPS('transhumance')">GPS</button>
           </div>
-          <button class="assist-btn" onclick="getGPS('transhumance')">GPS</button>
+          <a id="transhumanceMapLink" class="map-link" style="display:none" target="_blank" rel="noopener">📍 Ouvrir dans la carte</a>
         </div>
-        <a id="transhumanceMapLink" class="map-link" style="display:none" target="_blank" rel="noopener">📍 Ouvrir dans la carte</a>
+        <div class="field"><label>Nombre de ruches</label><input id="transNb" type="number" value="1"></div>
+        <div class="field"><label>Floraison recherchée</label><select id="transFloraison"><option>Lavande</option><option>Acacia</option><option>Châtaignier</option><option>Tilleul</option><option>Tournesol</option><option>Colza</option><option>Bruyère</option><option>Miellat</option><option>Autre</option></select></div>
+        <div class="field"><label>Notes</label><textarea id="transNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('transhumance')">Enregistrer</button>
       </div>
-      ${fieldInput("Nombre de ruches","number","1")}
-      ${fieldSelect("Floraison recherchée",["Lavande","Acacia","Châtaignier","Tilleul","Tournesol","Colza","Bruyère","Miellat","Autre"])}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Transhumance')">Enregistrer</button>
-    </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"transhumances","Aucune transhumance enregistrée.", t => record(formatDateFr(t.date), `${t.depart} → ${t.arrivee}`, `${t.nb} ruche(s) · ${t.floraison}` + (t.gps ? ` · GPS : ${t.gps}` : "") + (t.notes ? ` · ${t.notes}` : "")))}
   `;
+  
   if(s === "pesees") return `
     <h2 class="detail-title">Pesées</h2>
-    ${record("10/03/2026","Poids estimé","42 kg")}
-    <div class="record" style="background:#fff">
-      <h3 style="margin:0 0 12px">Nouvelle pesée</h3>
-      ${fieldInput("Date","date")}
-      ${fieldInput("Poids total kg","number","42")}
-      ${fieldInput("Arrière gauche kg","number")}
-      ${fieldInput("Arrière droite kg","number")}
-      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Pesée')">Enregistrer</button>
-    </div>
+    <div class="detail-sub">Poids total ou pesée arrière gauche / droite.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('pesees')">＋ Nouvelle pesée</button>
+    ${state.moduleFormOpen === "pesees" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Nouvelle pesée")}
+        <div class="field"><label>Date</label><input id="peseeDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Poids total kg</label><input id="peseeTotal" type="number" step="0.1"></div>
+        <div class="field"><label>Arrière gauche kg</label><input id="peseeGauche" type="number" step="0.1"></div>
+        <div class="field"><label>Arrière droite kg</label><input id="peseeDroite" type="number" step="0.1"></div>
+        <div class="field"><label>Notes</label><textarea id="peseeNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('pesees')">Enregistrer</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"pesees","Aucune pesée enregistrée.", p => record(formatDateFr(p.date), "Pesée", `Total : ${p.total || "—"} kg · G : ${p.gauche || "—"} kg · D : ${p.droite || "—"} kg` + (p.notes ? ` · ${p.notes}` : "")))}
   `;
+  
   if(s === "photos") return `
     <h2 class="detail-title">Photos</h2>
     <p style="color:#64748b">Ajoute des photos de couvain, reine, hausses ou entrée de ruche.</p>
@@ -2186,6 +2480,16 @@ function normalizeHives(){
   state.hives.forEach(h=>{
     if(!h.visites) h.visites = [];
     if(!h.reines) h.reines = [];
+    if(!h.divisions) h.divisions = [];
+    if(!h.hausses) h.hausses = [];
+    if(!h.recoltes) h.recoltes = [];
+    if(!h.traitements) h.traitements = [];
+    if(!h.frelons) h.frelons = [];
+    if(!h.nourrissements) h.nourrissements = [];
+    if(!h.pesees) h.pesees = [];
+    if(!h.transhumances) h.transhumances = [];
+    if(!h.photos) h.photos = [];
+    if(!h.documents) h.documents = [];
     if(typeof h.alerts !== "number") h.alerts = Number(h.alerts || 0);
     if(!h.status) h.status = "Bonne activité";
   });
@@ -2394,7 +2698,7 @@ function createHiveDemo(){
     date: new Date().toLocaleDateString("fr-FR"),
     theme: type === "ruchette" ? "lavender" : "acacia",
     tag: type === "ruchette" ? "purple" : "orange",
-    alerts: 0, honey: 0, visites: [], reines: []
+    alerts: 0, honey: 0, visites: [], reines: [], divisions: [], hausses: [], recoltes: [], traitements: [], frelons: [], nourrissements: [], pesees: [], transhumances: [], photos: [], documents: []
   });
   saveState();
   showToast("✓ " + (type === "ruchette" ? "Ruchette" : "Ruche") + " " + code + " créée");
@@ -2989,6 +3293,7 @@ function openHive(code){
   state.hiveSection = "resume";
   state.visitFormOpen = false;
   state.queenFormOpen = false;
+  state.moduleFormOpen = null;
   state.currentHive = h;
   setHero("", "", true);
   setNav("ruchers");
