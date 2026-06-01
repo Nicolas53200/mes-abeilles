@@ -1052,6 +1052,33 @@
       box-shadow:0 12px 28px rgba(255,122,24,.28);
     }
 
+
+    /* v16 — Score colonie */
+    .status-score-card{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:18px;
+      padding:13px;
+      cursor:pointer;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+    }
+    .status-score-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .status-score-label{font-size:12px;color:#64748b;font-weight:850}
+    .status-score-value{font-size:18px;font-weight:950;margin-top:4px}
+    .score-bar{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:10px}
+    .score-bar-fill{height:100%;border-radius:999px;background:var(--grad-orange)}
+    .score-info{width:28px;height:28px;border-radius:50%;background:#f1f5f9;color:#334155;display:flex;align-items:center;justify-content:center;font-weight:950;flex:0 0 auto}
+    .score-modal{position:fixed;inset:0;background:rgba(3,7,18,.55);display:none;align-items:flex-end;justify-content:center;z-index:260}
+    .score-modal.open{display:flex}
+    .score-modal-panel{width:min(430px,100vw);max-height:86vh;overflow:auto;background:#fff;border-radius:28px 28px 0 0;padding:20px;box-shadow:0 -20px 50px rgba(0,0,0,.25)}
+    .score-line{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)}
+    .score-line:last-child{border-bottom:0}
+    .score-line-title{font-weight:900}
+    .score-line-detail{font-size:13px;color:#64748b;margin-top:3px}
+    .score-points{font-weight:950;color:#0f172a;white-space:nowrap}
+    .score-scale{display:grid;gap:7px;margin-top:14px;font-size:13px;color:#475569}
+    .score-scale div{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+
     @media print{
       body *{visibility:hidden}
       .print-only,.print-only *{visibility:visible}
@@ -1069,6 +1096,20 @@
   </div>
 
   <div id="toast" class="toast"></div>
+
+  <div id="scoreModal" class="score-modal" onclick="closeScoreModal(event)">
+    <div class="score-modal-panel" onclick="event.stopPropagation()">
+      <div class="between" style="align-items:center;margin-bottom:12px">
+        <div>
+          <h2 class="panel-title" style="margin:0">Analyse de la colonie</h2>
+          <div class="muted" id="scoreModalSub">Score ruche</div>
+        </div>
+        <button class="icon-btn" style="background:#f1f5f9;color:#0f172a;width:42px;height:42px" onclick="closeScoreModal()">×</button>
+      </div>
+      <div id="scoreModalContent"></div>
+    </div>
+  </div>
+
 
   <!-- Splash screen -->
   <div id="splash" class="splash">
@@ -1212,7 +1253,7 @@ function hiveCard(h){
         <h3 class="hive-title">${isRuchette ? 'Ruchette' : 'Ruche'} ${h.name}</h3>
         <div class="hive-apiary">${h.apiary}</div>
         <div class="hive-status ${warn ? 'warn' : ''}">
-          <span class="status-dot"></span>${h.status}
+          <span class="status-dot"></span>${h.statusIcon ? h.statusIcon + " " : ""}${h.status || latestVisitScore(h).status.label}
         </div>
         <div class="visit-label">Dernière visite</div>
         <div class="visit-date">📅 ${h.date}</div>
@@ -1630,17 +1671,22 @@ function visitHistoryHTML(h){
   if(!h.visites.length){
     return '<div class="empty-history">Aucune visite enregistrée pour cette ruche.</div>';
   }
-  return h.visites.map(v => record(
-    formatDateFr(v.date),
-    v.title || "Inspection",
-    [
-      "Reine : " + (v.reine || "—"),
-      "Couvain : " + (v.couvain || "—"),
-      "Réserves : " + (v.reserves || "—"),
-      "Varroa : " + (v.varroa || "—"),
-      v.notes ? "Notes : " + v.notes : ""
-    ].filter(Boolean).join(" · ")
-  )).join("");
+  return h.visites.map(v => {
+    const sr = (typeof v.score === "number") ? {score:v.score, status:scoreStatus(v.score)} : calculateVisitScore(v);
+    return record(
+      formatDateFr(v.date),
+      `${sr.status.icon} ${sr.status.label} · ${sr.score}/100`,
+      [
+        "Reine : " + (v.reine || "—"),
+        "Ponte : " + (v.ponte || "—"),
+        "Couvain : " + (v.couvain || "—"),
+        "Réserves : " + (v.reserves || "—"),
+        "Varroa : " + (v.varroa || "—"),
+        "Frelons : " + (v.frelons || "—"),
+        v.notes ? "Notes : " + v.notes : ""
+      ].filter(Boolean).join(" · ")
+    );
+  }).join("");
 }
 
 function visitFormHTML(h){
@@ -1658,6 +1704,7 @@ function visitFormHTML(h){
       <div class="field"><label>Ponte</label><select id="visitPonte"><option>Normale</option><option>Faible</option><option>Absente</option><option>À vérifier</option></select></div>
       <div class="field"><label>Couvain</label><select id="visitCouvain"><option>Normal</option><option>Abondant</option><option>Faible</option><option>Absent</option></select></div>
       <div class="field"><label>Cellules royales</label><select id="visitCellules"><option>Non</option><option>Oui</option><option>À surveiller</option></select></div>
+      <div class="field"><label>Population / force</label><select id="visitForce"><option>Forte</option><option>Moyenne</option><option>Faible</option></select></div>
       <div class="field"><label>Réserves miel</label><select id="visitReserves"><option>Bonnes</option><option>Moyennes</option><option>Faibles</option></select></div>
       <div class="field"><label>Pollen</label><select id="visitPollen"><option>Normal</option><option>Abondant</option><option>Faible</option></select></div>
       <div class="field"><label>Varroa</label><select id="visitVarroa"><option>Non contrôlé</option><option>Comptage OK</option><option>Présence faible</option><option>Présence forte</option><option>Traitement à prévoir</option></select></div>
@@ -1683,6 +1730,7 @@ function saveVisit(){
     ponte: document.getElementById("visitPonte")?.value || "Normale",
     couvain: document.getElementById("visitCouvain")?.value || "Normal",
     cellules: document.getElementById("visitCellules")?.value || "Non",
+    force: document.getElementById("visitForce")?.value || "Forte",
     reserves: document.getElementById("visitReserves")?.value || "Bonnes",
     pollen: document.getElementById("visitPollen")?.value || "Normal",
     varroa: document.getElementById("visitVarroa")?.value || "Non contrôlé",
@@ -1690,8 +1738,15 @@ function saveVisit(){
     notes: document.getElementById("visitNotes")?.value.trim() || ""
   };
 
+  const scoreResult = calculateVisitScore(visit);
+  visit.score = scoreResult.score;
+  visit.scoreStatus = scoreResult.status.label;
+  visit.scoreIcon = scoreResult.status.icon;
+  visit.scoreDetails = scoreResult.parts;
+
   h.visites.unshift(visit);
   h.date = formatDateFr(visit.date);
+  updateHiveStatusFromScore(h, scoreResult);
 
   const alerts = [];
   if(visit.reine !== "Oui") alerts.push("Vérifier présence de reine");
@@ -1700,8 +1755,11 @@ function saveVisit(){
   if(visit.varroa === "Présence forte" || visit.varroa === "Traitement à prévoir") alerts.push("Traitement varroa à prévoir");
   if(visit.frelons === "Forte pression" || visit.frelons === "Piège à poser") alerts.push("Surveiller / piéger les frelons");
 
+  if(h.visites.length > 1 && typeof h.visites[1].score === "number" && h.visites[1].score - visit.score >= 15){
+    alerts.push("Dégradation rapide détectée : -" + (h.visites[1].score - visit.score) + " points");
+  }
+
   h.alerts = alerts.length;
-  h.status = alerts.length ? "À surveiller" : "Bonne activité";
   h.alertList = alerts;
 
   state.hiveSection = "visites";
@@ -1716,7 +1774,7 @@ function saveVisit(){
     if(history) history.scrollIntoView({behavior:"smooth", block:"start"});
   }, 30);
 
-  showToast("✓ Visite enregistrée");
+  showToast("✓ Visite enregistrée · Score " + visit.score + "/100");
 }
 
 function ensureQueenArrays(h){
@@ -2081,6 +2139,129 @@ function moduleFormHeader(title){
 }
 
 
+
+function scoreStatus(score){
+  if(score >= 90) return {label:"Excellente", icon:"🟢", tone:"excellent"};
+  if(score >= 70) return {label:"Bonne activité", icon:"🟢", tone:"good"};
+  if(score >= 50) return {label:"Surveillance", icon:"🟡", tone:"watch"};
+  if(score >= 30) return {label:"Risque", icon:"🟠", tone:"risk"};
+  return {label:"Critique", icon:"🔴", tone:"critical"};
+}
+
+function pointsFor(value, rules){
+  const key = value || "";
+  return Object.prototype.hasOwnProperty.call(rules, key) ? rules[key] : (rules.default || 0);
+}
+
+function calculateVisitScore(v){
+  const parts = [];
+  function add(name, value, points, max, detail){
+    parts.push({name:name, value:value || "—", points:Number(points || 0), max:max, detail:detail || ""});
+  }
+
+  add("🐝 Reine", v.reine, pointsFor(v.reine, {"Oui":20,"Incertain":10,"Non":0, default:10}), 20, "Présence de la reine");
+  add("🥚 Ponte", v.ponte, pointsFor(v.ponte, {"Normale":20,"Faible":10,"Absente":0,"À vérifier":5, default:10}), 20, "Qualité de ponte");
+  add("👶 Couvain", v.couvain, pointsFor(v.couvain, {"Abondant":15,"Normal":12,"Faible":5,"Absent":0, default:8}), 15, "Volume et régularité du couvain");
+  add("🍯 Réserves", v.reserves, pointsFor(v.reserves, {"Bonnes":15,"Moyennes":8,"Faibles":0, default:8}), 15, "Miel et réserves disponibles");
+  add("🦠 Varroa", v.varroa, pointsFor(v.varroa, {"Comptage OK":15,"Présence faible":10,"Non contrôlé":8,"Présence forte":3,"Traitement à prévoir":0, default:8}), 15, "Pression varroa");
+  add("🛡️ Frelons", v.frelons, pointsFor(v.frelons, {"Non":10,"Quelques-uns":7,"Piège posé":7,"Piège à poser":4,"Forte pression":2,"Nid signalé à proximité":0, default:7}), 10, "Pression frelons");
+  add("👥 Population", v.force || v.population, pointsFor(v.force || v.population, {"Forte":5,"Moyenne":3,"Faible":1, default:3}), 5, "Force estimée de la colonie");
+
+  const score = Math.max(0, Math.min(100, parts.reduce((s,p)=>s + Number(p.points || 0), 0)));
+  const status = scoreStatus(score);
+  return {score:score, status:status, parts:parts};
+}
+
+function latestVisitScore(h){
+  ensureHiveArrays(h);
+  if(h.visites && h.visites.length){
+    const v = h.visites[0];
+    if(typeof v.score === "number" && v.scoreDetails) return {score:v.score, status:scoreStatus(v.score), parts:v.scoreDetails};
+    return calculateVisitScore(v);
+  }
+  const fallback = {
+    reine:"Oui",
+    ponte:"Normale",
+    couvain:"Normal",
+    reserves:"Bonnes",
+    varroa:"Non contrôlé",
+    frelons:"Non",
+    force:h.alerts ? "Moyenne" : "Forte"
+  };
+  return calculateVisitScore(fallback);
+}
+
+function statusScoreHTML(h){
+  const s = latestVisitScore(h);
+  return `
+    <div class="status-score-card" onclick="openScoreModal('${h.code}')">
+      <div class="status-score-top">
+        <div>
+          <div class="status-score-label">Statut colonie</div>
+          <div class="status-score-value">${s.status.icon} ${s.status.label}</div>
+          <div class="mini-help">${s.score} / 100 — cliquez pour comprendre</div>
+        </div>
+        <div class="score-info">i</div>
+      </div>
+      <div class="score-bar"><div class="score-bar-fill" style="width:${s.score}%"></div></div>
+    </div>
+  `;
+}
+
+function openScoreModal(code){
+  const h = state.hives.find(x=>x.code===code) || state.currentHive || state.hives[0];
+  if(!h) return;
+  const s = latestVisitScore(h);
+  const modal = document.getElementById("scoreModal");
+  const sub = document.getElementById("scoreModalSub");
+  const content = document.getElementById("scoreModalContent");
+  if(!modal || !content) return;
+
+  if(sub) sub.textContent = `${h.name} · ${s.status.icon} ${s.status.label} · ${s.score}/100`;
+
+  content.innerHTML = `
+    <div class="status-score-card" style="cursor:default;margin-bottom:14px">
+      <div class="status-score-value">${s.status.icon} ${s.status.label}</div>
+      <div class="mini-help">Score global : ${s.score} / 100</div>
+      <div class="score-bar"><div class="score-bar-fill" style="width:${s.score}%"></div></div>
+    </div>
+
+    ${s.parts.map(p=>`
+      <div class="score-line">
+        <div>
+          <div class="score-line-title">${p.name}</div>
+          <div class="score-line-detail">${p.value} · ${p.detail}</div>
+        </div>
+        <div class="score-points">+${p.points}/${p.max}</div>
+      </div>
+    `).join("")}
+
+    <div class="score-scale">
+      <div>90–100 : 🟢 Excellente</div>
+      <div>70–89 : 🟢 Bonne activité</div>
+      <div>50–69 : 🟡 Surveillance</div>
+      <div>30–49 : 🟠 Risque</div>
+      <div>0–29 : 🔴 Critique</div>
+    </div>
+  `;
+  modal.classList.add("open");
+}
+
+function closeScoreModal(e){
+  if(!e || e.target.id === "scoreModal" || e.target.classList.contains("icon-btn")){
+    document.getElementById("scoreModal")?.classList.remove("open");
+  }
+}
+
+function updateHiveStatusFromScore(h, scoreResult){
+  const s = scoreResult || latestVisitScore(h);
+  h.score = s.score;
+  h.status = s.status.label;
+  h.statusIcon = s.status.icon;
+  return h;
+}
+
+
 function hiveSectionContent(h){
   const s = state.hiveSection;
   const isRuchette = h.type === "ruchette";
@@ -2092,7 +2273,7 @@ function hiveSectionContent(h){
     </div>
     <div class="detail-sub">${h.apiary} · ${h.code}</div>
     <div class="info-grid">
-      ${infoBox("Statut", h.status)}
+      ${statusScoreHTML(h)}
       ${infoBox("Dernière visite", h.date)}
       ${infoBox("Code QR", h.code)}
       ${isRuchette ? infoBox("Type", "Ruchette") : infoBox("Miel récolté", h.honey + " kg")}
