@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
   <title>Mes Abeilles 🐝</title>
   <link rel="manifest" href="./manifest.json">
-  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="apple-touch-icon" href="./icon192.png">
   <style>
     :root{
       --nav:#071225;
@@ -1087,6 +1087,269 @@
     .alert-list{display:grid;gap:8px;margin-top:10px}
     .alert-item{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:14px;padding:10px;font-weight:850;font-size:14px}
 
+    /* ═══════════════════════════════════════════════
+       TABLETTE — min-width 768px
+       Optimisé pour utilisation avec gants
+       Cibles tactiles : minimum 64px de hauteur
+    ════════════════════════════════════════════════ */
+    @media (min-width: 768px) {
+
+      /* ── Conteneur principal élargi ── */
+      .phone {
+        max-width: 900px;
+        padding-bottom: 130px;
+      }
+
+      /* ── Hero plus aéré ── */
+      .hero {
+        padding: 28px 32px 90px;
+      }
+      .brand { font-size: 34px; }
+      .brand img { height: 56px !important; width: 56px !important; }
+      .icon-btn { width: 64px; height: 64px; border-radius: 20px; font-size: 26px; }
+
+      /* ── Stats hero en 3 colonnes larges ── */
+      .hero-stats {
+        gap: 16px;
+      }
+      .stat-icon { width: 58px; height: 58px; font-size: 28px; }
+      .stat-value { font-size: 32px; }
+      .stat-label { font-size: 15px; }
+
+      /* ── Navigation du bas — plus haute, boutons plus larges ── */
+      .bottom {
+        height: 90px;
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+      }
+      .bottom-inner {
+        height: 90px;
+      }
+      .nav-btn {
+        font-size: 14px;
+        padding-top: 10px;
+        gap: 6px;
+      }
+      .nav-icon { font-size: 28px; }
+      .plus {
+        width: 76px;
+        height: 76px;
+        font-size: 48px;
+        margin-top: -38px;
+        border-radius: 26px;
+      }
+
+      /* ── Boutons d'action principaux — taille gants ── */
+      .big-action {
+        min-height: 100px !important;
+        font-size: 22px !important;
+        border-radius: 28px;
+        padding: 20px !important;
+      }
+      .big-action .action-icon { font-size: 40px; }
+
+      /* ── Actions accueil en 2 colonnes ── */
+      .actions {
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      /* ── Cartes ruches en grille 3 colonnes ── */
+      #ruchersGrid {
+        grid-template-columns: repeat(3, 1fr) !important;
+      }
+      .hive-card {
+        min-width: unset;
+        max-width: unset;
+        border-radius: 28px;
+      }
+      .hive-image { height: 120px; }
+      .hive-body { padding: 18px; }
+      .hive-title { font-size: 22px; }
+      .hive-apiary { font-size: 15px; }
+      .hive-status { font-size: 15px; padding: 10px 14px; }
+      .visit-date { font-size: 16px; }
+
+      /* ── Onglets ruche — plus grands ── */
+      .hive-tab {
+        padding: 18px 22px;
+        font-size: 17px;
+        border-radius: 999px;
+        gap: 10px;
+        min-height: 64px;
+      }
+      .hive-tab-icon { font-size: 24px; }
+
+      /* ── Champs de saisie — cibles gants ── */
+      input, select, textarea {
+        padding: 18px 20px;
+        font-size: 18px;
+        border-radius: 20px;
+        min-height: 64px;
+      }
+      textarea { min-height: 140px; }
+      .field label {
+        font-size: 16px;
+        margin-bottom: 8px;
+      }
+
+      /* ── Boutons secondaires — taille gants ── */
+      .assist-btn {
+        padding: 18px 22px;
+        font-size: 17px;
+        min-height: 64px;
+        border-radius: 18px;
+      }
+      .file-btn {
+        padding: 18px 14px;
+        font-size: 16px;
+        min-height: 64px;
+        border-radius: 18px;
+      }
+      .export-btn {
+        padding: 20px;
+        font-size: 17px;
+        min-height: 72px;
+        border-radius: 22px;
+      }
+      .see-all {
+        padding: 14px 22px;
+        font-size: 16px;
+        min-height: 56px;
+        border-radius: 18px;
+      }
+
+      /* ── Cases à cocher conformité — plus grosses ── */
+      .checkline {
+        padding: 16px;
+        border-radius: 18px;
+        gap: 14px;
+      }
+      .checkline input[type="checkbox"] {
+        width: 28px;
+        height: 28px;
+        min-height: 28px;
+        flex: 0 0 28px;
+        border-radius: 8px;
+      }
+      .checkline span { font-size: 16px; }
+
+      /* ── Panneaux et cards ── */
+      .panel {
+        border-radius: 32px;
+        padding: 28px;
+      }
+      .panel h2 { font-size: 32px; }
+      .record {
+        border-radius: 24px;
+        padding: 20px;
+        margin-bottom: 14px;
+      }
+      .record-head { font-size: 17px; }
+      .record-body { font-size: 16px; margin-top: 8px; }
+
+      /* ── Fiche ruche layout 2 colonnes ── */
+      .hive-content-wrap { display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: start; }
+      .hive-tabs {
+        flex-direction: column;
+        overflow-x: unset;
+        overflow-y: auto;
+        gap: 8px;
+        padding: 0;
+        margin: 0;
+        position: sticky;
+        top: 10px;
+        max-height: calc(100vh - 160px);
+      }
+      .hive-tab {
+        border-radius: 20px !important;
+        justify-content: flex-start;
+        padding: 20px 18px;
+      }
+      .detail-panel {
+        border-radius: 32px;
+        padding: 28px;
+        min-height: 600px;
+      }
+      .detail-title { font-size: 36px; }
+
+      /* ── Info grid 3 colonnes sur tablette ── */
+      .info-grid { grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+      .info-box { border-radius: 22px; padding: 18px; }
+      .info-box .label { font-size: 14px; }
+      .info-box .value { font-size: 22px; }
+
+      /* ── Bouton convertir ruchette ── */
+      .convert-btn {
+        min-height: 90px;
+        font-size: 20px;
+        border-radius: 24px;
+      }
+
+      /* ── Splash écran ── */
+      .splash-glow { width: 220px; height: 220px; border-radius: 48px; }
+      .splash-title { font-size: 48px; }
+      .splash-sub { font-size: 20px; }
+      .splash-btn {
+        font-size: 24px;
+        padding: 26px;
+        border-radius: 28px;
+        min-height: 90px;
+      }
+      .splash-feat { padding: 18px 20px; border-radius: 22px; }
+      .splash-feat-icon { font-size: 32px; }
+      .splash-feat-text strong { font-size: 18px; }
+      .splash-feat-text { font-size: 16px; }
+
+      /* ── Coach marks — bulle plus lisible ── */
+      .coach-bubble { width: 460px; padding: 28px; border-radius: 28px; }
+      .coach-title { font-size: 24px; }
+      .coach-body { font-size: 17px; margin-bottom: 22px; }
+      .coach-next { padding: 18px 28px; font-size: 17px; border-radius: 18px; min-height: 60px; }
+      .coach-skip { font-size: 16px; }
+
+      /* ── Guide banner ── */
+      .guide-banner { padding: 22px 24px; border-radius: 28px; }
+      .guide-icon { font-size: 44px; }
+      .guide-title { font-size: 20px; }
+      .guide-sub { font-size: 16px; }
+      .guide-btn { padding: 16px 22px; font-size: 16px; min-height: 60px; border-radius: 18px; }
+
+      /* ── Bouton aide ruche ── */
+      .hive-help-btn {
+        width: 64px; height: 64px;
+        font-size: 26px;
+        bottom: 120px; right: 20px;
+      }
+
+      /* ── Barre recherche ruchers ── */
+      .home-search {
+        padding: 16px 20px;
+        border-radius: 22px;
+        font-size: 18px;
+      }
+      .home-search input { font-size: 18px; }
+
+      /* ── Toast ── */
+      .toast { font-size: 17px; padding: 16px 28px; border-radius: 20px; }
+
+      /* ── QR card ── */
+      .qr-card-small { flex: 0 0 130px; padding: 14px; }
+      .qr-card-small canvas { width: 100px; height: 100px; }
+      .qr-card-small button { font-size: 14px; padding: 10px; border-radius: 14px; }
+
+      /* ── Section titles ── */
+      .section-title { font-size: 34px; }
+    }
+
+    /* ═══════════════════════════════════════════════
+       TABLETTE LARGE — min-width 1024px
+    ════════════════════════════════════════════════ */
+    @media (min-width: 1024px) {
+      .phone { max-width: 1100px; }
+      #ruchersGrid { grid-template-columns: repeat(4, 1fr) !important; }
+      .actions { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
     @media print{
       body *{visibility:hidden}
       .print-only,.print-only *{visibility:visible}
@@ -1234,6 +1497,23 @@
   </div>
 
 <script>
+/* ── LocalStorage ─────────────────────────────────── */
+const LS_KEY = "mesAbeilles_data_v1";
+const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
+const LS_LEGACY_KEYS = [
+  "mesAbeilles_data_v1",
+  "mesAbeilles_data_backup_v1",
+  "mesAbeilles_v17",
+  "mesAbeilles_v16",
+  "mesAbeilles_v15",
+  "mesAbeilles_v14",
+  "mesAbeilles_v13",
+  "mesAbeilles_v12",
+  "mesAbeilles_v11",
+  "mesAbeilles_v10",
+  "mesAbeilles_v9"
+];
+
 const state = {
   page: "home",
   hiveSection: "resume",
@@ -2295,17 +2575,35 @@ function saveHiveFile(kind){
     return;
   }
 
-  const item = {id: kind + "_" + Date.now(), date: todayISO(), name: file.name, size: Math.round(file.size / 1024) + " Ko", desc: desc, category: category};
+  const item = {
+    id: kind + "_" + Date.now(),
+    date: todayISO(),
+    name: file.name,
+    size: Math.round(file.size / 1024) + " Ko",
+    desc: desc,
+    category: category
+  };
 
   if(isPhoto && file.type && file.type.startsWith("image/")){
     const reader = new FileReader();
     reader.onload = function(){
-      item.dataUrl = reader.result;
+      const result = String(reader.result || "");
+
+      // Sécurité Android/localStorage : on ne stocke pas les images trop grosses.
+      // Les données ruche restent sauvegardées.
+      if(result.length < 350000){
+        item.dataUrl = result;
+      } else {
+        item.dataUrl = "";
+        item.previewRemoved = true;
+        item.note = "Aperçu non conservé pour éviter de saturer le stockage local.";
+      }
+
       h.photos.unshift(item);
       saveState();
       document.getElementById("content").innerHTML = hiveDetail(h.code);
       drawAllQr(h.code);
-      showToast("✓ Photo enregistrée");
+      showToast(item.previewRemoved ? "✓ Photo référencée · aperçu non conservé" : "✓ Photo enregistrée");
     };
     reader.readAsDataURL(file);
     return;
@@ -2728,10 +3026,6 @@ function fieldInput(label, type="text", placeholder=""){
   const id = "f"+(++_fieldId);
   return `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" placeholder="${placeholder}"></div>`;
 }
-/* ── LocalStorage ─────────────────────────────────── */
-const LS_KEY = "mesAbeilles_v9";
-
-
 function normalizeHives(){
   if(!Array.isArray(state.hives)) state.hives = [];
   state.hives.forEach(h=>{
@@ -2752,23 +3046,120 @@ function normalizeHives(){
   });
 }
 
+function storageState(stripImages=false){
+  const copy = JSON.parse(JSON.stringify(state));
+  copy.savedAt = new Date().toISOString();
+  copy.appVersion = "v18";
+  if(stripImages && Array.isArray(copy.hives)){
+    copy.hives.forEach(h=>{
+      if(Array.isArray(h.photos)){
+        h.photos.forEach(p=>{
+          if(p.dataUrl){
+            p.dataUrl = "";
+            p.previewRemoved = true;
+          }
+        });
+      }
+    });
+  }
+  return copy;
+}
+
+function tryWriteStorage(key, data){
+  localStorage.setItem(key, JSON.stringify(data));
+  return true;
+}
+
 function saveState(){
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){}
+  normalizeHives();
+
+  try{
+    const full = storageState(false);
+    const fullString = JSON.stringify(full);
+
+    // Si les photos rendent le fichier trop gros, on garde les données métiers
+    // et on supprime uniquement les aperçus image.
+    if(fullString.length > 4200000){
+      const light = storageState(true);
+      tryWriteStorage(LS_KEY, light);
+      tryWriteStorage(LS_BACKUP_KEY, light);
+      console.warn("[Mes Abeilles] Sauvegarde allégée : aperçus photos retirés pour éviter la limite navigateur.");
+      showToast("✓ Données sauvegardées · photos allégées");
+      return true;
+    }
+
+    localStorage.setItem(LS_KEY, fullString);
+    localStorage.setItem(LS_BACKUP_KEY, fullString);
+    return true;
+  } catch(e){
+    console.warn("[Mes Abeilles] Sauvegarde complète impossible, tentative allégée", e);
+    try{
+      const light = storageState(true);
+      tryWriteStorage(LS_KEY, light);
+      tryWriteStorage(LS_BACKUP_KEY, light);
+      showToast("⚠️ Sauvegarde allégée : certaines images ne sont pas conservées");
+      return true;
+    } catch(err){
+      console.error("[Mes Abeilles] Échec sauvegarde", err);
+      alert("La sauvegarde locale a échoué. Android/Chrome bloque ou limite le stockage. Fais un export JSON depuis Administration pour sécuriser tes données.");
+      return false;
+    }
+  }
+}
+
+function mergeLoadedState(saved){
+  if(!saved || typeof saved !== "object") return false;
+  if(Array.isArray(saved.hives)) state.hives = saved.hives;
+  if(saved.profil) state.profil = saved.profil;
+  if(typeof saved.onboardingDone === "boolean") state.onboardingDone = saved.onboardingDone;
+  if(typeof saved.hiveTourDone === "boolean") state.hiveTourDone = saved.hiveTourDone;
+  return Array.isArray(saved.hives) || !!saved.profil;
 }
 
 function loadState(){
-  try{
-    const raw = localStorage.getItem(LS_KEY);
-    if(raw){
-      const saved = JSON.parse(raw);
-      if(saved.hives) state.hives = saved.hives;
-      if(saved.profil) state.profil = saved.profil;
-      if(saved.onboardingDone) state.onboardingDone = saved.onboardingDone;
-      if(saved.hiveTourDone) state.hiveTourDone = saved.hiveTourDone;
+  let best = null;
+  let bestKey = "";
+
+  for(const key of LS_LEGACY_KEYS){
+    try{
+      const raw = localStorage.getItem(key);
+      if(!raw) continue;
+      const data = JSON.parse(raw);
+      const hasUsefulData = (Array.isArray(data.hives) && data.hives.length) || (data.profil && Object.keys(data.profil).length);
+      if(!hasUsefulData) continue;
+
+      const t = data.savedAt ? Date.parse(data.savedAt) : 0;
+      const score = (Array.isArray(data.hives) ? data.hives.length : 0) * 1000000000000 + (Number.isFinite(t) ? t : 0);
+
+      if(!best || score > best.score){
+        best = {data, score};
+        bestKey = key;
+      }
+    } catch(e){
+      console.warn("[Mes Abeilles] Donnée ignorée", key, e);
     }
-  } catch(e){}
+  }
+
+  if(best){
+    mergeLoadedState(best.data);
+    normalizeHives();
+    // Migration vers la clé stable v18
+    saveState();
+    console.log("[Mes Abeilles] Données restaurées depuis", bestKey);
+    return true;
+  }
+
   normalizeHives();
+  console.log("[Mes Abeilles] Aucune donnée locale trouvée");
+  return false;
 }
+
+window.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "hidden") saveState();
+});
+window.addEventListener("pagehide", saveState);
+window.addEventListener("beforeunload", saveState);
+
 
 function showToast(msg){
   const t = document.getElementById("toast");
