@@ -856,6 +856,8 @@
       max-width:calc(100vw - 40px);
       width:340px;
       left:50%;transform:translateX(-50%);
+      max-height:calc(100vh - 120px);
+      overflow-y:auto;
       animation:bubbleIn .28s cubic-bezier(.34,1.56,.64,1);
     }
     @keyframes bubbleIn{from{opacity:0;transform:translateX(-50%) scale(.92)}to{opacity:1;transform:translateX(-50%) scale(1)}}
@@ -1247,30 +1249,30 @@
       .record-head { font-size: 17px; }
       .record-body { font-size: 16px; margin-top: 8px; }
 
-      /* ── Fiche ruche layout 2 colonnes ── */
-      .hive-content-wrap { display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: start; }
+      /* ── Fiche ruche — onglets horizontaux (comme mobile) ── */
+      .hive-content-wrap { display: block; }
       .hive-tabs {
-        flex-direction: column;
-        overflow-x: unset;
-        overflow-y: auto;
-        gap: 8px;
-        padding: 0;
-        margin: 0;
-        position: sticky;
-        top: 10px;
-        max-height: calc(100vh - 160px);
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: unset;
+        gap: 10px;
+        padding: 2px 0 14px;
+        margin: 0 -18px 14px 0;
+        position: static;
+        max-height: unset;
       }
       .hive-tab {
-        border-radius: 20px !important;
-        justify-content: flex-start;
-        padding: 20px 18px;
+        border-radius: 999px !important;
+        justify-content: center;
+        padding: 16px 20px;
+        min-height: 60px;
       }
       .detail-panel {
-        border-radius: 32px;
-        padding: 28px;
-        min-height: 600px;
+        border-radius: 28px;
+        padding: 22px;
+        min-height: 400px;
       }
-      .detail-title { font-size: 36px; }
+      .detail-title { font-size: 30px; }
 
       /* ── Info grid 3 colonnes sur tablette ── */
       .info-grid { grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
@@ -1301,7 +1303,7 @@
       .splash-feat-text { font-size: 16px; }
 
       /* ── Coach marks — bulle plus lisible ── */
-      .coach-bubble { width: 460px; padding: 28px; border-radius: 28px; }
+      .coach-bubble { width: min(460px, calc(100vw - 40px)); padding: 28px; border-radius: 28px; max-height: calc(100vh - 140px); overflow-y: auto; }
       .coach-title { font-size: 24px; }
       .coach-body { font-size: 17px; margin-bottom: 22px; }
       .coach-next { padding: 18px 28px; font-size: 17px; border-radius: 18px; min-height: 60px; }
@@ -3601,9 +3603,18 @@ function coachShow(){
     arrow.className = "coach-arrow " + step.arrow;
     if(step.bubblePos === "bottom"){
       // Bulle en dessous
-      bubble.style.top = (r.bottom + pad + 18) + "px";
+      // Bulle contrainte dans l'écran
+    const hbTop = r.bottom + pad + 18;
+    if(hbTop + 320 > window.innerHeight){
+      bubble.style.top = "auto";
+      bubble.style.bottom = Math.max(20, window.innerHeight - r.top + pad + 14) + "px";
+      arrow.className = "coach-arrow down";
+    } else {
+      bubble.style.top = hbTop + "px";
       bubble.style.bottom = "auto";
-      arrow.style.display = "block";
+      arrow.className = "coach-arrow up";
+    }
+    arrow.style.display = "block";
       arrow.className = "coach-arrow up";
     } else {
       // Bulle au-dessus de la nav
@@ -3831,12 +3842,21 @@ function hiveCoachShow(){
     hole.setAttribute("width", r.width + pad*2);
     hole.setAttribute("height", r.height + pad*2);
     hole.setAttribute("rx", "16");
-    // Bulle toujours en dessous de la barre d'onglets
-    bubble.style.top = (r.bottom + pad + 14) + "px";
-    bubble.style.bottom = "auto";
+    // Bulle en dessous de la barre d'onglets, contrainte dans l'écran
+    const bubbleTop = r.bottom + pad + 14;
+    const bubbleMaxH = window.innerHeight - 120;
+    // Si la bulle sort en bas, la placer au-dessus de l'élément
+    if(bubbleTop + 280 > window.innerHeight){
+      bubble.style.top = "auto";
+      bubble.style.bottom = (window.innerHeight - r.top + pad + 14) + "px";
+      arrow.className = "coach-arrow down";
+    } else {
+      bubble.style.top = Math.min(bubbleTop, bubbleMaxH - 280) + "px";
+      bubble.style.bottom = "auto";
+      arrow.className = "coach-arrow up";
+    }
     bubble.style.transform = "translateX(-50%)";
     arrow.style.display = "block";
-    arrow.className = "coach-arrow up";
   } else {
     svg.style.display = step.bubblePos === "center" ? "block" : "none";
     highlight.style.display = "none";
