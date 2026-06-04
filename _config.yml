@@ -1,0 +1,8 @@
+# Configuration GitHub Pages
+# Désactive le traitement Jekyll pour servir les fichiers tels quels
+exclude:
+  - sw.js
+  - manifest.json
+
+# Encodage UTF-8 pour les emojis
+encoding: utf-8
