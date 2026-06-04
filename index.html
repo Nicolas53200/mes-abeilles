@@ -1655,121 +1655,3107 @@ function scan(){
   return `
     <section class="panel">
       <h2>Scanner une ruche</h2>
-      <p style="color:#64748b">Démo : tape le code QR. Dans la vraie version, ce bouton utilisera la caméra de l’iPhone.</p>
-      <div class="field">
-        <label>Code QR</label>
-        <input id="scanInput" value="RUCHE-001" placeholder="Ex : RUCHE-001">
+      <p style="color:#64748b;margin-bottom:18px">Pointe la caméra vers le QR code collé sur ta ruche.</p>
+
+      <div id="scannerWrap" style="position:relative;border-radius:24px;overflow:hidden;background:#000;aspect-ratio:1;max-width:340px;margin:0 auto 18px;">
+        <video id="scanVideo" style="width:100%;height:100%;object-fit:cover;" playsinline muted></video>
+        <canvas id="scanCanvas" style="display:none"></canvas>
+        <!-- Viseur -->
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+          <div style="width:65%;aspect-ratio:1;border:3px solid #ffd24a;border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,0.4)"></div>
+        </div>
+        <div id="scanStatus" style="position:absolute;bottom:16px;left:0;right:0;text-align:center;color:#fff;font-size:14px;font-weight:700">
+          Démarrage de la caméra...
+        </div>
       </div>
-      <button class="big-action primary" style="width:100%;min-height:78px" onclick="scanDemo()">Ouvrir la ruche</button>
+
+      <div id="scanResult" style="display:none" class="notice" style="margin-bottom:14px"></div>
+
+      <button class="big-action primary" style="width:100%;min-height:76px" id="scanStartBtn" onclick="startScanner()">
+        📷 Activer la caméra
+      </button>
+      <button class="big-action" style="width:100%;min-height:70px;margin-top:10px;background:#f1f5f9;color:#0b1328" onclick="stopScanner()">
+        ⏹ Arrêter
+      </button>
+
+      <div style="margin-top:24px;padding-top:18px;border-top:1px solid #e4e9f4">
+        <div style="font-size:14px;color:#64748b;margin-bottom:10px">Ou entre le code manuellement :</div>
+        <div class="field">
+          <input id="scanInput" placeholder="Ex : RUCHE-001" style="text-transform:uppercase">
+        </div>
+        <button class="big-action primary" style="width:100%;min-height:70px" onclick="scanManuel()">
+          Ouvrir cette ruche
+        </button>
+      </div>
     </section>
   `;
 }
 
-function ruchers(){
-  return `
-    <section>
-      <div class="section-head">
-        <div class="section-title">Toutes les ruches</div>
-        <button class="see-all" onclick="showPage('newHive')">+ Ajouter</button>
-      </div>
-      <div class="home-search" style="margin-bottom:18px">
-        <span>🔍</span>
-        <input id="ruchersSearch" placeholder="Rechercher par nom, code, rucher…" oninput="renderRuchers()">
-      </div>
-      <div id="ruchersGrid" style="display:flex;flex-wrap:wrap;gap:14px">
-        ${state.hives.map(hiveCard).join("")}
-      </div>
-      <div id="ruchersEmpty" style="display:none;padding:24px;text-align:center;color:#64748b">Aucune ruche trouvée.</div>
-    </section>
-  `;
+let scanStream = null;
+let scanInterval = null;
+
+function startScanner(){
+  const video = document.getElementById("scanVideo");
+  const status = document.getElementById("scanStatus");
+  const btn = document.getElementById("scanStartBtn");
+  if(!video) return;
+
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    status.textContent = "Caméra non disponible sur cet appareil.";
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment", width:{ideal:1280}, height:{ideal:720} }
+  })
+  .then(stream => {
+    scanStream = stream;
+    video.srcObject = stream;
+    video.play();
+    status.textContent = "Cherche un QR code...";
+    btn.textContent = "📷 Caméra active";
+    btn.style.background = "#16a34a";
+    // Lancer la détection en boucle
+    scanInterval = setInterval(detectQr, 300);
+  })
+  .catch(err => {
+    console.error(err);
+    if(err.name === "NotAllowedError"){
+      status.textContent = "⚠️ Autorise l'accès à la caméra dans les paramètres Chrome.";
+    } else {
+      status.textContent = "Erreur caméra : " + err.message;
+    }
+  });
 }
 
-function renderRuchers(){
-  const q = (document.getElementById("ruchersSearch")?.value || "").toLowerCase().trim();
-  const list = state.hives.filter(h => [h.name, h.code, h.apiary, h.status].join(" ").toLowerCase().includes(q));
-  const grid = document.getElementById("ruchersGrid");
-  const empty = document.getElementById("ruchersEmpty");
-  if(grid) grid.innerHTML = list.map(hiveCard).join("");
-  if(empty) empty.style.display = list.length ? "none" : "block";
+function detectQr(){
+  const video = document.getElementById("scanVideo");
+  const canvas = document.getElementById("scanCanvas");
+  if(!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  if(typeof jsQR === "undefined") return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(imageData.data, imageData.width, imageData.height, {
+    inversionAttempts: "dontInvert"
+  });
+
+  if(code){
+    const text = code.data.toUpperCase().trim();
+    stopScanner();
+    showToast("✓ QR détecté : " + text);
+    // Chercher la ruche correspondante
+    const hive = state.hives.find(h => h.code === text || text.includes(h.code));
+    if(hive){
+      openHive(hive.code);
+    } else {
+      const result = document.getElementById("scanResult");
+      if(result){
+        result.style.display = "block";
+        result.innerHTML = "⚠️ Code détecté : <strong>" + text + "</strong><br>Aucune ruche correspondante trouvée.";
+      }
+    }
+  }
 }
 
-function newHive(){
+function stopScanner(){
+  if(scanInterval){ clearInterval(scanInterval); scanInterval = null; }
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  const video = document.getElementById("scanVideo");
+  if(video) video.srcObject = null;
+  const status = document.getElementById("scanStatus");
+  if(status) status.textContent = "Caméra arrêtée.";
+  const btn = document.getElementById("scanStartBtn");
+  if(btn){ btn.textContent = "📷 Activer la caméra"; btn.style.background = ""; }
+}
+
+function scanManuel(){
+  const val = (document.getElementById("scanInput")?.value || "").trim().toUpperCase();
+  if(!val){ showToast("⚠️ Entre un code ruche"); return; }
+  const hive = state.hives.find(h => h.code === val);
+  if(hive){ openHive(hive.code); }
+  else { showToast("⚠️ Ruche " + val + " introuvable"); }
+}
+
+
+function alerts(){
+  const items = state.hives
+    .map(h=>{
+      const list = [];
+      if(Array.isArray(h.alertList)) list.push(...h.alertList);
+      if(Number(h.alerts || 0) > 0 && !list.length) list.push(h.status || "À surveiller");
+      return {h, list:[...new Set(list.filter(Boolean))]};
+    })
+    .filter(x=>x.list.length);
+
+  if(!items.length){
+    return `<section class="panel"><h2>Alertes</h2><div class="empty-history">Aucune alerte active pour le moment.</div></section>`;
+  }
+
   return `
     <section class="panel">
-      <h2>Nouvelle ruche / ruchette</h2>
-
-      <div class="field">
-        <label for="newHiveType">Type</label>
-        <select id="newHiveType" onchange="toggleNewHiveFields(this.value)">
-          <option value="ruche">🏠 Ruche</option>
-          <option value="ruchette">🪣 Ruchette</option>
-        </select>
-      </div>
-
-      <div class="assist-card">
-        <div class="assist-row">
-          <div class="field" style="margin-bottom:0">
-            <label>Code QR proposé</label>
-            <input id="newHiveQr" value="${nextHiveCode()}" oninput="refreshNewHiveQr()" placeholder="Ex : RUCHE-004">
-          </div>
-          <button class="assist-btn" onclick="proposeNewHiveQr()">Proposer</button>
+      <h2>Alertes</h2>
+      ${items.map(({h,list})=>`
+        <div class="alert-hive-card" onclick="openHive('${h.code}')" style="cursor:pointer">
+          <div class="record-head"><span>${h.type === "ruchette" ? "Ruchette" : "Ruche"} ${h.name}</span><span>${list.length} alerte(s)</span></div>
+          <div class="record-body">${h.apiary} · ${h.code}</div>
+          <div class="alert-list">${list.map(a=>`<div class="alert-item">⚠️ ${a}</div>`).join("")}</div>
         </div>
-        <div class="qr-preview-wrap">
-          <canvas id="newHiveQrPreview" width="150" height="150"></canvas>
-          <div>
-            <strong>QR code</strong>
-            <div style="color:#64748b;font-size:13px;margin-top:4px">À imprimer et coller sur la ruche ou ruchette.</div>
-            <button class="assist-btn secondary" style="margin-top:8px" onclick="drawQr('printQr', document.getElementById('newHiveQr').value); window.print()">Imprimer</button>
-          </div>
-        </div>
+      `).join("")}
+    </section>
+  `;
+}
+function admin(){
+  const p = state.profil || {};
+  return `
+    <section class="panel">
+      <h2>Administration</h2>
+
+      <div class="export-bar">
+        <button class="export-btn dl" onclick="exportData()">⬇️ Exporter vers PC</button>
+        <label class="export-btn imp" style="cursor:pointer">
+          ⬆️ Importer depuis PC
+          <input type="file" accept=".json" class="file-hidden" onchange="importData(this)">
+        </label>
       </div>
+      <div class="notice" style="margin-bottom:16px">L'export génère un fichier <strong>.json</strong> que tu peux sauvegarder sur PC ou partager.</div>
 
-      <div class="field"><label>Nom</label><input id="newHiveName" placeholder="Ex : Lavande, Essaim-01…"></div>
-      <div class="field"><label>Rucher</label><input id="newHiveApiary" placeholder="Ex : Rucher du Verger"></div>
-      <div class="field"><label>Emplacement</label><input placeholder="Ex : Ligne A · Place 4"></div>
+      <div class="field"><label>Prénom</label><input id="adminPrenom" value="${p.prenom || ""}" placeholder="Ton prénom"></div>
+      <div class="field"><label>Nom</label><input id="adminNom" value="${p.nom || ""}" placeholder="Ton nom"></div>
+      <div class="field"><label>Entreprise</label><input id="adminEntreprise" value="${p.entreprise || ""}" placeholder="Ex : Rucher des Collines"></div>
+      <div class="field"><label>NAPI</label><input id="adminNapi" value="${p.napi || ""}" placeholder="Numéro d'apiculteur"></div>
+      <div class="field"><label>SIRET</label><input id="adminSiret" value="${p.siret || ""}" placeholder="Numéro SIRET"></div>
+      <div class="field"><label>Adresse</label><input id="adminAdresse" value="${p.adresse || ""}" placeholder="Adresse de l'entreprise"></div>
+      <div class="field"><label>Téléphone</label><input id="adminTelephone" value="${p.telephone || ""}" placeholder="Téléphone"></div>
+      <div class="field"><label>Email</label><input id="adminEmail" value="${p.email || ""}" placeholder="Email"></div>
 
-      <div class="assist-card">
-        <div class="assist-row">
-          <div class="field" style="margin-bottom:0">
-            <label>Coordonnées GPS</label>
-            <input id="newHiveGps" placeholder="Latitude, longitude" oninput="updateMapLink('newHive')">
-          </div>
-          <button class="assist-btn" onclick="getGPS('newHive')">GPS</button>
-        </div>
-        <a id="newHiveMapLink" class="map-link" style="display:none" target="_blank" rel="noopener">📍 Ouvrir dans la carte</a>
-      </div>
-
-      <!-- Champs ruche standard -->
-      <div id="champsRuche">
-        <div class="field"><label>Type de ruche</label>
-          <select>
-            <option>Dadant 10 cadres</option>
-            <option>Dadant 12 cadres</option>
-            <option>Warré</option>
-            <option>Langstroth</option>
-          </select>
+      <div class="field"><label>Logo</label>
+        <input type="file" accept="image/*" id="adminLogo" class="file-hidden" onchange="onFileSelected('adminLogo','adminLogoLabel')">
+        <div id="adminLogoLabel" class="mini-help" style="margin-bottom:6px">${p.logoName || "Aucun fichier"}</div>
+        <div class="file-actions">
+          <button class="file-btn" onclick="fileUpload('adminLogo')">📁 Choisir</button>
+          <button class="file-btn primary" onclick="scanDocument('adminLogo')">📷 Scanner</button>
         </div>
       </div>
 
-      <!-- Champs ruchette spécifiques -->
-      <div id="champsRuchette" style="display:none">
-        <div class="notice" style="margin-bottom:12px">🪣 Une ruchette est temporaire. Tu pourras la convertir en ruche une fois la colonie établie.</div>
-        ${fieldSelect("Origine de la colonie",["Division","Essaim naturel capturé","Essaim sur cadres","Reine achetée","Nucléus acheté","Autre"])}
-        ${fieldSelect("Taille ruchette",["5 cadres","6 cadres","Ruchette polystyrène","Ruchette bois","Autre"])}
-        ${fieldInput("Ruche d'origine (si division)","text","Ex : RUCHE-001")}
-        ${fieldInput("Date de peuplement","date")}
-        ${fieldSelect("Reine présente",["Oui — vue","Oui — ponte observée","Cellule royale","Non — à introduire","Incertain"])}
-      </div>
+      <button class="big-action primary" style="width:100%;min-height:78px" onclick="saveAdmin()">Enregistrer</button>
+    </section>
 
-      <button class="big-action primary" style="width:100%;min-height:78px" onclick="createHiveDemo()">Créer</button>
+    <section class="panel" style="margin-top:0">
+      <h2 style="display:flex;align-items:center;gap:10px">💬 <span>Proposer une idée</span></h2>
+      <p style="color:#64748b;font-size:14px;margin:0 0 16px">Tu as une suggestion, un bug à signaler ou une amélioration à proposer ? Envoie-la directement au concepteur.</p>
+      <div class="field"><label for="fbType">Type de message</label><select id="fbType"><option value="idee">💡 Idée / nouvelle fonctionnalité</option><option value="bug">🐛 Bug ou problème</option><option value="amelioration">✏️ Amélioration</option><option value="autre">💬 Autre</option></select></div>
+      <div class="field"><label for="fbSujet">Sujet</label><input id="fbSujet" placeholder="En une phrase, de quoi s'agit-il ?"></div>
+      <div class="field"><label for="fbMessage">Description</label><textarea id="fbMessage" placeholder="Décris ton idée ou le problème rencontré en détail…" style="min-height:120px"></textarea></div>
+      <div class="field"><label for="fbEmail">Ton e-mail (facultatif)</label><input id="fbEmail" placeholder="Pour pouvoir te répondre si besoin"></div>
+      <button class="big-action primary" style="width:100%;min-height:72px" onclick="sendFeedback()">Envoyer l'idée</button>
+    </section>
+  `;
+}
+function saveAdmin(){
+  if(!state.profil) state.profil = {};
+  state.profil.prenom = document.getElementById("adminPrenom")?.value || "";
+  state.profil.nom = document.getElementById("adminNom")?.value || "";
+  state.profil.entreprise = document.getElementById("adminEntreprise")?.value || "";
+  state.profil.napi = document.getElementById("adminNapi")?.value || "";
+  state.profil.siret = document.getElementById("adminSiret")?.value || "";
+  state.profil.adresse = document.getElementById("adminAdresse")?.value || "";
+  state.profil.telephone = document.getElementById("adminTelephone")?.value || "";
+  state.profil.email = document.getElementById("adminEmail")?.value || "";
+  const logoInput = document.getElementById("adminLogo");
+  if(logoInput && logoInput.files && logoInput.files[0]){
+    state.profil.logoName = logoInput.files[0].name;
+  }
+  saveState();
+  showToast("✓ Administration enregistrée");
+  const hasHives = state.hives.length > 0;
+  if(!hasHives){
+    setTimeout(()=>{
+      showPage("newHive");
+      showToast("🏠 Maintenant crée ta première ruche !");
+    }, 800);
+  }
+}
+function sendFeedback(){
+  const type  = document.getElementById("fbType")?.value || "";
+  const sujet = document.getElementById("fbSujet")?.value.trim() || "";
+  const msg   = document.getElementById("fbMessage")?.value.trim() || "";
+  const email = document.getElementById("fbEmail")?.value.trim() || "";
+
+  if(!sujet || !msg){
+    showToast("⚠️ Merci de remplir le sujet et la description.");
+    return;
+  }
+
+  // Construction du lien mailto — fonctionne sans serveur
+  const typeLabel = {
+    idee: "Idée / nouvelle fonctionnalité",
+    bug: "Bug ou problème",
+    amelioration: "Amélioration d'une fonction existante",
+    autre: "Autre"
+  }[type] || type;
+
+  const body = [
+    "Type : " + typeLabel,
+    "Sujet : " + sujet,
+    "",
+    msg,
+    "",
+    email ? "Email de l'apiculteur : " + email : "(pas d'email renseigné)",
+    "",
+    "--- Envoyé depuis Mes Abeilles ---"
+  ].join("\n");
+
+  const mailto = "mailto:contact@mesabeilles.fr"
+    + "?subject=" + encodeURIComponent("[Mes Abeilles] " + sujet)
+    + "&body=" + encodeURIComponent(body);
+
+  window.location.href = mailto;
+  showToast("✓ Ouverture de ton application e-mail…");
+
+  // Vider le formulaire après envoi
+  setTimeout(()=>{
+    const s = document.getElementById("fbSujet"); if(s) s.value = "";
+    const m = document.getElementById("fbMessage"); if(m) m.value = "";
+    const e = document.getElementById("fbEmail"); if(e) e.value = "";
+  }, 1500);
+}
+
+function menu(){
+  return `
+    <section class="panel">
+      <h2>Menu</h2>
+      <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('home')">Accueil</button>
+      <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('ruchers')">Ruchers</button>
+      <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('scan')">Scanner</button>
+      <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('admin')">Administration</button>
+      <button class="big-action" style="width:100%;margin-bottom:12px" onclick="openHive('RUCHE-001'); setHiveSection('conformite')">Conformité</button>
     </section>
   `;
 }
 
-function toggleNewHiveFields(type){
-  document.getElementById("champsRuche").style.display     = type === "ruche"     ? "block" : "none";
-  document.getElementById("champsRuchette").style.display  = type === "ruchette"  ? "block" : "none";
+function hiveDetail(code){
+  const h = state.hives.find(x=>x.code===code) || state.hives[0];
+  state.currentHive = h;
+  const isRuchette = h.type === "ruchette";
+  return `
+    <div class="hive-content-wrap">
+      <nav class="hive-tabs" id="hiveTabs">
+        ${tabButton("resume","🏠","Résumé")}
+        ${isRuchette ? tabButton("ruchette","🪣","Ruchette") : ""}
+        ${tabButton("visites","📅","Visites")}
+        ${tabButton("reine","♛","Reine")}
+        ${tabButton("divisions","🔀","Divisions")}
+        ${tabButton("actions","✅","Actions")}
+        ${!isRuchette ? tabButton("hausses","📦","Hausses") : ""}
+        ${!isRuchette ? tabButton("miel","🍯","Miel") : ""}
+        ${tabButton("traitements","🛡️","Traitements")}
+        ${tabButton("frelons","🐝","Frelons")}
+        ${tabButton("nourrissement","🧃","Nourrissement")}
+        ${!isRuchette ? tabButton("transhumance","🚚","Transhumance") : ""}
+        ${!isRuchette ? tabButton("pesees","⚖️","Pesées") : ""}
+        ${tabButton("photos","📷","Photos")}
+        ${!isRuchette ? tabButton("conformite","📋","Conformité") : ""}
+        ${tabButton("documents","📁","Documents")}
+        ${tabButton("qrcode","⌗","QR Code")}
+      </nav>
+
+      <section class="detail-panel" id="hiveDetailContent">
+        ${hiveSectionContent(h)}
+      </section>
+    </div>
+  `;
 }
+
+function tabButton(section, icon, label){
+  return `<button class="hive-tab ${state.hiveSection===section ? "active" : ""}" onclick="setHiveSection('${section}')"><span class="hive-tab-icon">${icon}</span>${label}</button>`;
+}
+
+function setHiveSection(section){
+  state.hiveSection = section;
+  if(section !== "visites") state.visitFormOpen = false;
+  if(section !== "reine") state.queenFormOpen = false;
+  if(state.moduleFormOpen !== section) state.moduleFormOpen = null;
+  if(!state.currentHive) state.currentHive = state.hives[0];
+  const h = state.currentHive;
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+  setTimeout(()=>{
+    const active = document.querySelector(".hive-tab.active");
+    if(active) active.scrollIntoView({behavior:"smooth", inline:"center", block:"nearest"});
+  }, 20);
+}
+
+function ensureHiveArrays(h){
+  if(!h.visites) h.visites = [];
+  if(!h.alertList && Array.isArray(h.alertes)) h.alertList = h.alertes;
+  return h;
+}
+
+function openNewVisit(){
+  state.hiveSection = "visites";
+  state.visitFormOpen = true;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+    setTimeout(()=>{
+      const form = document.getElementById("newVisitForm");
+      if(form) form.scrollIntoView({behavior:"smooth", block:"start"});
+    }, 30);
+  }
+}
+
+function closeNewVisit(){
+  state.visitFormOpen = false;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+  }
+}
+
+function todayISO(){
+  return new Date().toISOString().slice(0,10);
+}
+
+function formatDateFr(iso){
+  if(!iso) return new Date().toLocaleDateString("fr-FR");
+  if(/^\d{4}-\d{2}-\d{2}$/.test(iso)){
+    const [y,m,d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  }
+  return iso;
+}
+
+function visitHistoryHTML(h){
+  ensureHiveArrays(h);
+  if(!h.visites.length){
+    return '<div class="empty-history">Aucune visite enregistrée pour cette ruche.</div>';
+  }
+  return h.visites.map(v => {
+    const sr = (typeof v.score === "number") ? {score:v.score, status:scoreStatus(v.score)} : calculateVisitScore(v);
+    return record(
+      formatDateFr(v.date),
+      `${sr.status.icon} ${sr.status.label} · ${sr.score}/100`,
+      [
+        "Reine : " + (v.reine || "—"),
+        "Ponte : " + (v.ponte || "—"),
+        "Couvain : " + (v.couvain || "—"),
+        "Réserves : " + (v.reserves || "—"),
+        "Varroa : " + (v.varroa || "—"),
+        "Frelons : " + (v.frelons || "—"),
+        v.notes ? "Notes : " + v.notes : ""
+      ].filter(Boolean).join(" · ")
+    );
+  }).join("");
+}
+
+function visitFormHTML(h){
+  const d = todayISO();
+  return `
+    <div class="visit-form-card" id="newVisitForm">
+      <div class="visit-form-head">
+        <h3 style="margin:0">Nouvelle visite</h3>
+        <button class="close-small" onclick="closeNewVisit()">Fermer</button>
+      </div>
+
+      <div class="field"><label>Date</label><input id="visitDate" type="date" value="${d}"></div>
+      <div class="field"><label>Reine présente</label><select id="visitReine"><option>Oui</option><option>Non</option><option>Incertain</option></select></div>
+      <div class="field"><label>Reine vue</label><select id="visitReineVue"><option>Non</option><option>Oui</option></select></div>
+      <div class="field"><label>Ponte</label><select id="visitPonte"><option>Normale</option><option>Faible</option><option>Absente</option><option>À vérifier</option></select></div>
+      <div class="field"><label>Couvain</label><select id="visitCouvain"><option>Normal</option><option>Abondant</option><option>Faible</option><option>Absent</option></select></div>
+      <div class="field"><label>Cellules royales</label><select id="visitCellules"><option>Non</option><option>Oui</option><option>À surveiller</option></select></div>
+      <div class="field"><label>Population / force</label><select id="visitForce"><option>Forte</option><option>Moyenne</option><option>Faible</option></select></div>
+      <div class="field"><label>Réserves miel</label><select id="visitReserves"><option>Bonnes</option><option>Moyennes</option><option>Faibles</option></select></div>
+      <div class="field"><label>Pollen</label><select id="visitPollen"><option>Normal</option><option>Abondant</option><option>Faible</option></select></div>
+      <div class="field"><label>Varroa</label><select id="visitVarroa"><option>Non contrôlé</option><option>Comptage OK</option><option>Présence faible</option><option>Présence forte</option><option>Traitement à prévoir</option></select></div>
+      <div class="field"><label>Frelons</label><select id="visitFrelons"><option>Non</option><option>Quelques-uns</option><option>Forte pression</option><option>Piège à poser</option><option>Piège posé</option></select></div>
+      <div class="field"><label>Notes</label><textarea id="visitNotes" placeholder="Observations, cadres vus, actions à prévoir…"></textarea></div>
+
+      <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px" onclick="saveVisit()">Enregistrer la visite</button>
+    </div>
+  `;
+}
+
+function saveVisit(){
+  const h = state.currentHive || state.hives[0];
+  if(!h) return;
+  ensureHiveArrays(h);
+
+  const visit = {
+    id: "visit_" + Date.now(),
+    date: document.getElementById("visitDate")?.value || todayISO(),
+    title: "Inspection complète",
+    reine: document.getElementById("visitReine")?.value || "Oui",
+    reineVue: document.getElementById("visitReineVue")?.value || "Non",
+    ponte: document.getElementById("visitPonte")?.value || "Normale",
+    couvain: document.getElementById("visitCouvain")?.value || "Normal",
+    cellules: document.getElementById("visitCellules")?.value || "Non",
+    force: document.getElementById("visitForce")?.value || "Forte",
+    reserves: document.getElementById("visitReserves")?.value || "Bonnes",
+    pollen: document.getElementById("visitPollen")?.value || "Normal",
+    varroa: document.getElementById("visitVarroa")?.value || "Non contrôlé",
+    frelons: document.getElementById("visitFrelons")?.value || "Non",
+    notes: document.getElementById("visitNotes")?.value.trim() || ""
+  };
+
+  const scoreResult = calculateVisitScore(visit);
+  visit.score = scoreResult.score;
+  visit.scoreStatus = scoreResult.status.label;
+  visit.scoreIcon = scoreResult.status.icon;
+  visit.scoreDetails = scoreResult.parts;
+
+  h.visites.unshift(visit);
+  h.date = formatDateFr(visit.date);
+  updateHiveStatusFromScore(h, scoreResult);
+
+  const alerts = [];
+  if(visit.reine !== "Oui") alerts.push("Vérifier présence de reine");
+  if(visit.ponte === "Absente" || visit.ponte === "À vérifier") alerts.push("Contrôler la ponte");
+  if(visit.reserves === "Faibles") alerts.push("Prévoir nourrissement");
+  if(visit.varroa === "Présence forte" || visit.varroa === "Traitement à prévoir") alerts.push("Traitement varroa à prévoir");
+  if(visit.frelons === "Forte pression" || visit.frelons === "Piège à poser") alerts.push("Surveiller / piéger les frelons");
+
+  if(h.visites.length > 1 && typeof h.visites[1].score === "number" && h.visites[1].score - visit.score >= 15){
+    alerts.push("Dégradation rapide détectée : -" + (h.visites[1].score - visit.score) + " points");
+  }
+
+  h.alerts = alerts.length;
+  h.alertList = alerts;
+
+  state.hiveSection = "visites";
+  state.visitFormOpen = false;
+  saveState();
+
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+
+  setTimeout(()=>{
+    const history = document.getElementById("visitesHistory");
+    if(history) history.scrollIntoView({behavior:"smooth", block:"start"});
+  }, 30);
+
+  showToast("✓ Visite enregistrée · Score " + visit.score + "/100");
+}
+
+function ensureQueenArrays(h){
+  if(!h.reines) h.reines = [];
+  return h;
+}
+
+function queenCurrentHTML(h){
+  ensureQueenArrays(h);
+  const q = h.reines[0] || {
+    annee:"—",
+    couleur:"—",
+    race:"—",
+    origine:"—",
+    marquee:"—",
+    statut:"Non renseignée",
+    date:""
+  };
+  return `
+    <div class="info-grid">
+      ${infoBox("Année", q.annee || "—")}
+      ${infoBox("Couleur", q.couleur || "—")}
+      ${infoBox("Race", q.race || "—")}
+      ${infoBox("Origine", q.origine || "—")}
+      ${infoBox("Marquée", q.marquee || "—")}
+      ${infoBox("Statut", q.statut || "—")}
+    </div>
+  `;
+}
+
+function queenHistoryHTML(h){
+  ensureQueenArrays(h);
+  if(!h.reines.length){
+    return '<div class="empty-history">Aucune reine enregistrée. Ajoute ou remplace une reine pour créer l’historique.</div>';
+  }
+  return h.reines.map(q => record(
+    formatDateFr(q.date),
+    "Reine " + (q.annee || "—") + " · " + (q.couleur || "Sans couleur"),
+    [
+      "Race : " + (q.race || "—"),
+      "Origine : " + (q.origine || "—"),
+      "Marquée : " + (q.marquee || "—"),
+      "Statut : " + (q.statut || "—"),
+      q.notes ? "Notes : " + q.notes : ""
+    ].filter(Boolean).join(" · ")
+  )).join("");
+}
+
+function openQueenForm(){
+  state.hiveSection = "reine";
+  state.queenFormOpen = true;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+    setTimeout(()=>{
+      const form = document.getElementById("queenForm");
+      if(form) form.scrollIntoView({behavior:"smooth", block:"start"});
+    }, 30);
+  }
+}
+
+function closeQueenForm(){
+  state.queenFormOpen = false;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+  }
+}
+
+function queenFormHTML(h){
+  return `
+    <div class="queen-form-card" id="queenForm">
+      <div class="visit-form-head">
+        <h3 style="margin:0">Ajouter / remplacer reine</h3>
+        <button class="close-small" onclick="closeQueenForm()">Fermer</button>
+      </div>
+
+      <div class="field"><label>Date introduction / remplacement</label><input id="queenDate" type="date" value="${todayISO()}"></div>
+      <div class="field"><label>Année naissance</label><input id="queenYear" type="number" value="${new Date().getFullYear()}"></div>
+      <div class="field"><label>Couleur marquage</label>
+        <select id="queenColor">
+          <option>Blanc</option><option>Jaune</option><option>Rouge</option><option>Vert</option><option>Bleu</option><option>Non marquée</option>
+        </select>
+      </div>
+      <div class="field"><label>Race</label>
+        <select id="queenRace">
+          <option>Buckfast</option>
+          <option>Abeille noire locale</option>
+          <option>Carnica</option>
+          <option>Italienne / Ligustica</option>
+          <option>Caucasienne</option>
+          <option>Hybride</option>
+          <option>Inconnue</option>
+          <option>Autre</option>
+        </select>
+      </div>
+      <div class="field"><label>Origine</label>
+        <select id="queenOrigin">
+          <option>Division</option><option>Achat</option><option>Élevage maison</option><option>Essaim naturel</option><option>Remérage naturel</option><option>Introduction cellule royale</option>
+        </select>
+      </div>
+      <div class="field"><label>Marquée</label><select id="queenMarked"><option>Oui</option><option>Non</option></select></div>
+      <div class="field"><label>Statut</label>
+        <select id="queenStatus">
+          <option>En ponte</option><option>À vérifier</option><option>Remérage</option><option>Absente</option><option>Remplacée</option>
+        </select>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="queenNotes" placeholder="Ex : reine douce, bonne ponte, remplacement suite à essaimage…"></textarea></div>
+
+      <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px" onclick="saveQueen()">Enregistrer la reine</button>
+    </div>
+  `;
+}
+
+function saveQueen(){
+  const h = state.currentHive || state.hives[0];
+  if(!h) return;
+  ensureQueenArrays(h);
+
+  const q = {
+    id: "queen_" + Date.now(),
+    date: document.getElementById("queenDate")?.value || todayISO(),
+    annee: document.getElementById("queenYear")?.value || String(new Date().getFullYear()),
+    couleur: document.getElementById("queenColor")?.value || "Non renseignée",
+    race: document.getElementById("queenRace")?.value || "Inconnue",
+    origine: document.getElementById("queenOrigin")?.value || "Non renseignée",
+    marquee: document.getElementById("queenMarked")?.value || "Non",
+    statut: document.getElementById("queenStatus")?.value || "À vérifier",
+    notes: document.getElementById("queenNotes")?.value.trim() || ""
+  };
+
+  h.reines.unshift(q);
+
+  if(q.statut === "Absente" || q.statut === "À vérifier"){
+    h.status = "À surveiller";
+    h.alerts = Math.max(Number(h.alerts || 0), 1);
+    if(!h.alertList) h.alertList = [];
+    if(!h.alertList.includes("Vérifier la reine")) h.alertList.push("Vérifier la reine");
+  }
+
+  state.hiveSection = "reine";
+  state.queenFormOpen = false;
+  saveState();
+
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+
+  setTimeout(()=>{
+    const history = document.getElementById("queenHistory");
+    if(history) history.scrollIntoView({behavior:"smooth", block:"start"});
+  }, 30);
+
+  showToast("✓ Reine enregistrée");
+}
+
+
+function ensureModuleArrays(h){
+  ensureHiveArrays(h);
+  ensureQueenArrays(h);
+  ["divisions","hausses","recoltes","traitements","frelons","nourrissements","pesees","transhumances","photos","documents"].forEach(k=>{
+    if(!h[k]) h[k] = [];
+  });
+  return h;
+}
+
+function openModuleForm(section){
+  state.hiveSection = section;
+  state.moduleFormOpen = section;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+    setTimeout(()=>{
+      const form = document.getElementById("moduleForm");
+      if(form) form.scrollIntoView({behavior:"smooth", block:"start"});
+    }, 30);
+  }
+}
+
+function closeModuleForm(){
+  state.moduleFormOpen = null;
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+  }
+}
+
+function val(id, fallback=""){
+  return document.getElementById(id)?.value || fallback;
+}
+
+function moduleHistoryHTML(h, key, emptyText, formatter){
+  ensureModuleArrays(h);
+  const arr = h[key] || [];
+  if(!arr.length) return `<div class="empty-history">${emptyText}</div>`;
+  return arr.map(formatter).join("");
+}
+
+function saveModule(section){
+  const h = state.currentHive || state.hives[0];
+  if(!h) return;
+  ensureModuleArrays(h);
+
+  if(section === "divisions"){
+    const newCode = val("divisionQrCode", nextHiveCode());
+    const item = {
+      id:"division_" + Date.now(),
+      date: val("divisionDate", todayISO()),
+      newName: val("divisionName", h.name + "-2"),
+      newCode,
+      couvain: val("divisionCouvain","3"),
+      miel: val("divisionMiel","1"),
+      cellule: val("divisionCellule","Oui"),
+      reine: val("divisionReine","Non"),
+      notes: val("divisionNotes","")
+    };
+    h.divisions.unshift(item);
+    if(!state.hives.some(x => x.code === newCode)){
+      state.hives.push({
+        code:newCode,
+        name:item.newName,
+        apiary:h.apiary,
+        type:"ruchette",
+        status:"En cours d'établissement",
+        date:formatDateFr(item.date),
+        theme:"lavender",
+        tag:"purple",
+        alerts:1,
+        honey:0,
+        origine:"Division de " + h.name,
+        rucheOrigine:h.code,
+        datePeuplement:item.date,
+        taille:"5 cadres",
+        visites:[], reines:[], divisions:[], hausses:[], recoltes:[], traitements:[], frelons:[], nourrissements:[], pesees:[], transhumances:[], photos:[], documents:[]
+      });
+    }
+  }
+
+  if(section === "hausses"){
+    const item = {
+      id:"hausse_" + Date.now(),
+      date: val("hausseDate", todayISO()),
+      action: val("hausseAction","Hausse posée"),
+      nombre: Number(val("hausseNombre","1")),
+      retrait: val("hausseRetrait",""),
+      notes: val("hausseNotes","")
+    };
+    h.hausses.unshift(item);
+  }
+
+  if(section === "miel"){
+    const item = {
+      id:"recolte_" + Date.now(),
+      date: val("mielDate", todayISO()),
+      kilos: Number(val("mielKilos","0")),
+      type: val("mielType","Miel de printemps"),
+      butinage: val("mielButinage","Lavande"),
+      notes: val("mielNotes","")
+    };
+    h.recoltes.unshift(item);
+    h.honey = (h.recoltes || []).reduce((s,r)=>s+Number(r.kilos||0),0);
+  }
+
+  if(section === "traitements"){
+    const item = {
+      id:"traitement_" + Date.now(),
+      date: val("traitementDate", todayISO()),
+      type: val("traitementType","Apivar (lanières)"),
+      retrait: val("traitementRetrait",""),
+      quantite: val("traitementQuantite","2 lanières"),
+      notes: val("traitementNotes","")
+    };
+    h.traitements.unshift(item);
+    if(item.type.toLowerCase().includes("varroa") || item.type.includes("Apivar") || item.type.includes("Apitraz") || item.type.includes("Apistan")){
+      if(!h.alertList) h.alertList = [];
+      if(item.retrait && !h.alertList.includes("Retrait traitement prévu : " + item.retrait)){
+        h.alertList.push("Retrait traitement prévu : " + item.retrait);
+      }
+    }
+  }
+
+  if(section === "frelons"){
+    const item = {
+      id:"frelon_" + Date.now(),
+      date: val("frelonDate", todayISO()),
+      observation: val("frelonObservation","Aucun"),
+      piege: val("frelonPiege","Non posé"),
+      captures: val("frelonCaptures","0"),
+      notes: val("frelonNotes","")
+    };
+    h.frelons.unshift(item);
+    if(item.observation === "Forte pression" || item.observation === "Nid signalé à proximité"){
+      h.status = "À surveiller";
+      h.alerts = Math.max(Number(h.alerts||0),1);
+      if(!h.alertList) h.alertList = [];
+      if(!h.alertList.includes("Surveiller les frelons")) h.alertList.push("Surveiller les frelons");
+    }
+  }
+
+  if(section === "nourrissement"){
+    const item = {
+      id:"nourrissement_" + Date.now(),
+      date: val("nourrissementDate", todayISO()),
+      type: val("nourrissementType","Sirop 50/50"),
+      quantite: val("nourrissementQuantite","2 L"),
+      notes: val("nourrissementNotes","")
+    };
+    h.nourrissements.unshift(item);
+  }
+
+  if(section === "pesees"){
+    const item = {
+      id:"pesee_" + Date.now(),
+      date: val("peseeDate", todayISO()),
+      total: val("peseeTotal",""),
+      gauche: val("peseeGauche",""),
+      droite: val("peseeDroite",""),
+      notes: val("peseeNotes","")
+    };
+    h.pesees.unshift(item);
+  }
+
+  if(section === "transhumance"){
+    const item = {
+      id:"transhumance_" + Date.now(),
+      date: val("transDate", todayISO()),
+      depart: val("transDepart", h.apiary),
+      arrivee: val("transArrivee",""),
+      gps: val("transhumanceGps",""),
+      nb: val("transNb","1"),
+      floraison: val("transFloraison","Lavande"),
+      notes: val("transNotes","")
+    };
+    h.transhumances.unshift(item);
+  }
+
+  state.moduleFormOpen = null;
+  saveState();
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+  showToast("✓ " + sectionLabel(section) + " enregistré");
+}
+
+function sectionLabel(section){
+  return {
+    divisions:"Division",
+    hausses:"Hausse",
+    miel:"Récolte",
+    traitements:"Traitement",
+    frelons:"Frelons",
+    nourrissement:"Nourrissement",
+    pesees:"Pesée",
+    transhumance:"Transhumance"
+  }[section] || "Élément";
+}
+
+function moduleFormHeader(title){
+  return `<div class="visit-form-head"><h3 style="margin:0">${title}</h3><button class="close-small" onclick="closeModuleForm()">Fermer</button></div>`;
+}
+
+
+
+function scoreStatus(score){
+  if(score >= 90) return {label:"Excellente", icon:"🟢", tone:"excellent"};
+  if(score >= 70) return {label:"Bonne activité", icon:"🟢", tone:"good"};
+  if(score >= 50) return {label:"Surveillance", icon:"🟡", tone:"watch"};
+  if(score >= 30) return {label:"Risque", icon:"🟠", tone:"risk"};
+  return {label:"Critique", icon:"🔴", tone:"critical"};
+}
+
+function pointsFor(value, rules){
+  const key = value || "";
+  return Object.prototype.hasOwnProperty.call(rules, key) ? rules[key] : (rules.default || 0);
+}
+
+function calculateVisitScore(v){
+  const parts = [];
+  function add(name, value, points, max, detail){
+    parts.push({name:name, value:value || "—", points:Number(points || 0), max:max, detail:detail || ""});
+  }
+
+  add("🐝 Reine", v.reine, pointsFor(v.reine, {"Oui":20,"Incertain":10,"Non":0, default:10}), 20, "Présence de la reine");
+  add("🥚 Ponte", v.ponte, pointsFor(v.ponte, {"Normale":20,"Faible":10,"Absente":0,"À vérifier":5, default:10}), 20, "Qualité de ponte");
+  add("👶 Couvain", v.couvain, pointsFor(v.couvain, {"Abondant":15,"Normal":12,"Faible":5,"Absent":0, default:8}), 15, "Volume et régularité du couvain");
+  add("🍯 Réserves", v.reserves, pointsFor(v.reserves, {"Bonnes":15,"Moyennes":8,"Faibles":0, default:8}), 15, "Miel et réserves disponibles");
+  add("🦠 Varroa", v.varroa, pointsFor(v.varroa, {"Comptage OK":15,"Présence faible":10,"Non contrôlé":8,"Présence forte":3,"Traitement à prévoir":0, default:8}), 15, "Pression varroa");
+  add("🛡️ Frelons", v.frelons, pointsFor(v.frelons, {"Non":10,"Quelques-uns":7,"Piège posé":7,"Piège à poser":4,"Forte pression":2,"Nid signalé à proximité":0, default:7}), 10, "Pression frelons");
+  add("👥 Population", v.force || v.population, pointsFor(v.force || v.population, {"Forte":5,"Moyenne":3,"Faible":1, default:3}), 5, "Force estimée de la colonie");
+
+  const score = Math.max(0, Math.min(100, parts.reduce((s,p)=>s + Number(p.points || 0), 0)));
+  const status = scoreStatus(score);
+  return {score:score, status:status, parts:parts};
+}
+
+function latestVisitScore(h){
+  ensureHiveArrays(h);
+  if(h.visites && h.visites.length){
+    const v = h.visites[0];
+    if(typeof v.score === "number" && v.scoreDetails) return {score:v.score, status:scoreStatus(v.score), parts:v.scoreDetails};
+    return calculateVisitScore(v);
+  }
+  const fallback = {
+    reine:"Oui",
+    ponte:"Normale",
+    couvain:"Normal",
+    reserves:"Bonnes",
+    varroa:"Non contrôlé",
+    frelons:"Non",
+    force:h.alerts ? "Moyenne" : "Forte"
+  };
+  return calculateVisitScore(fallback);
+}
+
+function statusScoreHTML(h){
+  const s = latestVisitScore(h);
+  return `
+    <div class="status-score-card" onclick="openScoreModal('${h.code}')">
+      <div class="status-score-top">
+        <div>
+          <div class="status-score-label">Statut colonie</div>
+          <div class="status-score-value">${s.status.icon} ${s.status.label}</div>
+          <div class="mini-help">${s.score} / 100 — cliquez pour comprendre</div>
+        </div>
+        <div class="score-info">i</div>
+      </div>
+      <div class="score-bar"><div class="score-bar-fill" style="width:${s.score}%"></div></div>
+    </div>
+  `;
+}
+
+function openScoreModal(code){
+  const h = state.hives.find(x=>x.code===code) || state.currentHive || state.hives[0];
+  if(!h) return;
+  const s = latestVisitScore(h);
+  const modal = document.getElementById("scoreModal");
+  const sub = document.getElementById("scoreModalSub");
+  const content = document.getElementById("scoreModalContent");
+  if(!modal || !content) return;
+
+  if(sub) sub.textContent = `${h.name} · ${s.status.icon} ${s.status.label} · ${s.score}/100`;
+
+  content.innerHTML = `
+    <div class="status-score-card" style="cursor:default;margin-bottom:14px">
+      <div class="status-score-value">${s.status.icon} ${s.status.label}</div>
+      <div class="mini-help">Score global : ${s.score} / 100</div>
+      <div class="score-bar"><div class="score-bar-fill" style="width:${s.score}%"></div></div>
+    </div>
+
+    ${s.parts.map(p=>`
+      <div class="score-line">
+        <div>
+          <div class="score-line-title">${p.name}</div>
+          <div class="score-line-detail">${p.value} · ${p.detail}</div>
+        </div>
+        <div class="score-points">+${p.points}/${p.max}</div>
+      </div>
+    `).join("")}
+
+    <div class="score-scale">
+      <div>90–100 : 🟢 Excellente</div>
+      <div>70–89 : 🟢 Bonne activité</div>
+      <div>50–69 : 🟡 Surveillance</div>
+      <div>30–49 : 🟠 Risque</div>
+      <div>0–29 : 🔴 Critique</div>
+    </div>
+  `;
+  modal.classList.add("open");
+}
+
+function closeScoreModal(e){
+  if(!e || e.target.id === "scoreModal" || e.target.classList.contains("icon-btn")){
+    document.getElementById("scoreModal")?.classList.remove("open");
+  }
+}
+
+function updateHiveStatusFromScore(h, scoreResult){
+  const s = scoreResult || latestVisitScore(h);
+  h.score = s.score;
+  h.status = s.status.label;
+  h.statusIcon = s.status.icon;
+  return h;
+}
+
+
+
+function saveHiveFile(kind){
+  const h = state.currentHive || state.hives[0];
+  if(!h) return;
+  ensureModuleArrays(h);
+
+  const isPhoto = kind === "photos";
+  const fileInput = document.getElementById(isPhoto ? "photoFile" : "docFile");
+  const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+  const desc = document.getElementById(isPhoto ? "photoDesc" : "docDesc")?.value || "";
+  const category = isPhoto ? "Photo" : (document.getElementById("docCategory")?.value || "Document");
+
+  if(!file){
+    showToast("⚠️ Sélectionne un fichier");
+    return;
+  }
+
+  const item = {
+    id: kind + "_" + Date.now(),
+    date: todayISO(),
+    name: file.name,
+    size: Math.round(file.size / 1024) + " Ko",
+    desc: desc,
+    category: category
+  };
+
+  if(isPhoto && file.type && file.type.startsWith("image/")){
+    const reader = new FileReader();
+    reader.onload = function(){
+      const result = String(reader.result || "");
+
+      // Sécurité Android/localStorage : on ne stocke pas les images trop grosses.
+      // Les données ruche restent sauvegardées.
+      if(result.length < 350000){
+        item.dataUrl = result;
+      } else {
+        item.dataUrl = "";
+        item.previewRemoved = true;
+        item.note = "Aperçu non conservé pour éviter de saturer le stockage local.";
+      }
+
+      h.photos.unshift(item);
+      saveState();
+      document.getElementById("content").innerHTML = hiveDetail(h.code);
+      drawAllQr(h.code);
+      showToast(item.previewRemoved ? "✓ Photo référencée · aperçu non conservé" : "✓ Photo enregistrée");
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
+
+  if(kind === "documents"){
+    h.documents.unshift(item);
+    saveState();
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+    showToast("✓ Document enregistré");
+  }
+}
+
+
+function hiveSectionContent(h){
+  const s = state.hiveSection;
+  const isRuchette = h.type === "ruchette";
+
+  if(s === "resume") return `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <h2 class="detail-title" style="margin:0">${isRuchette ? 'Ruchette' : 'Ruche'} ${h.name}</h2>
+      ${isRuchette ? '<span class="ruchette-badge">🪣 Ruchette</span>' : ''}
+    </div>
+    <div class="detail-sub">${h.apiary} · ${h.code}</div>
+    <div class="info-grid">
+      ${statusScoreHTML(h)}
+      ${infoBox("Dernière visite", h.date)}
+      ${infoBox("Code QR", h.code)}
+      ${isRuchette ? infoBox("Type", "Ruchette") : infoBox("Miel récolté", h.honey + " kg")}
+      ${infoBox("Reine", "Présente · Marquée")}
+      ${infoBox("Force", h.alerts ? "Faible" : "En développement")}
+      ${isRuchette ? infoBox("Origine", h.origine || "—") : infoBox("Hausses actives", "2")}
+      ${infoBox("Type matériel", isRuchette ? (h.taille || "5 cadres") : "Dadant 10 cadres")}
+    </div>
+    <div style="height:16px"></div>
+    ${isRuchette ? `
+      <button class="convert-btn" onclick="convertirEnRuche('${h.code}')">
+        🏠 Transférer en ruche
+      </button>
+      <div style="font-size:12px;color:#64748b;text-align:center;margin-top:8px">La colonie est prête ? Convertis cette ruchette en ruche.</div>
+    ` : ''}
+  `;
+
+  if(s === "ruchette") return `
+    <h2 class="detail-title">🪣 Suivi ruchette</h2>
+    <div class="detail-sub">Informations spécifiques à cette ruchette</div>
+
+    <div class="info-grid" style="margin-bottom:16px">
+      ${infoBox("Origine", h.origine || "—")}
+      ${infoBox("Taille", h.taille || "5 cadres")}
+      ${infoBox("Peuplement", h.datePeuplement || "—")}
+      ${infoBox("Ruche d'origine", h.rucheOrigine || "—")}
+    </div>
+
+    ${record("Observation","Colonie en développement","Reine en ponte, couvain naissant, réserves à surveiller.")}
+
+    <div class="record" style="background:#fff">
+      <h3 style="margin:0 0 12px">Mettre à jour</h3>
+      ${fieldSelect("État de la ruchette",["En cours d'établissement","Reine acceptée — ponte OK","Colonie forte — prête au transfert","Reine rejetée — à recommencer","Colonie perdue"])}
+      ${fieldSelect("Reine",["Présente — ponte observée","Cellule royale en cours","En introduction","Absente"])}
+      ${fieldInput("Observations","text","Notes libres…")}
+      ${fieldInput("Transfert prévu","date")}
+      <button class="big-action primary" style="width:100%;min-height:70px" onclick="fakeSave('Ruchette')">Enregistrer</button>
+    </div>
+
+    <div style="margin-top:16px">
+      <button class="convert-btn" onclick="convertirEnRuche('${h.code}')">
+        🏠 Transférer en ruche
+      </button>
+      <div style="font-size:12px;color:#64748b;text-align:center;margin-top:8px">
+        La colonie est établie et prête ? Ce bouton convertit la ruchette en ruche standard avec tout son historique conservé.
+      </div>
+    </div>
+  `;
+  if(s === "visites") return `
+    <h2 class="detail-title">Visites</h2>
+    <div class="detail-sub">Historique et nouvelle inspection</div>
+
+    ${!state.visitFormOpen ? `
+      <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openNewVisit()">
+        ＋ Nouvelle visite
+      </button>
+    ` : ""}
+
+    ${state.visitFormOpen ? visitFormHTML(h) : ""}
+
+    <div id="visitesHistory">
+      ${visitHistoryHTML(h)}
+    </div>
+  `;
+    if(s === "reine") return `
+    <h2 class="detail-title">Reine</h2>
+    <div class="detail-sub">Fiche reine actuelle et historique des remplacements</div>
+
+    ${queenCurrentHTML(h)}
+
+    <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px;margin:12px 0" onclick="openQueenForm()">
+      ♛ Ajouter / remplacer la reine
+    </button>
+
+    ${state.queenFormOpen ? queenFormHTML(h) : ""}
+
+    <h3 style="margin:18px 0 10px">Historique reine</h3>
+    <div id="queenHistory">
+      ${queenHistoryHTML(h)}
+    </div>
+  `;
+    if(s === "divisions") return `
+    <h2 class="detail-title">Divisions</h2>
+    <div class="detail-sub">Créer une division et générer automatiquement la nouvelle ruchette.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('divisions')">＋ Créer une division</button>
+    ${state.moduleFormOpen === "divisions" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Créer une division")}
+        <div class="field"><label>Date division</label><input id="divisionDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Nom nouvelle ruche / ruchette</label><input id="divisionName" placeholder="Ex : ${h.name}-2"></div>
+        <div class="field">
+          <label>Code QR proposé</label>
+          <div class="qr-proposal">
+            <input id="divisionQrCode" value="${nextHiveCode()}" placeholder="Ex : RUCHE-004">
+            <button class="see-all" type="button" onclick="proposeDivisionQr()">Proposer</button>
+          </div>
+          <div class="mini-help">La division créera une nouvelle ruchette avec ce QR code.</div>
+        </div>
+        <div class="field"><label>Cadres de couvain</label><input id="divisionCouvain" type="number" value="3"></div>
+        <div class="field"><label>Cadres de miel</label><input id="divisionMiel" type="number" value="1"></div>
+        <div class="field"><label>Cellule royale</label><select id="divisionCellule"><option>Oui</option><option>Non</option></select></div>
+        <div class="field"><label>Reine fécondée</label><select id="divisionReine"><option>Non</option><option>Oui</option></select></div>
+        <div class="field"><label>Notes</label><textarea id="divisionNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('divisions')">Enregistrer la division</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"divisions","Aucune division enregistrée.", d => record(formatDateFr(d.date), "Division → " + d.newName, `${d.couvain} cadres couvain · ${d.miel} cadres miel · QR : ${d.newCode} · Cellule royale : ${d.cellule} · Reine fécondée : ${d.reine}`))}
+  `;
+  
+  if(s === "actions") return `
+    <h2 class="detail-title">Actions</h2>
+    ${record("À faire","Contrôle varroa","Contrôler chute naturelle ou prévoir traitement.")}
+    ${record("À faire","Vérifier hausses","Contrôler remplissage et operculation.")}
+  `;
+  if(s === "hausses") return `
+    <h2 class="detail-title">Hausses</h2>
+    <div class="detail-sub">Pose, retrait et suivi des hausses.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('hausses')">＋ Ajouter une action hausse</button>
+    ${state.moduleFormOpen === "hausses" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Ajouter / retirer hausse")}
+        <div class="field"><label>Action</label><select id="hausseAction"><option>Hausse posée</option><option>Hausse retirée</option></select></div>
+        <div class="field"><label>Date</label><input id="hausseDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Nombre</label><input id="hausseNombre" type="number" value="1"></div>
+        <div class="field"><label>Date de retrait prévue / réelle</label><input id="hausseRetrait" type="date"></div>
+        <div class="field"><label>Notes</label><textarea id="hausseNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('hausses')">Enregistrer</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"hausses","Aucune hausse enregistrée.", x => record(formatDateFr(x.date), x.action, `${x.nombre} hausse(s)` + (x.retrait ? ` · Retrait : ${formatDateFr(x.retrait)}` : "") + (x.notes ? ` · ${x.notes}` : "")))}
+  `;
+  
+  if(s === "miel") return `
+    <h2 class="detail-title">Miel</h2>
+    <div class="detail-sub">Récoltes et types de miel.</div>
+    ${infoBox("Total récolté", (h.honey || 0) + " kg")}
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin:12px 0" onclick="openModuleForm('miel')">＋ Nouvelle récolte</button>
+    ${state.moduleFormOpen === "miel" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Nouvelle récolte")}
+        <div class="field"><label>Date récolte</label><input id="mielDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Kilos récoltés</label><input id="mielKilos" type="number" step="0.1" placeholder="Ex : 12"></div>
+        <div class="field"><label>Type de miel</label><select id="mielType"><option>Miel de printemps</option><option>Miel d’été</option><option>Miel toutes fleurs</option><option>Miel de lavande</option><option>Miel de châtaignier</option><option>Miel de forêt</option><option>Autre</option></select></div>
+        <div class="field"><label>Butinage principal</label><select id="mielButinage"><option>Lavande</option><option>Acacia</option><option>Châtaignier</option><option>Tilleul</option><option>Tournesol</option><option>Colza</option><option>Ronces</option><option>Trèfle</option><option>Bruyère</option><option>Forêt</option><option>Prairie</option><option>Miellat</option></select></div>
+        <div class="field"><label>Notes</label><textarea id="mielNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('miel')">Enregistrer la récolte</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"recoltes","Aucune récolte enregistrée.", r => record(formatDateFr(r.date), r.type + " · " + r.kilos + " kg", `Butinage : ${r.butinage}` + (r.notes ? ` · ${r.notes}` : "")))}
+  `;
+  
+  if(s === "traitements") return `
+    <h2 class="detail-title">Traitements</h2>
+    <div class="detail-sub">Varroa, contrôles sanitaires et dates de retrait.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('traitements')">＋ Ajouter traitement</button>
+    ${state.moduleFormOpen === "traitements" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Ajouter traitement")}
+        <div class="field"><label>Type</label><select id="traitementType"><option>Apivar (lanières)</option><option>Apitraz (lanières)</option><option>Apistan (lanières)</option><option>VarroMed</option><option>Api-Bioxal</option><option>Acide oxalique</option><option>Acide formique</option><option>Thymol</option><option>MAQS</option><option>Comptage varroa</option><option>Désinfection matériel</option><option>Contrôle maladie</option><option>Contrôle fausse teigne</option></select></div>
+        <div class="field"><label>Date pose / action</label><input id="traitementDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Retrait prévu</label><input id="traitementRetrait" type="date"></div>
+        <div class="field"><label>Quantité / dose</label><input id="traitementQuantite" placeholder="Ex : 2 lanières"></div>
+        <div class="field"><label>Notes</label><textarea id="traitementNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('traitements')">Enregistrer le traitement</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"traitements","Aucun traitement enregistré.", t => record(formatDateFr(t.date), t.type, `${t.quantite || "—"}` + (t.retrait ? ` · Retrait prévu : ${formatDateFr(t.retrait)}` : "") + (t.notes ? ` · ${t.notes}` : "")))}
+  `;
+  
+  if(s === "frelons") return `
+    <h2 class="detail-title">Frelons</h2>
+    <div class="detail-sub">Pression frelons, pièges et captures.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('frelons')">＋ Ajouter observation</button>
+    ${state.moduleFormOpen === "frelons" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Suivi frelons")}
+        <div class="field"><label>Date</label><input id="frelonDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Observation</label><select id="frelonObservation"><option>Aucun</option><option>Quelques frelons</option><option>Forte pression</option><option>Nid signalé à proximité</option></select></div>
+        <div class="field"><label>Piège</label><select id="frelonPiege"><option>Non posé</option><option>Piège installé</option><option>Piège retiré</option><option>Piège à contrôler</option></select></div>
+        <div class="field"><label>Captures estimées</label><input id="frelonCaptures" type="number" value="0"></div>
+        <div class="field"><label>Notes</label><textarea id="frelonNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('frelons')">Enregistrer</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"frelons","Aucune observation frelons.", f => record(formatDateFr(f.date), f.observation, `${f.piege} · Captures : ${f.captures}` + (f.notes ? ` · ${f.notes}` : "")))}
+  `;
+  
+  if(s === "nourrissement") return `
+    <h2 class="detail-title">Nourrissement</h2>
+    <div class="detail-sub">Sirop, candi, protéines.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('nourrissement')">＋ Ajouter nourrissement</button>
+    ${state.moduleFormOpen === "nourrissement" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Ajouter nourrissement")}
+        <div class="field"><label>Date</label><input id="nourrissementDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Type</label><select id="nourrissementType"><option>Sirop 50/50</option><option>Sirop 70/30</option><option>Candi</option><option>Protéines</option></select></div>
+        <div class="field"><label>Quantité</label><input id="nourrissementQuantite" placeholder="Ex : 2 L, 1 kg"></div>
+        <div class="field"><label>Notes</label><textarea id="nourrissementNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('nourrissement')">Enregistrer</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"nourrissements","Aucun nourrissement enregistré.", n => record(formatDateFr(n.date), n.type, `${n.quantite || "—"}` + (n.notes ? ` · ${n.notes}` : "")))}
+  `;
+  
+  if(s === "transhumance") return `
+    <h2 class="detail-title">Transhumance</h2>
+    <div class="detail-sub">Déplacements, coordonnées GPS et floraisons recherchées.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('transhumance')">＋ Nouveau déplacement</button>
+    ${state.moduleFormOpen === "transhumance" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Nouveau déplacement")}
+        <div class="field"><label>Date déplacement</label><input id="transDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Départ</label><input id="transDepart" value="${h.apiary || ""}"></div>
+        <div class="field"><label>Arrivée</label><input id="transArrivee" placeholder="Ex : Plateau de Lavande"></div>
+        <div class="assist-card">
+          <div class="assist-row">
+            <div class="field" style="margin-bottom:0">
+              <label>GPS arrivée</label>
+              <input id="transhumanceGps" placeholder="Latitude, longitude" oninput="updateMapLink('transhumance')">
+            </div>
+            <button class="assist-btn" onclick="getGPS('transhumance')">GPS</button>
+          </div>
+          <a id="transhumanceMapLink" class="map-link" style="display:none" target="_blank" rel="noopener">📍 Ouvrir dans la carte</a>
+        </div>
+        <div class="field"><label>Nombre de ruches</label><input id="transNb" type="number" value="1"></div>
+        <div class="field"><label>Floraison recherchée</label><select id="transFloraison"><option>Lavande</option><option>Acacia</option><option>Châtaignier</option><option>Tilleul</option><option>Tournesol</option><option>Colza</option><option>Bruyère</option><option>Miellat</option><option>Autre</option></select></div>
+        <div class="field"><label>Notes</label><textarea id="transNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('transhumance')">Enregistrer</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"transhumances","Aucune transhumance enregistrée.", t => record(formatDateFr(t.date), `${t.depart} → ${t.arrivee}`, `${t.nb} ruche(s) · ${t.floraison}` + (t.gps ? ` · GPS : ${t.gps}` : "") + (t.notes ? ` · ${t.notes}` : "")))}
+  `;
+  
+  if(s === "pesees") return `
+    <h2 class="detail-title">Pesées</h2>
+    <div class="detail-sub">Poids total ou pesée arrière gauche / droite.</div>
+    <button class="big-action primary module-save-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openModuleForm('pesees')">＋ Nouvelle pesée</button>
+    ${state.moduleFormOpen === "pesees" ? `
+      <div class="module-form-card" id="moduleForm">
+        ${moduleFormHeader("Nouvelle pesée")}
+        <div class="field"><label>Date</label><input id="peseeDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Poids total kg</label><input id="peseeTotal" type="number" step="0.1"></div>
+        <div class="field"><label>Arrière gauche kg</label><input id="peseeGauche" type="number" step="0.1"></div>
+        <div class="field"><label>Arrière droite kg</label><input id="peseeDroite" type="number" step="0.1"></div>
+        <div class="field"><label>Notes</label><textarea id="peseeNotes"></textarea></div>
+        <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('pesees')">Enregistrer</button>
+      </div>
+    ` : ""}
+    ${moduleHistoryHTML(h,"pesees","Aucune pesée enregistrée.", p => record(formatDateFr(p.date), "Pesée", `Total : ${p.total || "—"} kg · G : ${p.gauche || "—"} kg · D : ${p.droite || "—"} kg` + (p.notes ? ` · ${p.notes}` : "")))}
+  `;
+  
+  if(s === "photos") return `
+    <h2 class="detail-title">Photos</h2>
+    <p style="color:#64748b">Ajoute des photos de couvain, reine, hausses ou entrée de ruche.</p>
+    <div class="module-form-card">
+      <div class="field"><label>Photo</label><input id="photoFile" type="file" accept="image/*"></div>
+      <div class="field"><label>Description</label><input id="photoDesc" placeholder="Ex : couvain, reine, entrée de ruche…"></div>
+      <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveHiveFile('photos')">Enregistrer la photo</button>
+    </div>
+    ${moduleHistoryHTML(h,"photos","Aucune photo enregistrée.", p => `
+      <div class="record">
+        <div class="record-head"><span>${p.desc || "Photo"}</span><span>${formatDateFr(p.date)}</span></div>
+        <div class="record-body">${p.name || "Fichier image"}</div>
+        ${p.dataUrl ? `<img class="media-thumb" src="${p.dataUrl}" alt="${p.desc || "Photo ruche"}">` : ""}
+      </div>
+    `)}
+  `;
+    if(s === "conformite") return `
+    <h2 class="detail-title">Conformité apiculteur</h2>
+    <div class="detail-sub">Champs et documents selon ton profil.</div>
+
+    TYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#071225" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
+  <title>Mes Abeilles 🐝</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icon192.png">
+  <style>
+    :root{
+      --nav:#071225;
+      --nav2:#101c3a;
+      --bg:#f4f6fb;
+      --card:#ffffff;
+      --text:#0b1328;
+      --muted:#6b768d;
+      --line:#e7ebf3;
+      --orange:#ff7a18;
+      --orange2:#ffd24a;
+      --green:#16a34a;
+      --warning:#f97316;
+      --shadow:0 16px 36px rgba(15,23,42,.12);
+      --radius:28px;
+      --grad-orange:linear-gradient(135deg,#ff7a18,#ffd24a);
+      --grad-nav:linear-gradient(180deg,#071225,#111d3c);
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;
+      background-color:#060e1e;
+      background-image:url("data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%2772.00%27%20height=%2762.35%27%3E%0A%20%20%3Cpolygon%20points=%2733.50,15.59%2025.75,29.01%2010.25,29.01%202.50,15.59%2010.25,2.17%2025.75,2.17%27%20fill=%27%231c2024%27/%3E%0A%20%20%3Cpolygon%20points=%2769.50,15.59%2061.75,29.01%2046.25,29.01%2038.50,15.59%2046.25,2.17%2061.75,2.17%27%20fill=%27%231c2024%27/%3E%0A%20%20%3Cpolygon%20points=%2751.50,46.77%2043.75,60.19%2028.25,60.19%2020.50,46.77%2028.25,33.34%2043.75,33.34%27%20fill=%27%231c2024%27/%3E%0A%20%20%3Cpolygon%20points=%2715.50,46.77%207.75,60.19%20-7.75,60.19%20-15.50,46.77%20-7.75,33.34%207.75,33.34%27%20fill=%27%231c2024%27/%3E%0A%20%20%3Cpolygon%20points=%2787.50,46.77%2079.75,60.19%2064.25,60.19%2056.50,46.77%2064.25,33.34%2079.75,33.34%27%20fill=%27%231c2024%27/%3E%0A%3C/svg%3E");
+      background-size:72px 62px;
+      color:var(--text);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    }
+    button,input,select,textarea{font:inherit}
+    button{cursor:pointer}
+    .phone{
+      max-width:430px;
+      min-height:100vh;
+      margin:0 auto;
+      background:var(--bg);
+      position:relative;
+      overflow:hidden;
+      padding-bottom:116px;
+    }
+        .hero{
+      background-color:#071225;
+      background-image:
+        radial-gradient(220px 160px at 78% 20%, rgba(255,122,24,.15), transparent 60%),
+        radial-gradient(240px 160px at 10% 15%, rgba(255,210,74,.08), transparent 62%),
+        url("data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%2772.00%27%20height=%2762.35%27%3E%0A%20%20%3Cpolygon%20points=%2733.50,15.59%2025.75,29.01%2010.25,29.01%202.50,15.59%2010.25,2.17%2025.75,2.17%27%20fill=%27%23222424%27/%3E%0A%20%20%3Cpolygon%20points=%2769.50,15.59%2061.75,29.01%2046.25,29.01%2038.50,15.59%2046.25,2.17%2061.75,2.17%27%20fill=%27%23222424%27/%3E%0A%20%20%3Cpolygon%20points=%2751.50,46.77%2043.75,60.19%2028.25,60.19%2020.50,46.77%2028.25,33.34%2043.75,33.34%27%20fill=%27%23222424%27/%3E%0A%20%20%3Cpolygon%20points=%2715.50,46.77%207.75,60.19%20-7.75,60.19%20-15.50,46.77%20-7.75,33.34%207.75,33.34%27%20fill=%27%23222424%27/%3E%0A%20%20%3Cpolygon%20points=%2787.50,46.77%2079.75,60.19%2064.25,60.19%2056.50,46.77%2064.25,33.34%2079.75,33.34%27%20fill=%27%23222424%27/%3E%0A%3C/svg%3E");
+      background-size:auto, auto, 72px 62px;
+      color:#fff;
+      padding:22px 18px 88px;
+      border-bottom-left-radius:38px;
+      border-bottom-right-radius:38px;
+      position:relative;
+    }
+    .hero-top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:26px;
+    }
+    .icon-btn{
+      width:54px;height:54px;border:0;border-radius:20px;
+      background:rgba(255,255,255,.12);
+      color:#fff;font-size:28px;
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+    .brand{
+      font-size:31px;
+      font-weight:900;
+      letter-spacing:-.05em;
+      text-align:center;
+      flex:1;
+    }
+    .hero-hive-row{
+      display:none;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:14px;
+      margin-top:22px;
+    }
+    .hero-hive-left{min-width:0}
+    .hero-hive-title{
+      font-size:34px;
+      font-weight:950;
+      letter-spacing:-.05em;
+      line-height:1.02;
+      margin-bottom:6px;
+    }
+    .hero-hive-sub{
+      font-size:16px;
+      color:#d6dfef;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .hero-qr-card{
+      background:#fff;
+      border-radius:16px;
+      padding:9px;
+      text-align:center;
+      flex:0 0 92px;
+      box-shadow:0 12px 28px rgba(0,0,0,.18);
+    }
+    .hero-qr-card canvas{
+      width:72px;
+      height:72px;
+      display:block;
+      image-rendering:pixelated;
+      margin:0 auto 7px;
+    }
+    .hero-qr-card button{
+      border:0;
+      border-radius:10px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#130d04;
+      font-size:11px;
+      font-weight:950;
+      padding:7px 8px;
+      width:100%;
+    }
+    .hero-qr-code{
+      font-size:10px;
+      color:#475569;
+      font-weight:900;
+      margin-bottom:5px;
+    }
+    .hero-stats{
+      display:grid;
+      grid-template-columns:1fr 1fr 1fr;
+      gap:14px;
+      align-items:center;
+    }
+    .stat{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .stat-icon{
+      width:54px;height:54px;border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+      color:#fff;font-size:25px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      box-shadow:0 10px 25px rgba(255,122,24,.28);
+      flex:0 0 auto;
+    }
+    .stat-icon.green{background:linear-gradient(135deg,#22c55e,#86efac)}
+    .stat-icon.yellow{background:linear-gradient(135deg,#ffd24a,#ffb703);color:#141006}
+    .stat-label{font-size:14px;color:#dbe3f4}
+    .stat-value{font-size:25px;font-weight:900;line-height:1.1;margin-top:4px}
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      border-radius:999px;
+      padding:12px 18px;
+      font-weight:900;
+      background:rgba(22,163,74,.18);
+      color:#d8ffe4;
+      white-space:nowrap;
+      margin-left:auto;
+      grid-column:auto;
+    }
+    .pill-dot{width:10px;height:10px;background:#22c55e;border-radius:50%}
+    .sheet{
+      background:linear-gradient(180deg,#fff,#f7f9fd);
+      margin-top:-54px;
+      border-top-left-radius:38px;
+      border-top-right-radius:38px;
+      padding:28px 18px 0;
+      position:relative;
+      z-index:2;
+      min-height:620px;
+    }
+    .actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+      margin-bottom:34px;
+    }
+    .big-action{
+      min-height:104px;
+      border:0;
+      border-radius:26px;
+      padding:18px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:18px;
+      text-align:left;
+      font-weight:950;
+      font-size:24px;
+      line-height:1.08;
+      box-shadow:var(--shadow);
+      background:#fff;
+      color:#090f1f;
+    }
+    .big-action.primary{
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#090f1f;
+    }
+    .big-action .action-icon{font-size:38px;line-height:1}
+    .section-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:18px;
+    }
+    .section-title{
+      font-size:30px;
+      font-weight:950;
+      letter-spacing:-.05em;
+    }
+    .see-all{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      padding:12px 18px;
+      font-size:16px;
+      font-weight:900;
+      color:#0b1328;
+      box-shadow:0 8px 20px rgba(15,23,42,.05);
+    }
+    .carousel{
+      display:flex;
+      gap:14px;
+      overflow-x:auto;
+      scroll-snap-type:x mandatory;
+      padding:0 2px 14px;
+      margin-right:-18px;
+    }
+    .carousel::-webkit-scrollbar{display:none}
+    .hive-card{
+      min-width:222px;
+      max-width:222px;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:22px;
+      overflow:hidden;
+      box-shadow:0 12px 28px rgba(15,23,42,.08);
+      scroll-snap-align:start;
+      position:relative;
+    }
+    .hive-image{
+      height:126px;
+      position:relative;
+      overflow:hidden;
+    }
+    .lavender{background:
+      radial-gradient(circle at 20% 30%,rgba(255,255,255,.25),transparent 14%),
+      linear-gradient(135deg,#6d28d9,#a78bfa 45%,#7c3aed)}
+    .acacia{background:
+      radial-gradient(circle at 30% 35%,rgba(255,255,255,.85),transparent 10%),
+      radial-gradient(circle at 65% 48%,rgba(255,255,255,.9),transparent 12%),
+      linear-gradient(135deg,#b7e4c7,#fef9c3)}
+    .sunflower{background:
+      radial-gradient(circle at 65% 45%,#78350f 0 12%,#facc15 13% 32%,transparent 33%),
+      linear-gradient(135deg,#facc15,#fb923c)}
+    .flower-texture{
+      position:absolute;inset:0;
+      opacity:.9;
+      background-image:
+        radial-gradient(circle at 15% 70%,rgba(255,255,255,.45) 0 3px,transparent 4px),
+        radial-gradient(circle at 45% 35%,rgba(255,255,255,.35) 0 2px,transparent 3px),
+        radial-gradient(circle at 78% 62%,rgba(255,255,255,.4) 0 3px,transparent 4px);
+      background-size:38px 38px;
+    }
+    .code-tag{
+      position:absolute;
+      left:16px;
+      bottom:-1px;
+      background:#fff;
+      border-top-left-radius:12px;
+      border-top-right-radius:12px;
+      padding:10px 14px 8px;
+      font-weight:950;
+      color:#6d28d9;
+      box-shadow:0 -3px 10px rgba(0,0,0,.08);
+    }
+    .code-tag.orange{color:#ea580c}
+    .hive-body{padding:18px 16px 16px}
+    .hive-title{font-size:23px;font-weight:950;letter-spacing:-.04em;margin:0 0 6px}
+    .hive-apiary{color:#6b768d;font-size:15px;margin-bottom:18px}
+    .hive-status{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background:#dcfce7;
+      color:#15803d;
+      border-radius:999px;
+      padding:9px 12px;
+      font-weight:900;
+      font-size:15px;
+      margin-bottom:18px;
+    }
+    .hive-status.warn{background:#ffedd5;color:#ea580c}
+    .status-dot{width:9px;height:9px;border-radius:50%;background:#22c55e}
+    .hive-status.warn .status-dot{background:#f97316}
+    .visit-label{color:#6b768d;font-size:14px;margin-bottom:5px}
+    .visit-date{font-weight:900}
+    .arrow{
+      position:absolute;right:16px;bottom:86px;
+      font-size:32px;font-weight:500;color:#0b1328;
+    }
+    .dots{display:flex;justify-content:center;gap:12px;margin:8px 0 24px}
+    .dot{width:10px;height:10px;border-radius:50%;background:#d7dce6}
+    .dot.active{background:#ff7a18}
+    .bottom{
+      position:fixed;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:0;
+      width:min(430px,100vw);
+      padding:10px 18px calc(10px + env(safe-area-inset-bottom,0px));
+      z-index:20;
+    }
+    .bottom-inner{
+      background:rgba(255,255,255,.94);
+      backdrop-filter:blur(16px);
+      border:1px solid rgba(226,232,240,.9);
+      border-radius:26px;
+      box-shadow:0 12px 40px rgba(15,23,42,.12);
+      display:grid;
+      grid-template-columns:1fr 1fr 76px 1fr 1fr;
+      align-items:center;
+      gap:4px;
+      padding:8px 8px;
+    }
+    .nav-btn{
+      border:0;background:transparent;color:#68758d;
+      font-weight:900;font-size:13px;
+      padding:8px 2px;
+      position:relative;
+    }
+    .nav-btn .nav-icon{display:block;font-size:27px;line-height:1;margin-bottom:4px}
+    .nav-btn.active{color:#ff7a18}
+    .plus{
+      width:64px;height:64px;border:0;border-radius:50%;
+      background:linear-gradient(135deg,#ff7a18,#ffb11f);
+      color:#111;font-size:42px;font-weight:700;
+      margin-top:-34px;
+      box-shadow:0 16px 32px rgba(255,122,24,.36);
+    }
+    .nav-badge{
+      position:absolute;top:2px;right:16px;
+      background:#ef4444;color:#fff;border-radius:999px;
+      min-width:21px;height:21px;font-size:12px;
+      display:flex;align-items:center;justify-content:center;
+      border:2px solid #fff;
+    }
+    .panel{
+      background:#fff;border:1px solid var(--line);
+      border-radius:26px;padding:20px;
+      box-shadow:var(--shadow);
+      margin-bottom:18px;
+    }
+    .panel h2{margin:0 0 14px;font-size:25px;letter-spacing:-.04em}
+    .field{margin-bottom:12px}
+    .field label{display:block;color:#64748b;font-weight:800;font-size:13px;margin-bottom:6px}
+    input,select,textarea{
+      width:100%;border:1px solid var(--line);background:#f8fafc;
+      border-radius:16px;padding:12px 14px;outline:0;
+    }
+    textarea{min-height:100px}
+    .hidden{display:none}
+    .hive-layout{
+      display:grid;
+      grid-template-columns:130px 1fr;
+      gap:14px;
+      align-items:start;
+    }
+    .hive-side{
+      background:linear-gradient(180deg,#071225,#101c3a);
+      color:#fff;
+      border-radius:24px;
+      padding:12px;
+      position:sticky;
+      top:10px;
+      max-height:calc(100vh - 140px);
+      overflow:auto;
+    }
+    .hive-side-title{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.09em;
+      color:#aab4c8;
+      margin:6px 8px 10px;
+      font-weight:900;
+    }
+    .side-item{
+      width:100%;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.045);
+      color:#fff;
+      border-radius:14px;
+      padding:11px 9px;
+      margin-bottom:7px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:12px;
+      font-weight:900;
+      text-align:left;
+    }
+    .side-item.active{
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;
+      border-color:#ffd24a;
+    }
+    .side-item .sicon{font-size:17px;width:20px;text-align:center}
+    .qr-mini{
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,210,74,.45);
+      border-radius:18px;
+      padding:10px;
+      margin-top:12px;
+      text-align:center;
+    }
+    .qr-canvas{
+      background:#fff;
+      border-radius:10px;
+      padding:8px;
+      width:92px;
+      height:92px;
+      image-rendering:pixelated;
+      margin:8px auto;
+      display:block;
+    }
+    .qr-print-btn{
+      width:100%;
+      border:0;
+      border-radius:12px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      padding:10px 8px;
+      font-weight:950;
+      font-size:12px;
+      color:#130d04;
+    }
+    .detail-panel{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:26px;
+      padding:18px;
+      box-shadow:var(--shadow);
+      min-height:520px;
+    }
+    .detail-title{
+      font-size:28px;
+      font-weight:950;
+      letter-spacing:-.05em;
+      margin:0 0 8px;
+    }
+    .detail-sub{color:#64748b;margin-bottom:18px}
+    .info-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+    .info-box{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:13px;
+    }
+    .info-box .label{font-size:12px;color:#64748b;font-weight:850}
+    .info-box .value{font-size:18px;font-weight:950;margin-top:4px}
+    .record{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:14px;
+      margin-bottom:10px;
+    }
+    .record-head{display:flex;justify-content:space-between;gap:10px;font-weight:950}
+    .record-body{color:#64748b;font-size:14px;margin-top:6px}
+    .print-only{display:none}
+    @media (max-width:390px){
+      .hive-layout{grid-template-columns:112px 1fr;gap:10px}
+      .side-item{font-size:11px;padding:10px 7px}
+      .side-item .sicon{font-size:15px;width:17px}
+      .detail-panel{padding:14px}
+      .info-grid{grid-template-columns:1fr}
+      .detail-title{font-size:24px}
+    }
+    .hive-layout{
+      display:block !important;
+    }
+    .hive-side{
+      display:none !important;
+    }
+    .hive-tabs{
+      display:flex;
+      gap:10px;
+      overflow-x:auto;
+      scroll-snap-type:x mandatory;
+      padding:2px 0 14px;
+      margin:0 -18px 14px 0;
+      -webkit-overflow-scrolling:touch;
+    }
+    .hive-tabs::-webkit-scrollbar{display:none}
+    .hive-tab{
+      flex:0 0 auto;
+      border:1px solid var(--line);
+      background:#fff;
+      color:#0b1328;
+      border-radius:999px;
+      padding:12px 15px;
+      font-size:14px;
+      font-weight:950;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+      scroll-snap-align:start;
+      white-space:nowrap;
+    }
+    .hive-tab.active{
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;
+      border-color:#ffd24a;
+      box-shadow:0 10px 24px rgba(255,122,24,.22);
+    }
+    .hive-tab-icon{font-size:18px}
+    .hive-content-wrap{
+      display:block;
+    }
+    .detail-panel{
+      min-height:460px;
+      border-radius:28px;
+    }
+    .hive-title-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      margin-bottom:14px;
+    }
+    .hive-title-row .title-left{min-width:0}
+    .qr-card-small{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:10px;
+      box-shadow:0 8px 18px rgba(15,23,42,.08);
+      text-align:center;
+      flex:0 0 98px;
+    }
+    .qr-card-small canvas{
+      width:72px;
+      height:72px;
+      image-rendering:pixelated;
+      display:block;
+      margin:0 auto 8px;
+    }
+    .qr-card-small button{
+      border:0;
+      border-radius:10px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      padding:7px 8px;
+      font-size:11px;
+      font-weight:950;
+      color:#130d04;
+      width:100%;
+    }
+    .qr-strip{
+      background:linear-gradient(135deg,#071225,#101c3a);
+      color:#fff;
+      border-radius:24px;
+      padding:14px;
+      display:grid;
+      grid-template-columns:86px 1fr;
+      gap:12px;
+      align-items:center;
+      margin-bottom:14px;
+      box-shadow:var(--shadow);
+    }
+    .qr-strip canvas{
+      width:76px;
+      height:76px;
+      background:#fff;
+      border-radius:12px;
+      padding:6px;
+      image-rendering:pixelated;
+    }
+    .qr-strip-title{
+      font-weight:950;
+      color:#ffd24a;
+      font-size:14px;
+      text-transform:uppercase;
+    }
+    .qr-strip-text{font-size:13px;color:#d8dfed;margin-top:4px}
+    .qr-strip button{
+      margin-top:8px;
+      border:0;
+      border-radius:12px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      padding:9px 12px;
+      font-weight:950;
+      color:#120d05;
+    }
+    @media (max-width:390px){
+      .hive-tab{font-size:13px;padding:11px 13px}
+      .hive-tabs{margin-right:-14px}
+      .qr-strip{grid-template-columns:78px 1fr}
+      .qr-strip canvas{width:70px;height:70px}
+    }
+
+    .compliance-grid{display:grid;grid-template-columns:1fr;gap:12px}
+    .compliance-card{
+      background:#f8fafc;border:1px solid var(--line);border-radius:18px;padding:14px;
+    }
+    .compliance-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px}
+    .compliance-title{font-weight:950;font-size:17px}
+    .tag{display:inline-flex;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:950}
+    .tag.required{background:#fee2e2;color:#dc2626}
+    .tag.recommended{background:#fef3c7;color:#b45309}
+    .tag.pro{background:#dbeafe;color:#1d4ed8}
+    .tag.ok{background:#dcfce7;color:#15803d}
+    .checklist{display:grid;gap:8px;margin-top:10px}
+    .checkline{display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px}
+    .checkline input{width:auto;margin-top:3px}
+    .doc-upload{border:1px dashed #cbd5e1;border-radius:16px;padding:12px;background:#fff;margin-top:10px}
+    .qr-proposal{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
+    .mini-help{font-size:12px;color:#64748b;margin-top:5px}
+    .notice{background:#eef6ff;border:1px solid #bfdbfe;color:#1e3a8a;border-radius:16px;padding:12px;margin:12px 0}
+
+
+    /* v7 — Optimisation accueil mobile iPhone / Android */
+    .hero{
+      padding:18px 18px 66px;
+      border-bottom-left-radius:30px;
+      border-bottom-right-radius:30px;
+    }
+    .hero-top{margin-bottom:18px}
+    .brand{font-size:26px}
+    .icon-btn{width:50px;height:50px;border-radius:18px}
+    .hero-stats{grid-template-columns:1fr 1fr 1fr;gap:9px}
+    .stat{gap:8px}
+    .stat-icon{width:44px;height:44px;font-size:21px}
+    .stat-label{font-size:12px}
+    .stat-value{font-size:22px}
+    .pill{padding:9px 14px;margin-top:6px}
+    .sheet{margin-top:-42px;padding:22px 16px 0}
+    .actions{gap:12px;margin-bottom:18px}
+    .big-action{min-height:78px;border-radius:22px;font-size:18px;padding:14px;gap:10px}
+    .big-action .action-icon{font-size:30px}
+    .section-title{font-size:28px}
+    .see-all{padding:10px 15px}
+    .carousel{gap:12px;margin-right:-16px}
+    .hive-card{min-width:174px;max-width:174px;border-radius:22px}
+    .hive-image{height:86px}
+    .code-tag{font-size:13px;padding:8px 10px 6px;left:12px}
+    .hive-body{padding:13px}
+    .hive-title{font-size:18px;margin-bottom:4px}
+    .hive-apiary{font-size:12px;margin-bottom:10px}
+    .hive-status{font-size:12px;padding:7px 9px;margin-bottom:10px}
+    .visit-label{font-size:12px}
+    .visit-date{font-size:13px}
+    .arrow{display:none}
+    .quick-mini{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+      margin:0 0 16px;
+    }
+    .mini-action{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:18px;
+      padding:10px 4px;
+      font-weight:900;
+      color:#0b1328;
+      box-shadow:0 6px 16px rgba(15,23,42,.05);
+      font-size:12px;
+      text-align:center;
+    }
+    .mini-action span{display:block;font-size:19px;margin-bottom:3px}
+    .home-search{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:11px 14px;
+      margin-bottom:16px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      box-shadow:0 6px 16px rgba(15,23,42,.05);
+    }
+    .home-search input{
+      border:0;
+      padding:0;
+      background:transparent;
+      outline:0;
+      width:100%;
+      font-size:15px;
+    }
+    .bottom-inner{grid-template-columns:1fr 1fr 64px 1fr 1fr}
+    .plus{width:58px;height:58px;font-size:38px;margin-top:-28px}
+    @media (max-width:390px){
+      .brand{font-size:24px}
+      .stat-icon{width:40px;height:40px}
+      .stat-value{font-size:20px}
+      .big-action{font-size:17px;min-height:74px}
+      .hive-card{min-width:164px;max-width:164px}
+      .hive-title{font-size:17px}
+      .bottom{padding-left:10px;padding-right:10px}
+    }
+
+
+    .assist-card{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:12px;
+      margin-bottom:12px;
+    }
+    .assist-row{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:10px;
+      align-items:end;
+    }
+    .assist-btn{
+      border:0;
+      border-radius:14px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#130d04;
+      padding:12px 14px;
+      font-weight:950;
+      white-space:nowrap;
+    }
+    .assist-btn.secondary{
+      background:#fff;
+      border:1px solid var(--line);
+      color:#0b1328;
+    }
+    .qr-preview-wrap{
+      display:grid;
+      grid-template-columns:96px 1fr;
+      gap:12px;
+      align-items:center;
+      margin-top:10px;
+    }
+    .qr-preview-wrap canvas{
+      width:88px;
+      height:88px;
+      image-rendering:pixelated;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:6px;
+    }
+    .map-link{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      margin-top:8px;
+      color:#2563eb;
+      font-weight:900;
+      text-decoration:none;
+    }
+
+    /* ── Splash screen ──────────────────────────────── */
+        .splash{
+      position:fixed;inset:0;z-index:300;
+      overflow:hidden;
+      background-color:#071225;
+      background-image:
+        radial-gradient(ellipse 70% 50% at 50% 0%, rgba(255,122,24,.10), transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(255,210,74,.06), transparent 55%),
+        url("data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%2772.00%27%20height=%2762.35%27%3E%0A%20%20%3Cpolygon%20points=%2733.50,15.59%2025.75,29.01%2010.25,29.01%202.50,15.59%2010.25,2.17%2025.75,2.17%27%20fill=%27%23222424%27/%3E%0A%20%20%3Cpolygon%20points=%2769.50,15.59%2061.75,29.01%2046.25,29.01%2038.50,15.59%2046.25,2.17%2061.75,2.17%27%20fill=%27%23222424%27/%3E%0A%20%20%3Cpolygon%20points=%2751.50,46.77%2043.75,60.19%2028.25,60.19%2020.50,46.77%2028.25,33.34%2043.75,33.34%27%20fill=%27%23222424%27/%3E%0A%20%20%3Cpolygon%20points=%2715.50,46.77%207.75,60.19%20-7.75,60.19%20-15.50,46.77%20-7.75,33.34%207.75,33.34%27%20fill=%27%23222424%27/%3E%0A%20%20%3Cpolygon%20points=%2787.50,46.77%2079.75,60.19%2064.25,60.19%2056.50,46.77%2064.25,33.34%2079.75,33.34%27%20fill=%27%23222424%27/%3E%0A%3C/svg%3E");
+      background-size:auto, auto, 72px 62px;
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:space-between;
+      padding:30px 24px calc(20px + env(safe-area-inset-bottom,0px));
+      transition:opacity .5s;
+    
+    }
+    .splash.out{opacity:0;pointer-events:none}
+    .splash-top{
+      display:flex;flex-direction:column;align-items:center;
+      flex:1;justify-content:flex-start;gap:0;
+      overflow-y:auto;
+      padding-top:20px;
+      -webkit-overflow-scrolling:touch;
+    }
+    .splash-glow{
+      width:130px;height:130px;border-radius:30px;
+      background:radial-gradient(circle,rgba(255,122,24,.18),transparent 70%);
+      display:flex;align-items:center;justify-content:center;
+      overflow:hidden;
+      margin-bottom:32px;
+      box-shadow:0 20px 50px rgba(255,122,24,.35), 0 0 0 1px rgba(255,255,255,.08);
+      animation:pulseGlow 2.5s ease-in-out infinite;
+    }
+    @keyframes pulseGlow{
+      0%,100%{box-shadow:0 0 40px 10px rgba(255,122,24,.2)}
+      50%{box-shadow:0 0 70px 20px rgba(255,210,74,.3)}
+    }
+    .splash-title{
+      font-size:32px;font-weight:950;letter-spacing:-.05em;
+      color:#fff;text-align:center;line-height:1.05;margin-bottom:10px;
+    }
+    .splash-title span{
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    }
+    .splash-sub{
+      font-size:16px;color:#7a8eaa;text-align:center;line-height:1.6;max-width:280px;
+    }
+    .splash-features{
+      display:flex;flex-direction:column;gap:8px;width:100%;margin:16px 0;
+    }
+    .splash-feat{
+      display:flex;align-items:center;gap:12px;
+      background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);
+      border-radius:16px;padding:10px 14px;
+    }
+    .splash-feat-icon{font-size:24px;flex:0 0 auto}
+    .splash-feat-text{color:#c8d4e8;font-size:14px;line-height:1.4}
+    .splash-feat-text strong{color:#fff;display:block;font-size:15px;margin-bottom:2px}
+    .splash-btn{
+      width:100%;border:0;border-radius:22px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;font-size:19px;font-weight:950;
+      padding:20px;
+      box-shadow:0 14px 36px rgba(255,122,24,.4);
+      letter-spacing:-.02em;
+      flex-shrink:0;
+      position:relative;
+      z-index:10;
+    }
+
+    /* ── Coach marks (tour guidé) ───────────────────── */
+    .coach-backdrop{
+      position:fixed;inset:0;z-index:200;
+      pointer-events:none;
+    }
+    /* Le trou découpé dans le backdrop est géré via SVG clipPath */
+    .coach-svg{
+      position:fixed;inset:0;width:100%;height:100%;
+      pointer-events:none;z-index:200;
+    }
+    .coach-overlay-rect{fill:rgba(5,14,30,.82)}
+    .coach-hole{fill:black} /* mode d'exclusion via feMerge */
+    .coach-bubble{
+      position:fixed;z-index:210;
+      background:#fff;
+      border-radius:22px;
+      padding:20px;
+      box-shadow:0 24px 60px rgba(0,0,0,.35);
+      max-width:calc(100vw - 40px);
+      width:340px;
+      left:50%;transform:translateX(-50%);
+      max-height:calc(100vh - 120px);
+      overflow-y:auto;
+      animation:bubbleIn .28s cubic-bezier(.34,1.56,.64,1);
+    }
+    @keyframes bubbleIn{from{opacity:0;transform:translateX(-50%) scale(.92)}to{opacity:1;transform:translateX(-50%) scale(1)}}
+    .coach-arrow{
+      position:absolute;width:18px;height:14px;
+      left:50%;transform:translateX(-50%);
+    }
+    .coach-arrow.up{top:-13px;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:14px solid #fff}
+    .coach-arrow.down{bottom:-13px;border-left:9px solid transparent;border-right:9px solid transparent;border-top:14px solid #fff}
+    .coach-step{font-size:11px;font-weight:950;color:#ff7a18;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+    .coach-title{font-size:19px;font-weight:950;letter-spacing:-.04em;color:#0b1328;margin-bottom:8px}
+    .coach-body{font-size:14px;color:#64748b;line-height:1.55;margin-bottom:16px}
+    .coach-footer{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .coach-dots-wrap{display:flex;gap:5px}
+    .coach-dot{width:7px;height:7px;border-radius:50%;background:#e2e8f0;transition:.25s}
+    .coach-dot.active{background:#ff7a18;width:20px;border-radius:3px}
+    .coach-next{
+      border:0;border-radius:14px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;font-weight:950;font-size:14px;
+      padding:12px 20px;
+    }
+    .coach-skip{border:0;background:transparent;color:#94a3b8;font-size:13px;font-weight:900}
+    /* Highlight ring autour de l'élément ciblé */
+    .coach-highlight{
+      position:fixed;z-index:205;
+      border-radius:18px;
+      box-shadow:0 0 0 4px #ffd24a, 0 0 0 8px rgba(255,210,74,.25);
+      pointer-events:none;
+      transition:all .35s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ── Guide banner (accueil) ─────────────────────── */
+    .guide-banner{
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      border-radius:22px;padding:16px 18px;margin-bottom:18px;
+      display:flex;align-items:center;gap:14px;
+      box-shadow:0 10px 28px rgba(255,122,24,.28);
+    }
+    .guide-icon{font-size:32px;flex:0 0 auto}
+    .guide-text{flex:1;min-width:0}
+    .guide-title{font-weight:950;font-size:16px;color:#120d05;margin-bottom:3px}
+    .guide-sub{font-size:13px;color:#3d2000}
+    .guide-btn{
+      border:0;border-radius:14px;background:#120d05;color:#ffd24a;
+      font-weight:950;font-size:13px;padding:10px 14px;flex:0 0 auto;
+    }
+
+    /* ── Ruchette ───────────────────────────────────── */
+    .ruchette-badge{
+      display:inline-flex;align-items:center;gap:5px;
+      background:linear-gradient(135deg,#7c3aed,#a78bfa);
+      color:#fff;border-radius:999px;
+      padding:4px 10px;font-size:11px;font-weight:900;
+      margin-bottom:8px;
+    }
+    .hive-card.is-ruchette .hive-image{
+      background:linear-gradient(135deg,#4c1d95,#7c3aed 45%,#5b21b6) !important;
+    }
+    .convert-btn{
+      width:100%;border:0;border-radius:18px;
+      background:linear-gradient(135deg,#16a34a,#4ade80);
+      color:#052e16;font-weight:950;font-size:16px;
+      padding:16px;margin-top:8px;
+      box-shadow:0 8px 22px rgba(22,163,74,.3);
+      display:flex;align-items:center;justify-content:center;gap:10px;
+    }
+
+    /* ── Bouton aide fiche ruche ────────────────────── */
+    .hive-help-btn{
+      position:fixed;
+      bottom:110px;
+      right:14px;
+      width:44px;height:44px;
+      border:0;border-radius:50%;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;font-size:20px;font-weight:950;
+      box-shadow:0 8px 22px rgba(255,122,24,.38);
+      z-index:190;
+      display:none;
+    }
+    .hive-help-btn.visible{display:flex;align-items:center;justify-content:center}
+
+    /* Toast sauvegarde */
+    .toast{
+      position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
+      background:#1e293b;color:#fff;border-radius:14px;padding:12px 20px;
+      font-weight:900;font-size:14px;z-index:999;opacity:0;
+      transition:opacity .25s;pointer-events:none;white-space:nowrap;
+    }
+    .toast.show{opacity:1}
+
+    /* Conformité adaptative */
+    .profil-block{
+      border:1px solid var(--line);border-radius:18px;padding:14px;
+      background:#f8fafc;margin-bottom:12px;
+    }
+    .profil-block-title{
+      font-weight:950;font-size:14px;color:#64748b;
+      text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;
+    }
+
+    /* Boutons fichier + scan */
+    .file-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+    .file-btn{
+      border:1px solid var(--line);background:#fff;border-radius:14px;
+      padding:10px 8px;font-size:13px;font-weight:900;color:#0b1328;
+      display:flex;align-items:center;justify-content:center;gap:6px;
+    }
+    .file-btn.primary{background:var(--grad-orange);border-color:#ffd24a;color:#120d05}
+    .file-hidden{display:none}
+
+    /* Export / Import */
+    .export-bar{
+      display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;
+    }
+    .export-btn{
+      border:0;border-radius:18px;padding:14px;font-weight:950;font-size:14px;
+      display:flex;align-items:center;justify-content:center;gap:8px;
+    }
+    .export-btn.dl{background:var(--grad-orange);color:#120d05}
+    .export-btn.imp{background:#fff;border:1px solid var(--line);color:#0b1328}
+
+
+    /* v11 — Visites dynamiques */
+    .new-visit-btn{
+      background:var(--grad-orange) !important;
+      color:#120d05 !important;
+      box-shadow:0 12px 28px rgba(255,122,24,.28);
+    }
+    .visit-form-card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:14px;
+      margin-top:12px;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+    }
+    .visit-form-head{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      margin-bottom:12px;
+    }
+    .close-small{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:12px;
+      padding:8px 10px;
+      font-weight:950;
+      color:#64748b;
+    }
+    .empty-history{
+      background:#f8fafc;
+      border:1px dashed #cbd5e1;
+      color:#64748b;
+      border-radius:18px;
+      padding:18px;
+      text-align:center;
+      margin-bottom:12px;
+    }
+
+
+    /* v12 — Reine dynamique */
+    .queen-form-card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:14px;
+      margin-top:12px;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+    }
+
+
+    /* v13 — Modules dynamiques */
+    .module-form-card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:14px;
+      margin-top:12px;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+    }
+    .module-actions{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:10px;
+      margin:12px 0;
+    }
+    .module-save-btn{
+      background:var(--grad-orange) !important;
+      color:#120d05 !important;
+      box-shadow:0 12px 28px rgba(255,122,24,.28);
+    }
+
+
+    /* v16 — Score colonie */
+    .status-score-card{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:18px;
+      padding:13px;
+      cursor:pointer;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+    }
+    .status-score-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .status-score-label{font-size:12px;color:#64748b;font-weight:850}
+    .status-score-value{font-size:18px;font-weight:950;margin-top:4px}
+    .score-bar{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:10px}
+    .score-bar-fill{height:100%;border-radius:999px;background:var(--grad-orange)}
+    .score-info{width:28px;height:28px;border-radius:50%;background:#f1f5f9;color:#334155;display:flex;align-items:center;justify-content:center;font-weight:950;flex:0 0 auto}
+    .score-modal{position:fixed;inset:0;background:rgba(3,7,18,.55);display:none;align-items:flex-end;justify-content:center;z-index:260}
+    .score-modal.open{display:flex}
+    .score-modal-panel{width:min(430px,100vw);max-height:86vh;overflow:auto;background:#fff;border-radius:28px 28px 0 0;padding:20px;box-shadow:0 -20px 50px rgba(0,0,0,.25)}
+    .score-line{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)}
+    .score-line:last-child{border-bottom:0}
+    .score-line-title{font-weight:900}
+    .score-line-detail{font-size:13px;color:#64748b;margin-top:3px}
+    .score-points{font-weight:950;color:#0f172a;white-space:nowrap}
+    .score-scale{display:grid;gap:7px;margin-top:14px;font-size:13px;color:#475569}
+    .score-scale div{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+
+
+    /* v17 — Finalisation audit */
+    .media-thumb{width:100%;max-height:160px;object-fit:cover;border-radius:16px;border:1px solid var(--line);margin-top:10px}
+    .doc-chip{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-top:8px;font-weight:850}
+    .alert-hive-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:14px;margin-bottom:12px;box-shadow:0 8px 20px rgba(15,23,42,.06)}
+    .alert-list{display:grid;gap:8px;margin-top:10px}
+    .alert-item{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:14px;padding:10px;font-weight:850;font-size:14px}
+
+    /* ═══════════════════════════════════════════════
+       TABLETTE — min-width 768px
+       Optimisé pour utilisation avec gants
+       Cibles tactiles : minimum 64px de hauteur
+    ════════════════════════════════════════════════ */
+    @media (min-width: 768px) {
+
+      /* ── Conteneur principal élargi ── */
+      .phone {
+        max-width: 900px;
+        padding-bottom: 130px;
+      }
+
+      /* ── Hero plus aéré ── */
+      .hero {
+        padding: 28px 32px 90px;
+      }
+      .brand { font-size: 34px; }
+      .brand img { height: 56px !important; width: 56px !important; }
+      .icon-btn { width: 64px; height: 64px; border-radius: 20px; font-size: 26px; }
+
+      /* ── Stats hero en 3 colonnes larges ── */
+      .hero-stats {
+        gap: 16px;
+      }
+      .stat-icon { width: 58px; height: 58px; font-size: 28px; }
+      .stat-value { font-size: 32px; }
+      .stat-label { font-size: 15px; }
+
+      /* ── Navigation du bas — plus haute, boutons plus larges ── */
+      .bottom {
+        height: 90px;
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+      }
+      .bottom-inner {
+        height: 90px;
+      }
+      .nav-btn {
+        font-size: 14px;
+        padding-top: 10px;
+        gap: 6px;
+      }
+      .nav-icon { font-size: 28px; }
+      .plus {
+        width: 76px;
+        height: 76px;
+        font-size: 48px;
+        margin-top: -38px;
+        border-radius: 26px;
+      }
+
+      /* ── Boutons d'action principaux — taille gants ── */
+      .big-action {
+        min-height: 100px !important;
+        font-size: 22px !important;
+        border-radius: 28px;
+        padding: 20px !important;
+      }
+      .big-action .action-icon { font-size: 40px; }
+
+      /* ── Actions accueil en 2 colonnes ── */
+      .actions {
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      /* ── Cartes ruches en grille 3 colonnes ── */
+      #ruchersGrid {
+        grid-template-columns: repeat(3, 1fr) !important;
+      }
+      .hive-card {
+        min-width: unset;
+        max-width: unset;
+        border-radius: 28px;
+      }
+      .hive-image { height: 120px; }
+      .hive-body { padding: 18px; }
+      .hive-title { font-size: 22px; }
+      .hive-apiary { font-size: 15px; }
+      .hive-status { font-size: 15px; padding: 10px 14px; }
+      .visit-date { font-size: 16px; }
+
+      /* ── Onglets ruche — plus grands ── */
+      .hive-tab {
+        padding: 18px 22px;
+        font-size: 17px;
+        border-radius: 999px;
+        gap: 10px;
+        min-height: 64px;
+      }
+      .hive-tab-icon { font-size: 24px; }
+
+      /* ── Champs de saisie — cibles gants ── */
+      input, select, textarea {
+        padding: 18px 20px;
+        font-size: 18px;
+        border-radius: 20px;
+        min-height: 64px;
+      }
+      textarea { min-height: 140px; }
+      .field label {
+        font-size: 16px;
+        margin-bottom: 8px;
+      }
+
+      /* ── Boutons secondaires — taille gants ── */
+      .assist-btn {
+        padding: 18px 22px;
+        font-size: 17px;
+        min-height: 64px;
+        border-radius: 18px;
+      }
+      .file-btn {
+        padding: 18px 14px;
+        font-size: 16px;
+        min-height: 64px;
+        border-radius: 18px;
+      }
+      .export-btn {
+        padding: 20px;
+        font-size: 17px;
+        min-height: 72px;
+        border-radius: 22px;
+      }
+      .see-all {
+        padding: 14px 22px;
+        font-size: 16px;
+        min-height: 56px;
+        border-radius: 18px;
+      }
+
+      /* ── Cases à cocher conformité — plus grosses ── */
+      .checkline {
+        padding: 16px;
+        border-radius: 18px;
+        gap: 14px;
+      }
+      .checkline input[type="checkbox"] {
+        width: 28px;
+        height: 28px;
+        min-height: 28px;
+        flex: 0 0 28px;
+        border-radius: 8px;
+      }
+      .checkline span { font-size: 16px; }
+
+      /* ── Panneaux et cards ── */
+      .panel {
+        border-radius: 32px;
+        padding: 28px;
+      }
+      .panel h2 { font-size: 32px; }
+      .record {
+        border-radius: 24px;
+        padding: 20px;
+        margin-bottom: 14px;
+      }
+      .record-head { font-size: 17px; }
+      .record-body { font-size: 16px; margin-top: 8px; }
+
+      /* ── Fiche ruche — onglets horizontaux (comme mobile) ── */
+      .hive-content-wrap { display: block; }
+      .hive-tabs {
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: unset;
+        gap: 10px;
+        padding: 2px 0 14px;
+        margin: 0 -18px 14px 0;
+        position: static;
+        max-height: unset;
+      }
+      .hive-tab {
+        border-radius: 999px !important;
+        justify-content: center;
+        padding: 16px 20px;
+        min-height: 60px;
+      }
+      .detail-panel {
+        border-radius: 28px;
+        padding: 22px;
+        min-height: 400px;
+      }
+      .detail-title { font-size: 30px; }
+
+      /* ── Info grid 3 colonnes sur tablette ── */
+      .info-grid { grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+      .info-box { border-radius: 22px; padding: 18px; }
+      .info-box .label { font-size: 14px; }
+      .info-box .value { font-size: 22px; }
+
+      /* ── Bouton convertir ruchette ── */
+      .convert-btn {
+        min-height: 90px;
+        font-size: 20px;
+        border-radius: 24px;
+      }
+
+      /* ── Splash écran ── */
+      .splash-glow { width: 220px; height: 220px; border-radius: 48px; }
+      .splash-title { font-size: 48px; }
+      .splash-sub { font-size: 20px; }
+      .splash-btn {
+        font-size: 24px;
+        padding: 26px;
+        border-radius: 28px;
+        min-height: 90px;
+      }
+      .splash-feat { padding: 18px 20px; border-radius: 22px; }
+      .splash-feat-icon { font-size: 32px; }
+      .splash-feat-text strong { font-size: 18px; }
+      .splash-feat-text { font-size: 16px; }
+
+      /* ── Coach marks — bulle plus lisible ── */
+      .coach-bubble { width: min(460px, calc(100vw - 40px)); padding: 28px; border-radius: 28px; max-height: calc(100vh - 140px); overflow-y: auto; }
+      .coach-title { font-size: 24px; }
+      .coach-body { font-size: 17px; margin-bottom: 22px; }
+      .coach-next { padding: 18px 28px; font-size: 17px; border-radius: 18px; min-height: 60px; }
+      .coach-skip { font-size: 16px; }
+
+      /* ── Guide banner ── */
+      .guide-banner { padding: 22px 24px; border-radius: 28px; }
+      .guide-icon { font-size: 44px; }
+      .guide-title { font-size: 20px; }
+      .guide-sub { font-size: 16px; }
+      .guide-btn { padding: 16px 22px; font-size: 16px; min-height: 60px; border-radius: 18px; }
+
+      /* ── Bouton aide ruche ── */
+      .hive-help-btn {
+        width: 64px; height: 64px;
+        font-size: 26px;
+        bottom: 120px; right: 20px;
+      }
+
+      /* ── Barre recherche ruchers ── */
+      .home-search {
+        padding: 16px 20px;
+        border-radius: 22px;
+        font-size: 18px;
+      }
+      .home-search input { font-size: 18px; }
+
+      /* ── Toast ── */
+      .toast { font-size: 17px; padding: 16px 28px; border-radius: 20px; }
+
+      /* ── QR card ── */
+      .qr-card-small { flex: 0 0 130px; padding: 14px; }
+      .qr-card-small canvas { width: 100px; height: 100px; }
+      .qr-card-small button { font-size: 14px; padding: 10px; border-radius: 14px; }
+
+      /* ── Section titles ── */
+      .section-title { font-size: 34px; }
+    }
+
+    /* ═══════════════════════════════════════════════
+       TABLETTE LARGE — min-width 1024px
+    ════════════════════════════════════════════════ */
+    @media (min-width: 1024px) {
+      .phone { max-width: 1100px; }
+      #ruchersGrid { grid-template-columns: repeat(4, 1fr) !important; }
+      .actions { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    /* ═══════════════════════════════════════════════
+       ADAPTATION HAUTEUR D'ÉCRAN — splash screen
+       Cible les petits écrans Android (Oppo, etc.)
+    ════════════════════════════════════════════════ */
+
+    /* Très petits écrans (hauteur < 640px — ex: Oppo A series) */
+    @media (max-height: 640px) {
+      .splash { padding: 16px 20px calc(12px + env(safe-area-inset-bottom,0px)); }
+      .splash-glow { width: 80px; height: 80px; border-radius: 20px; margin-bottom: 12px; }
+      .splash-title { font-size: 24px; margin-bottom: 6px; }
+      .splash-sub { font-size: 13px; margin-bottom: 0; }
+      .splash-features { gap: 5px; margin: 8px 0; }
+      .splash-feat { padding: 7px 10px; border-radius: 12px; gap: 8px; }
+      .splash-feat-icon { font-size: 18px; }
+      .splash-feat-text strong { font-size: 13px; }
+      .splash-feat-text { font-size: 12px; }
+      .splash-btn { padding: 14px; font-size: 16px; border-radius: 16px; }
+    }
+
+    /* Petits écrans (hauteur 640px–740px — ex: Oppo standard, Samsung A) */
+    @media (min-height: 641px) and (max-height: 740px) {
+      .splash { padding: 20px 24px calc(16px + env(safe-area-inset-bottom,0px)); }
+      .splash-glow { width: 100px; height: 100px; border-radius: 24px; margin-bottom: 16px; }
+      .splash-title { font-size: 26px; margin-bottom: 8px; }
+      .splash-sub { font-size: 14px; }
+      .splash-features { gap: 6px; margin: 10px 0; }
+      .splash-feat { padding: 8px 12px; }
+      .splash-feat-icon { font-size: 20px; }
+      .splash-feat-text strong { font-size: 14px; }
+      .splash-feat-text { font-size: 13px; }
+      .splash-btn { padding: 16px; font-size: 17px; }
+    }
+
+    /* Écrans moyens (hauteur 741px–800px — ex: iPhone SE, Oppo Reno) */
+    @media (min-height: 741px) and (max-height: 800px) {
+      .splash { padding: 24px 26px calc(18px + env(safe-area-inset-bottom,0px)); }
+      .splash-glow { width: 110px; height: 110px; border-radius: 26px; margin-bottom: 20px; }
+      .splash-title { font-size: 28px; }
+      .splash-features { margin: 12px 0; }
+    }
+
+    /* Grands écrans (hauteur > 800px — ex: iPhone Pro, Samsung S) */
+    @media (min-height: 801px) {
+      .splash { padding: 30px 24px calc(20px + env(safe-area-inset-bottom,0px)); }
+      .splash-glow { width: 130px; height: 130px; border-radius: 30px; margin-bottom: 28px; }
+      .splash-title { font-size: 32px; }
+      .splash-features { margin: 16px 0; gap: 8px; }
+    }
+
+    @media print{
+      body *{visibility:hidden}
+      .print-only,.print-only *{visibility:visible}
+      .print-only{display:block;position:absolute;left:0;top:0;width:100%;padding:24px;text-align:center}
+      .print-only canvas{width:260px;height:260px;image-rendering:pixelated}
+    }
+  </style>
+</head>
+<body>
+  <div class="print-only">
+    <h1>Mes Abeilles 🐝</h1>
+    <h2 id="printHiveName">RUCHE-001 · Ruche Lavande</h2>
+    <canvas id="printQr" width="150" height="150"></canvas>
+    <p>À imprimer et coller sur la ruche</p>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <div id="scoreModal" class="score-modal" onclick="closeScoreModal(event)">
+    <div class="score-modal-panel" onclick="event.stopPropagation()">
+      <div class="between" style="align-items:center;margin-bottom:12px">
+        <div>
+          <h2 class="panel-title" style="margin:0">Analyse de la colonie</h2>
+          <div class="muted" id="scoreModalSub">Score ruche</div>
+        </div>
+        <button class="icon-btn" style="background:#f1f5f9;color:#0f172a;width:42px;height:42px" onclick="closeScoreModal()">×</button>
+      </div>
+      <div id="scoreModalContent"></div>
+    </div>
+  </div>
+
+
+  <!-- Splash screen -->
+  <div id="splash" class="splash">
+    <div class="splash-top">
+      <div class="splash-glow"><img src="./icon192.png" alt="Mes Abeilles" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;"></div>
+      <div class="splash-title">Bienvenue sur<br><span>Mes Abeilles</span></div>
+      <div class="splash-sub">Ton carnet de rucher numérique, toujours dans ta poche.</div>
+      <div class="splash-features">
+        <div class="splash-feat">
+          <div class="splash-feat-icon">▤</div>
+          <div class="splash-feat-text"><strong>Gérer tes ruches</strong>Fiches complètes, QR codes, historique</div>
+        </div>
+        <div class="splash-feat">
+          <div class="splash-feat-icon">📅</div>
+          <div class="splash-feat-text"><strong>Enregistrer chaque visite</strong>Reine, couvain, varroa, hausses…</div>
+        </div>
+        <div class="splash-feat">
+          <div class="splash-feat-icon">📋</div>
+          <div class="splash-feat-text"><strong>Rester conforme</strong>NAPI, registre sanitaire, documents</div>
+        </div>
+        <div class="splash-feat">
+          <div class="splash-feat-icon">💾</div>
+          <div class="splash-feat-text"><strong>Données sauvegardées</strong>Sur ton téléphone, exportables sur PC</div>
+        </div>
+      </div>
+    </div>
+    <button class="splash-btn" onclick="splashFinish()">Découvrir l'application 🚀</button>
+  </div>
+
+  <!-- Coach marks (tour guidé) -->
+  <div id="coachHighlight" class="coach-highlight" style="display:none"></div>
+  <svg id="coachSvg" class="coach-svg" style="display:none">
+    <defs>
+      <mask id="coachMask">
+        <rect width="100%" height="100%" fill="white"/>
+        <rect id="coachHoleRect" rx="18" fill="black"/>
+      </mask>
+    </defs>
+    <rect width="100%" height="100%" fill="rgba(5,14,30,.82)" mask="url(#coachMask)"/>
+  </svg>
+  <div id="coachBubble" class="coach-bubble" style="display:none">
+    <div id="coachArrow" class="coach-arrow up"></div>
+    <div id="coachStep" class="coach-step"></div>
+    <div id="coachTitle" class="coach-title"></div>
+    <div id="coachBody" class="coach-body"></div>
+    <div class="coach-footer">
+      <button class="coach-skip" onclick="coachEnd()">Passer</button>
+      <div class="coach-dots-wrap" id="coachDots"></div>
+      <button class="coach-next" id="coachNextBtn" onclick="coachNext()">Suivant →</button>
+    </div>
+  </div>
+
+  <!-- Bouton aide flottant fiche ruche -->
+  <button id="hiveHelpBtn" class="hive-help-btn" onclick="hiveCoachStart()">?</button>
+
+  <div class="phone">
+    <header class="hero">
+      <div class="hero-top" id="heroTop">
+        <button class="icon-btn" onclick="showPage('menu')">☰</button>
+        <div class="brand" style="display:flex;align-items:center;justify-content:center">
+          <img src="./icon192.png" alt="Mes Abeilles" style="height:44px;width:44px;object-fit:cover;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.25);">
+          <span style="margin-left:10px;font-size:22px;font-weight:900;letter-spacing:-.04em">Mes Abeilles</span>
+        </div>
+        <button class="icon-btn" onclick="showPage('admin')">⚙️</button>
+      </div>
+
+      <div id="homeHero">
+        <div class="hero-stats">
+          <div class="stat">
+            <div class="stat-icon yellow">▤</div>
+            <div><div class="stat-label">Ruches</div><div class="stat-value" id="statRuches">3</div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-icon green">🔔</div>
+            <div><div class="stat-label">Alertes</div><div class="stat-value" id="statAlertes">3</div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-icon">🍯</div>
+            <div><div class="stat-label">Miel récolté</div><div class="stat-value" id="statMiel">24 kg</div></div>
+          </div>
+        </div>
+        <div style="height:22px"></div>
+      </div>
+
+      <div id="pageHero" class="hidden">
+        <h1 id="pageTitle" style="font-size:44px;margin:20px 0 8px;letter-spacing:-.05em">Accueil</h1>
+        <div id="pageSubtitle" style="font-size:20px;color:#d5dbea">Mes Abeilles</div>
+      </div>
+
+      <div id="heroHiveQrRow" class="hero-hive-row">
+        <div class="hero-hive-left">
+          <div id="heroHiveTitle" class="hero-hive-title">Ruche Lavande</div>
+          <div id="heroHiveSubtitle" class="hero-hive-sub">Rucher du Verger</div>
+        </div>
+        <div class="hero-qr-card">
+          <canvas id="heroQr" width="150" height="150"></canvas>
+          <div id="heroQrCode" class="hero-qr-code">RUCHE-001</div>
+          <button onclick="printQr()">Imprimer</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="sheet" id="content"></main>
+
+    <nav class="bottom">
+      <div class="bottom-inner">
+        <button class="nav-btn active" data-nav="home" onclick="showPage('home')"><span class="nav-icon">🏠</span>Accueil</button>
+        <button class="nav-btn" data-nav="ruchers" onclick="showPage('ruchers')"><span class="nav-icon">▤</span>Ruchers</button>
+        <button class="plus" onclick="showPage('newHive')">+</button>
+        <button class="nav-btn" data-nav="scan" onclick="showPage('scan')"><span class="nav-icon">⌗</span>Scanner</button>
+        <button class="nav-btn" data-nav="alerts" onclick="showPage('alerts')"><span class="nav-icon">🔔</span>Alertes<span class="nav-badge" id="navBadge">3</span></button>
+      </div>
+    </nav>
+  </div>
+
+<script>
+/* ── LocalStorage ─────────────────────────────────── */
+const LS_KEY = "mesAbeilles_data_v1";
+const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
+const LS_LEGACY_KEYS = [
+  "mesAbeilles_data_v1",
+  "mesAbeilles_data_backup_v1",
+  "mesAbeilles_v17",
+  "mesAbeilles_v16",
+  "mesAbeilles_v15",
+  "mesAbeilles_v14",
+  "mesAbeilles_v13",
+  "mesAbeilles_v12",
+  "mesAbeilles_v11",
+  "mesAbeilles_v10",
+  "mesAbeilles_v9"
+];
+
+const state = {
+  page: "home",
+  hiveSection: "resume",
+  visitFormOpen: false,
+  queenFormOpen: false,
+  moduleFormOpen: null,
+  profil: {},
+  hives: [],
+  onboardingDone: false,
+  hiveTourDone: false
+};
+loadState();
+
+function hiveCard(h){
+  const warn = h.alerts > 0;
+  const isRuchette = h.type === "ruchette";
+  return `
+    <article class="hive-card ${isRuchette ? 'is-ruchette' : ''}" onclick="openHive('${h.code}')">
+      <div class="hive-image ${isRuchette ? '' : h.theme}">
+        <div class="flower-texture"></div>
+        <div class="code-tag ${h.tag === 'orange' ? 'orange' : ''}">${h.code}</div>
+      </div>
+      <div class="hive-body">
+        ${isRuchette ? '<div class="ruchette-badge">🪣 Ruchette</div>' : ''}
+        <h3 class="hive-title">${isRuchette ? 'Ruchette' : 'Ruche'} ${h.name}</h3>
+        <div class="hive-apiary">${h.apiary}</div>
+        <div class="hive-status ${warn ? 'warn' : ''}">
+          <span class="status-dot"></span>${h.statusIcon ? h.statusIcon + " " : ""}${h.status || latestVisitScore(h).status.label}
+        </div>
+        <div class="visit-label">Dernière visite</div>
+        <div class="visit-date">📅 ${h.date}</div>
+      </div>
+      <div class="arrow">›</div>
+    </article>
+  `;
+}
+
+function homeHiveCards(list){
+  return list.map(hiveCard).join("");
+}
+
+function renderHomeHives(){
+  const q = (document.getElementById("homeSearch")?.value || "").toLowerCase().trim();
+  const list = state.hives.filter(h => [h.name,h.code,h.apiary,h.status].join(" ").toLowerCase().includes(q));
+  const target = document.getElementById("homeHiveCarousel");
+  if(target) target.innerHTML = list.length ? homeHiveCards(list) : '<div style="padding:14px;color:#64748b">Aucune ruche trouvée.</div>';
+}
+
+function home(){
+  return `
+    ${guideBanner()}
+    <div class="actions">
+      <button class="big-action primary" onclick="showPage('scan')">
+        <span class="action-icon">⌗</span>
+        <span>Scanner<br>une ruche</span>
+      </button>
+      <button class="big-action" onclick="showPage('newHive')">
+        <span class="action-icon">⊕</span>
+        <span>Nouvelle<br>ruche</span>
+      </button>
+    </div>
+
+    <div class="home-search">
+      <span>🔍</span>
+      <input id="homeSearch" placeholder="Rechercher une ruche..." oninput="renderHomeHives()">
+    </div>
+
+    <section>
+      <div class="section-head">
+        <div class="section-title">Mes ruches</div>
+        <button class="see-all" onclick="showPage('ruchers')">Voir tout ›</button>
+      </div>
+      <div class="carousel" id="homeHiveCarousel">
+        ${homeHiveCards(state.hives)}
+      </div>
+      <div class="dots"><span class="dot active"></span><span class="dot"></span><span class="dot"></span></div>
+    </section>
+  `;
+}
+function scan(){
+  return `
+    <section class="panel">
+      <h2>Scanner une ruche</h2>
+      <p style="color:#64748b;margin-bottom:18px">Pointe la caméra vers le QR code collé sur ta ruche.</p>
+
+      <div id="scannerWrap" style="position:relative;border-radius:24px;overflow:hidden;background:#000;aspect-ratio:1;max-width:340px;margin:0 auto 18px;">
+        <video id="scanVideo" style="width:100%;height:100%;object-fit:cover;" playsinline muted></video>
+        <canvas id="scanCanvas" style="display:none"></canvas>
+        <!-- Viseur -->
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+          <div style="width:65%;aspect-ratio:1;border:3px solid #ffd24a;border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,0.4)"></div>
+        </div>
+        <div id="scanStatus" style="position:absolute;bottom:16px;left:0;right:0;text-align:center;color:#fff;font-size:14px;font-weight:700">
+          Démarrage de la caméra...
+        </div>
+      </div>
+
+      <div id="scanResult" style="display:none" class="notice" style="margin-bottom:14px"></div>
+
+      <button class="big-action primary" style="width:100%;min-height:76px" id="scanStartBtn" onclick="startScanner()">
+        📷 Activer la caméra
+      </button>
+      <button class="big-action" style="width:100%;min-height:70px;margin-top:10px;background:#f1f5f9;color:#0b1328" onclick="stopScanner()">
+        ⏹ Arrêter
+      </button>
+
+      <div style="margin-top:24px;padding-top:18px;border-top:1px solid #e4e9f4">
+        <div style="font-size:14px;color:#64748b;margin-bottom:10px">Ou entre le code manuellement :</div>
+        <div class="field">
+          <input id="scanInput" placeholder="Ex : RUCHE-001" style="text-transform:uppercase">
+        </div>
+        <button class="big-action primary" style="width:100%;min-height:70px" onclick="scanManuel()">
+          Ouvrir cette ruche
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+let scanStream = null;
+let scanInterval = null;
+
+function startScanner(){
+  const video = document.getElementById("scanVideo");
+  const status = document.getElementById("scanStatus");
+  const btn = document.getElementById("scanStartBtn");
+  if(!video) return;
+
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    status.textContent = "Caméra non disponible sur cet appareil.";
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment", width:{ideal:1280}, height:{ideal:720} }
+  })
+  .then(stream => {
+    scanStream = stream;
+    video.srcObject = stream;
+    video.play();
+    status.textContent = "Cherche un QR code...";
+    btn.textContent = "📷 Caméra active";
+    btn.style.background = "#16a34a";
+    // Lancer la détection en boucle
+    scanInterval = setInterval(detectQr, 300);
+  })
+  .catch(err => {
+    console.error(err);
+    if(err.name === "NotAllowedError"){
+      status.textContent = "⚠️ Autorise l'accès à la caméra dans les paramètres Chrome.";
+    } else {
+      status.textContent = "Erreur caméra : " + err.message;
+    }
+  });
+}
+
+function detectQr(){
+  const video = document.getElementById("scanVideo");
+  const canvas = document.getElementById("scanCanvas");
+  if(!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  if(typeof jsQR === "undefined") return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(imageData.data, imageData.width, imageData.height, {
+    inversionAttempts: "dontInvert"
+  });
+
+  if(code){
+    const text = code.data.toUpperCase().trim();
+    stopScanner();
+    showToast("✓ QR détecté : " + text);
+    // Chercher la ruche correspondante
+    const hive = state.hives.find(h => h.code === text || text.includes(h.code));
+    if(hive){
+      openHive(hive.code);
+    } else {
+      const result = document.getElementById("scanResult");
+      if(result){
+        result.style.display = "block";
+        result.innerHTML = "⚠️ Code détecté : <strong>" + text + "</strong><br>Aucune ruche correspondante trouvée.";
+      }
+    }
+  }
+}
+
+function stopScanner(){
+  if(scanInterval){ clearInterval(scanInterval); scanInterval = null; }
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  const video = document.getElementById("scanVideo");
+  if(video) video.srcObject = null;
+  const status = document.getElementById("scanStatus");
+  if(status) status.textContent = "Caméra arrêtée.";
+  const btn = document.getElementById("scanStartBtn");
+  if(btn){ btn.textContent = "📷 Activer la caméra"; btn.style.background = ""; }
+}
+
+function scanManuel(){
+  const val = (document.getElementById("scanInput")?.value || "").trim().toUpperCase();
+  if(!val){ showToast("⚠️ Entre un code ruche"); return; }
+  const hive = state.hives.find(h => h.code === val);
+  if(hive){ openHive(hive.code); }
+  else { showToast("⚠️ Ruche " + val + " introuvable"); }
+}
+
+
 function alerts(){
   const items = state.hives
     .map(h=>{
@@ -3031,7 +6017,6 @@ function hiveSectionContent(h){
     if(s === "qrcode") return `
     <h2 class="detail-title">QR Code</h2>
     <div class="detail-sub">Imprime ce QR code et colle-le sur la ruche.</div>
-    <div class="notice" style="margin-bottom:14px">⚠️ <strong>Démo :</strong> ce QR code est <strong>décoratif</strong> et ne peut pas être scanné par une caméra. En production, utiliser une vraie librairie QR (ex : qrcode.js).</div>
     <div style="text-align:center">
       <canvas id="bigQr" width="150" height="150" style="width:230px;height:230px;image-rendering:pixelated;background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:14px"></canvas>
       <h3>${h.code}</h3>
@@ -3303,755 +6288,61 @@ function drawAllQr(code){
   drawQr("newHiveQrPreview", code);
 }
 function drawQr(id, text){
+  const c = document.getElementById(id);
+  if(!c) return;
+  // Vider le canvas
+  const ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, c.width, c.height);
+  // Utiliser QRCode.js si disponible
+  if(typeof QRCode !== "undefined"){
+    // Créer un div temporaire pour QRCode.js
+    const tmp = document.createElement("div");
+    tmp.style.display = "none";
+    document.body.appendChild(tmp);
+    try {
+      new QRCode(tmp, {
+        text: text || "RUCHE-000",
+        width: c.width,
+        height: c.height,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      // Copier l'image générée sur le canvas
+      setTimeout(()=>{
+        const img = tmp.querySelector("img") || tmp.querySelector("canvas");
+        if(img){
+          if(img.tagName === "CANVAS"){
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+          } else {
+            const i = new Image();
+            i.onload = ()=>{ ctx.drawImage(i, 0, 0, c.width, c.height); };
+            i.src = img.src;
+          }
+        }
+        document.body.removeChild(tmp);
+      }, 50);
+    } catch(e){
+      document.body.removeChild(tmp);
+      drawQrFallback(id, text);
+    }
+  } else {
+    drawQrFallback(id, text);
+  }
+}
+
+function drawQrFallback(id, text){
+  // Fallback décoratif si QRCode.js pas encore chargé
   const c=document.getElementById(id); if(!c) return;
   const ctx=c.getContext("2d"), cells=29, cell=Math.floor(c.width/cells);
   ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
-  function finder(x,y){ctx.fillStyle="#000";ctx.fillRect(x*cell,y*cell,7*cell,7*cell);ctx.fillStyle="#fff";ctx.fillRect((x+1)*cell,(y+1)*cell,5*cell,5*cell);ctx.fillStyle="#000";ctx.fillRect((x+2)*cell,(y+2)*cell,3*cell,3*cell)}
-  finder(1,1);finder(21,1);finder(1,21);
-  let seed=0;for(let i=0;i<text.length;i++)seed=(seed*31+text.charCodeAt(i))>>>0;
-  for(let y=0;y<cells;y++)for(let x=0;x<cells;x++){
-    if((x<9&&y<9)||(x>19&&y<9)||(x<9&&y>19))continue;
-    seed=(seed*1664525+1013904223)>>>0;
-    if(seed%100<42){ctx.fillStyle="#000";ctx.fillRect(x*cell,y*cell,cell,cell)}
-  }
-}
-function printQr(){
-  const h=state.currentHive||state.hives[0];
-  document.getElementById("printHiveName").textContent=h.code+" · Ruche "+h.name;
-  drawQr("printQr", h.code);
-  window.print();
-}
-
-
-function convertirEnRuche(code){
-  const h = state.hives.find(x => x.code === code);
-  if(!h) return;
-  if(!confirm(`Convertir la ruchette "${h.name}" en ruche ?\n\nTout l'historique sera conservé.`)) return;
-  h.type   = "ruche";
-  h.status = "Bonne activité";
-  h.theme  = "acacia";
-  h.tag    = "orange";
-  h.honey  = h.honey || 0;
-  saveState();
-  showToast("✓ Ruchette convertie en ruche !");
-  state.hiveSection = "resume";
-  openHive(code);
-}
-
-function nextHiveCode(){
-  const nums = state.hives.map(h=>{
-    const m = String(h.code || "").match(/RUCHE-(\d+)/);
-    return m ? Number(m[1]) : 0;
-  });
-  return "RUCHE-" + String(Math.max(0, ...nums) + 1).padStart(3,"0");
-}
-
-function proposeNewHiveQr(){
-  const input = document.getElementById("newHiveQr");
-  if(input) input.value = nextHiveCode();
-  drawQr("newHiveQrPreview", input ? input.value : nextHiveCode());
-}
-
-function refreshNewHiveQr(){
-  const input = document.getElementById("newHiveQr");
-  drawQr("newHiveQrPreview", input ? input.value : nextHiveCode());
-}
-
-function getGPS(targetPrefix){
-  if(!navigator.geolocation){
-    alert("La géolocalisation n'est pas disponible sur ce navigateur.");
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(
-    function(pos){
-      const lat = pos.coords.latitude.toFixed(6);
-      const lng = pos.coords.longitude.toFixed(6);
-      const gps = lat + ", " + lng;
-      const input = document.getElementById(targetPrefix + "Gps");
-      if(input) input.value = gps;
-      const link = document.getElementById(targetPrefix + "MapLink");
-      if(link){
-        link.href = "https://www.google.com/maps?q=" + encodeURIComponent(gps);
-        link.textContent = "📍 Ouvrir dans la carte";
-        link.style.display = "inline-flex";
-      }
-    },
-    function(){
-      alert("Impossible de récupérer la position. Vérifie l'autorisation GPS du navigateur.");
-    },
-    {enableHighAccuracy:true, timeout:10000, maximumAge:0}
-  );
-}
-
-function updateMapLink(targetPrefix){
-  const input = document.getElementById(targetPrefix + "Gps");
-  const link = document.getElementById(targetPrefix + "MapLink");
-  if(input && link && input.value.trim()){
-    link.href = "https://www.google.com/maps?q=" + encodeURIComponent(input.value.trim());
-    link.textContent = "📍 Ouvrir dans la carte";
-    link.style.display = "inline-flex";
-  }
-}
-
-function createHiveDemo(){
-  const name   = document.getElementById("newHiveName")?.value || "Nouvelle";
-  const code   = document.getElementById("newHiveQr")?.value || nextHiveCode();
-  const apiary = document.getElementById("newHiveApiary")?.value || "Nouveau rucher";
-  const type   = document.getElementById("newHiveType")?.value || "ruche";
-  state.hives.push({
-    code, name, apiary, type,
-    status: type === "ruchette" ? "En cours d'établissement" : "Bonne activité",
-    date: new Date().toLocaleDateString("fr-FR"),
-    theme: type === "ruchette" ? "lavender" : "acacia",
-    tag: type === "ruchette" ? "purple" : "orange",
-    alerts: 0, honey: 0, visites: [], reines: [], divisions: [], hausses: [], recoltes: [], traitements: [], frelons: [], nourrissements: [], pesees: [], transhumances: [], photos: [], documents: []
-  });
-  saveState();
-  showToast("✓ " + (type === "ruchette" ? "Ruchette" : "Ruche") + " " + code + " créée");
-  showPage("ruchers");
-}
-
-function setHero(title, subtitle, compact=false){
-  document.getElementById("homeHero").classList.toggle("hidden", compact);
-  document.getElementById("pageHero").classList.toggle("hidden", !compact);
-  document.getElementById("pageTitle").textContent = title;
-  document.getElementById("pageSubtitle").textContent = subtitle;
-}
-
-function setNav(page){
-  document.querySelectorAll("[data-nav]").forEach(b=>b.classList.remove("active"));
-  const map = {home:"home", ruchers:"ruchers", scan:"scan", alerts:"alerts"};
-  const key = map[page] || "";
-  const btn = document.querySelector(`[data-nav="${key}"]`);
-  if(btn) btn.classList.add("active");
-}
-
-/* Fix 6 — Ouvre la ruche avec alerte la plus récente, sinon la première */
-function quickAction(section){
-  const target = state.hives.find(h=>h.alerts>0) || state.hives[0];
-  if(!target){ alert("Aucune ruche enregistrée."); return; }
-  state.hiveSection = section;
-  openHive(target.code);
-  state.hiveSection = section;
-  setHiveSection(section);
-}
-
-/* Fix 3+9+16 — Recalcule et met à jour toutes les stats dynamiques */
-function updateStats(){
-  const ruches    = state.hives.filter(h=>h.type !== "ruchette").length;
-  const ruchettes = state.hives.filter(h=>h.type === "ruchette").length;
-  const total     = state.hives.length;
-  const alertes   = state.hives.reduce((s,h)=>s+h.alerts,0);
-  const miel      = state.hives.filter(h=>h.type !== "ruchette").reduce((s,h)=>s+h.honey,0);
-  const elR = document.getElementById("statRuches");
-  const elA = document.getElementById("statAlertes");
-  const elM = document.getElementById("statMiel");
-  const elB = document.getElementById("navBadge");
-  if(elR) elR.textContent = total;
-  if(elA) elA.textContent = alertes;
-  if(elM) elM.textContent = miel + " kg";
-  if(elB){ elB.textContent = alertes; elB.style.display = alertes>0?"flex":"none"; }
-}
-
-/* ── Conformité adaptive ──────────────────────────── */
-function updateConformiteProfil(type){
-  document.getElementById("blocVente").style.display = ['vente','pro'].includes(type) ? 'block' : 'none';
-  document.getElementById("blocPro").style.display = type === 'pro' ? 'block' : 'none';
-  document.getElementById("conformiteCards").innerHTML = conformiteCardsByProfil(type);
-}
-
-function saveConformite(){
-  if(!state.profil) state.profil = {};
-  state.profil.type      = document.getElementById("profilType")?.value || 'amateur';
-  state.profil.napi      = document.getElementById("cfNapi")?.value || '';
-  state.profil.nom       = document.getElementById("cfNom")?.value || '';
-  state.profil.adresse   = document.getElementById("cfAdresse")?.value || '';
-  state.profil.siret     = document.getElementById("cfSiret")?.value || '';
-  state.profil.entreprise= document.getElementById("cfEntreprise")?.value || '';
-  state.profil.tva       = document.getElementById("cfTva")?.value || '';
-  state.profil.certBio   = document.getElementById("cfCertBio")?.value || '';
-  state.profil.veto      = document.getElementById("cfVeto")?.value || '';
-  state.profil.assurance = document.getElementById("cfAssurance")?.value || '';
-  saveState();
-  showToast("✓ Profil enregistré");
-}
-
-function conformiteCardsByProfil(type){
-  const cards = [];
-  // Tous
-  cards.push(complianceCard("Déclaration annuelle des ruches","Obligatoire","required",[
-    "Récépissé de déclaration conservé",
-    "Déclaration effectuée entre le 1er sept. et le 31 déc.",
-    "Nombre total de colonies déclaré",
-    "Emplacements / communes déclarés"
-  ],"decl_ruches"));
-  cards.push(complianceCard("NAPI","Obligatoire","required",[
-    "Numéro NAPI renseigné dans l'application",
-    "NAPI visible au rucher si nécessaire",
-    "Récépissé annuel associé au NAPI archivé"
-  ],"napi"));
-  cards.push(complianceCard("Registre d'élevage / sanitaire","À tenir","required",[
-    "Visites et observations enregistrées",
-    "Traitements vétérinaires tracés",
-    "Dates de pose et retrait des lanières",
-    "Ordonnances ou justificatifs ajoutés"
-  ],"registre"));
-  // Vente + Pro
-  if(['vente','pro'].includes(type)){
-    cards.push(complianceCard("Vente de miel / produits","Obligatoire","pro",[
-      "SIRET renseigné et à jour",
-      "Étiquetage du miel conforme",
-      "Traçabilité des lots de miel",
-      "Coordonnées fabricant / vendeur présentes"
-    ],"vente_miel"));
-  }
-  // Pro uniquement
-  if(type === 'pro'){
-    cards.push(complianceCard("Obligations professionnelles","Requis","pro",[
-      "N° TVA renseigné",
-      "Suivi comptable des ventes",
-      "Déclaration revenus apicoles",
-      "Vétérinaire référent désigné"
-    ],"oblig_pro"));
-    cards.push(complianceCard("Certification bio (si applicable)","Recommandé","recommended",[
-      "Organisme certificateur désigné",
-      "Cahier des charges respecté",
-      "Audit annuel planifié"
-    ],"bio"));
-  }
-  // Tous — conseillé
-  cards.push(complianceCard("Documents conseillés","Conseillé","recommended",[
-    "Assurance responsabilité civile",
-    "Adhésion GDSA",
-    "Factures matériel / essaims / reines",
-    "Analyses de miel",
-  ],"conseilles"));
-  return cards.join("");
-}
-
-/* ── Splash screen ───────────────────────────────── */
-function splashFinish(){
-  const sp = document.getElementById("splash");
-  sp.classList.add("out");
-  setTimeout(()=>{ sp.style.display="none"; }, 500);
-  state.onboardingDone = true;
-  saveState();
-  showPage("home");
-  // Lancer le tour guidé après que la page soit rendue
-  setTimeout(coachStart, 400);
-}
-
-/* ── Coach marks — tour guidé ────────────────────── */
-const COACH_STEPS = [
-  {
-    targetId: "homeHero",
-    title: "Tes statistiques",
-    body: "En un coup d'œil : nombre de ruches, alertes en cours et kilos de miel récoltés. Ces chiffres se mettent à jour automatiquement.",
-    arrow: "down",
-    bubblePos: "bottom"
-  },
-  {
-    targetId: "heroTop",
-    title: "Le menu et les réglages",
-    body: "Le ☰ ouvre le menu de navigation. Le ⚙️ donne accès à ton profil apiculteur et à l'export de tes données vers PC.",
-    arrow: "down",
-    bubblePos: "bottom"
-  },
-  {
-    targetSelector: "[data-nav='ruchers']",
-    title: "Tes ruchers",
-    body: "Retrouve ici toutes tes ruches, filtre par nom ou rucher, et accède à la fiche détaillée de chacune.",
-    arrow: "up",
-    bubblePos: "top"
-  },
-  {
-    targetSelector: ".plus",
-    title: "Ajouter une ruche",
-    body: "Ce bouton crée une nouvelle ruche : tu choisis son nom, son rucher, ses coordonnées GPS et l'appli génère son QR code à imprimer.",
-    arrow: "up",
-    bubblePos: "top"
-  },
-  {
-    targetSelector: "[data-nav='scan']",
-    title: "Scanner une ruche",
-    body: "Devant une ruche ? Scanne son QR code pour ouvrir sa fiche directement et enregistrer une visite.",
-    arrow: "up",
-    bubblePos: "top"
-  },
-  {
-    targetSelector: "[data-nav='alerts']",
-    title: "Les alertes",
-    body: "Toutes les ruches nécessitant une attention sont listées ici — traitement à faire, réserves basses, forte pression de frelons…",
-    arrow: "up",
-    bubblePos: "top"
-  },
-  {
-    targetId: null,
-    title: "C'est tout !",
-    body: "Tu connais maintenant les bases. Commence par remplir ton profil apiculteur, puis crée ta première ruche. Bonne apiculture ! 🐝",
-    arrow: "down",
-    bubblePos: "center",
-    last: true
-  }
-];
-
-let coachStep = 0;
-
-function coachStart(){
-  coachStep = 0;
-  buildCoachDots();
-  coachShow();
-}
-
-function buildCoachDots(){
-  const wrap = document.getElementById("coachDots");
-  if(!wrap) return;
-  wrap.innerHTML = COACH_STEPS.map((_,i)=>`<div class="coach-dot ${i===0?'active':''}"></div>`).join("");
-}
-
-function coachShow(){
-  const step = COACH_STEPS[coachStep];
-  if(!step) return;
-
-  // Textes
-  document.getElementById("coachStep").textContent = "Étape " + (coachStep+1) + " / " + COACH_STEPS.length;
-  document.getElementById("coachTitle").textContent = step.title;
-  document.getElementById("coachBody").textContent = step.body;
-  document.getElementById("coachNextBtn").textContent = step.last ? "Terminer ✓" : "Suivant →";
-
-  // Dots
-  document.querySelectorAll(".coach-dot").forEach((d,i)=>d.classList.toggle("active", i===coachStep));
-
-  // Trouver l'élément cible
-  let target = null;
-  if(step.targetId) target = document.getElementById(step.targetId);
-  else if(step.targetSelector) target = document.querySelector(step.targetSelector);
-
-  const svg = document.getElementById("coachSvg");
-  const highlight = document.getElementById("coachHighlight");
-  const bubble = document.getElementById("coachBubble");
-  const arrow = document.getElementById("coachArrow");
-
-  bubble.style.display = "block";
-  svg.style.display = "block";
-
-  if(target && step.bubblePos !== "center"){
-    const r = target.getBoundingClientRect();
-    const pad = 8;
-
-    // Highlight ring
-    highlight.style.display = "block";
-    highlight.style.left = (r.left - pad) + "px";
-    highlight.style.top = (r.top - pad) + "px";
-    highlight.style.width = (r.width + pad*2) + "px";
-    highlight.style.height = (r.height + pad*2) + "px";
-    highlight.style.borderRadius = step.targetSelector?.includes("plus") ? "50%" : "18px";
-
-    // Trou dans l'overlay SVG
-    const hole = document.getElementById("coachHoleRect");
-    hole.setAttribute("x", r.left - pad);
-    hole.setAttribute("y", r.top - pad);
-    hole.setAttribute("width", r.width + pad*2);
-    hole.setAttribute("height", r.height + pad*2);
-    hole.setAttribute("rx", step.targetSelector?.includes("plus") ? "50" : "18");
-
-    // Position bulle
-    arrow.className = "coach-arrow " + step.arrow;
-    if(step.bubblePos === "bottom"){
-      // Bulle en dessous
-      // Bulle contrainte dans l'écran
-    const hbTop = r.bottom + pad + 18;
-    if(hbTop + 320 > window.innerHeight){
-      bubble.style.top = "auto";
-      bubble.style.bottom = Math.max(20, window.innerHeight - r.top + pad + 14) + "px";
-      arrow.className = "coach-arrow down";
-    } else {
-      bubble.style.top = hbTop + "px";
-      bubble.style.bottom = "auto";
-      arrow.className = "coach-arrow up";
-    }
-    arrow.style.display = "block";
-      arrow.className = "coach-arrow up";
-    } else {
-      // Bulle au-dessus de la nav
-      bubble.style.bottom = (window.innerHeight - r.top + pad + 18) + "px";
-      bubble.style.top = "auto";
-      arrow.style.display = "block";
-      arrow.className = "coach-arrow down";
-    }
-  } else {
-    // Étape centrale (dernière) — pas de highlight
-    highlight.style.display = "none";
-    const hole = document.getElementById("coachHoleRect");
-    hole.setAttribute("width", "0"); hole.setAttribute("height", "0");
-    bubble.style.top = "50%";
-    bubble.style.bottom = "auto";
-    bubble.style.transform = "translate(-50%, -50%)";
-    arrow.style.display = "none";
-  }
-  // Reset transform pour les autres étapes
-  if(step.bubblePos !== "center"){
-    bubble.style.transform = "translateX(-50%)";
-  }
-}
-
-function coachNext(){
-  coachStep++;
-  if(coachStep >= COACH_STEPS.length){
-    coachEnd();
-    return;
-  }
-  coachShow();
-}
-
-function coachEnd(){
-  document.getElementById("coachSvg").style.display = "none";
-  document.getElementById("coachBubble").style.display = "none";
-  document.getElementById("coachHighlight").style.display = "none";
-  // Guider vers admin
-  setTimeout(()=>{
-    showPage("admin");
-    showToast("👋 Commence par remplir ton profil !");
-  }, 200);
-}
-
-/* ── Tour guidé fiche ruche ──────────────────────── */
-const HIVE_COACH_STEPS = [
-  {
-    targetId: "hiveTabs",
-    title: "Les onglets de ta ruche",
-    body: "Fais défiler ces onglets pour accéder à toutes les informations de la ruche. Chaque onglet correspond à un aspect de ton suivi.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "resume",
-    title: "🏠 Résumé",
-    body: "Vue d'ensemble de la ruche : statut, dernière visite, miel récolté, type de reine, force de la colonie. Le point de départ de chaque inspection.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "visites",
-    title: "📅 Visites",
-    body: "Enregistre chaque inspection : reine vue, ponte, couvain, réserves, varroa, frelons… Tout est horodaté pour un historique complet.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "reine",
-    title: "♛ Reine",
-    body: "Suivi de la reine : année de naissance, race, couleur de marquage, origine, statut de ponte. Indispensable pour gérer les reméragements.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "traitements",
-    title: "🛡️ Traitements",
-    body: "Trace tous les traitements varroa (Apivar, acide oxalique…) avec les dates de pose et de retrait. Obligatoire pour le registre sanitaire.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "miel",
-    title: "🍯 Miel",
-    body: "Enregistre chaque récolte : date, kilos, type de miel, butinage principal. Le total s'affiche automatiquement dans le résumé.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "hausses",
-    title: "📦 Hausses",
-    body: "Suis la pose et le retrait des hausses. Tu peux noter le nombre de hausses actives et leur état de remplissage.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "frelons",
-    title: "🐝 Frelons",
-    body: "Signale la pression de frelons asiatiques, pose ou retire des pièges, et note les observations. Les alertes remontent automatiquement.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "nourrissement",
-    title: "🧃 Nourrissement",
-    body: "Note chaque nourrissement : type de sirop ou candi, quantité et date. Utile pour les périodes de soudure ou de stimulation.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "transhumance",
-    title: "🚚 Transhumance",
-    body: "Planifie et trace les déplacements de ruches. Tu peux enregistrer les coordonnées GPS de chaque nouvel emplacement.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "divisions",
-    title: "🔀 Divisions",
-    body: "Crée une division depuis cette ruche : l'appli propose automatiquement un code pour la nouvelle ruche et génère son QR code.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "pesees",
-    title: "⚖️ Pesées",
-    body: "Enregistre le poids de la ruche pour suivre l'évolution des réserves et détecter les grandes miellées ou les pertes.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "conformite",
-    title: "📋 Conformité",
-    body: "Vérifie ta conformité selon ton profil : NAPI, déclaration annuelle, registre sanitaire, SIRET si tu vends. Des cases à cocher pour ne rien oublier.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    tabTarget: "qrcode",
-    title: "⌗ QR Code",
-    body: "Affiche et imprime le QR code de cette ruche. Colle-le sur la ruche : un simple scan ouvrira directement sa fiche.",
-    arrow: "down", bubblePos: "bottom"
-  },
-  {
-    targetId: null,
-    title: "Tu connais tout ! 🐝",
-    body: "Navigue librement entre les onglets. Le bouton ? en bas à droite relance cette visite guidée à tout moment.",
-    arrow: "down", bubblePos: "center", last: true
-  }
-];
-
-let hiveCoachStep = 0;
-
-function hiveCoachStart(){
-  hiveCoachStep = 0;
-  // S'assurer qu'on est sur l'onglet résumé
-  if(state.hiveSection !== "resume"){
-    state.hiveSection = "resume";
-    if(state.currentHive){
-      document.getElementById("content").innerHTML = hiveDetail(state.currentHive.code);
-      drawAllQr(state.currentHive.code);
-    }
-  }
-  buildHiveCoachDots();
-  hiveCoachShow();
-}
-
-function buildHiveCoachDots(){
-  const wrap = document.getElementById("coachDots");
-  if(!wrap) return;
-  wrap.innerHTML = HIVE_COACH_STEPS.map((_,i)=>`<div class="coach-dot ${i===0?'active':''}"></div>`).join("");
-}
-
-function hiveCoachShow(){
-  const step = HIVE_COACH_STEPS[hiveCoachStep];
-  if(!step) return;
-
-  // Si l'étape demande d'activer un onglet spécifique, on le fait
-  if(step.tabTarget && state.currentHive){
-    // Scroller l'onglet en vue sans recharger le contenu
-    setTimeout(()=>{
-      const tabs = document.querySelectorAll(".hive-tab");
-      tabs.forEach(t=>{
-        const isTarget = t.textContent.toLowerCase().includes(
-          HIVE_COACH_STEPS[hiveCoachStep]?.tabTarget?.toLowerCase().slice(0,5) || ''
-        );
-        t.style.outline = "none";
-      });
-      // Trouver le bon onglet par son onclick
-      const allTabs = document.querySelectorAll(".hive-tab");
-      allTabs.forEach(t=>{
-        if(t.getAttribute("onclick")?.includes(`'${step.tabTarget}'`)){
-          t.style.outline = "3px solid #ffd24a";
-          t.scrollIntoView({behavior:"smooth", inline:"center", block:"nearest"});
-        } else {
-          t.style.outline = "none";
-        }
-      });
-    }, 80);
-  }
-
-  // Textes
-  document.getElementById("coachStep").textContent = "Onglet " + hiveCoachStep + " / " + (HIVE_COACH_STEPS.length - 1);
-  document.getElementById("coachTitle").textContent = step.title;
-  document.getElementById("coachBody").textContent = step.body;
-  document.getElementById("coachNextBtn").textContent = step.last ? "Terminé ✓" : "Suivant →";
-  document.getElementById("coachNextBtn").onclick = hiveCoachNext;
-  document.querySelector(".coach-skip").onclick = hiveCoachEnd;
-
-  // Dots
-  document.querySelectorAll(".coach-dot").forEach((d,i)=>d.classList.toggle("active", i===hiveCoachStep));
-
-  const svg = document.getElementById("coachSvg");
-  const highlight = document.getElementById("coachHighlight");
-  const bubble = document.getElementById("coachBubble");
-  const arrow = document.getElementById("coachArrow");
-
-  bubble.style.display = "block";
-
-  // Pour les étapes onglet : cibler la barre d'onglets
-  let target = null;
-  if(step.targetId) target = document.getElementById(step.targetId);
-  else if(step.tabTarget) target = document.getElementById("hiveTabs");
-
-  if(target && step.bubblePos !== "center"){
-    svg.style.display = "block";
-    const r = target.getBoundingClientRect();
-    const pad = 6;
-    highlight.style.display = "block";
-    highlight.style.left = (r.left - pad) + "px";
-    highlight.style.top = (r.top - pad) + "px";
-    highlight.style.width = (r.width + pad*2) + "px";
-    highlight.style.height = (r.height + pad*2) + "px";
-    highlight.style.borderRadius = "16px";
-    const hole = document.getElementById("coachHoleRect");
-    hole.setAttribute("x", r.left - pad);
-    hole.setAttribute("y", r.top - pad);
-    hole.setAttribute("width", r.width + pad*2);
-    hole.setAttribute("height", r.height + pad*2);
-    hole.setAttribute("rx", "16");
-    // Bulle en dessous de la barre d'onglets, contrainte dans l'écran
-    const bubbleTop = r.bottom + pad + 14;
-    const bubbleMaxH = window.innerHeight - 120;
-    // Si la bulle sort en bas, la placer au-dessus de l'élément
-    if(bubbleTop + 280 > window.innerHeight){
-      bubble.style.top = "auto";
-      bubble.style.bottom = (window.innerHeight - r.top + pad + 14) + "px";
-      arrow.className = "coach-arrow down";
-    } else {
-      bubble.style.top = Math.min(bubbleTop, bubbleMaxH - 280) + "px";
-      bubble.style.bottom = "auto";
-      arrow.className = "coach-arrow up";
-    }
-    bubble.style.transform = "translateX(-50%)";
-    arrow.style.display = "block";
-  } else {
-    svg.style.display = step.bubblePos === "center" ? "block" : "none";
-    highlight.style.display = "none";
-    const hole = document.getElementById("coachHoleRect");
-    hole.setAttribute("width","0"); hole.setAttribute("height","0");
-    if(step.bubblePos === "center"){
-      bubble.style.top = "50%";
-      bubble.style.bottom = "auto";
-      bubble.style.transform = "translate(-50%, -50%)";
-      arrow.style.display = "none";
-    }
-  }
-}
-
-function hiveCoachNext(){
-  // Retirer le highlight onglet
-  document.querySelectorAll(".hive-tab").forEach(t=>t.style.outline="none");
-  hiveCoachStep++;
-  if(hiveCoachStep >= HIVE_COACH_STEPS.length){
-    hiveCoachEnd();
-    return;
-  }
-  hiveCoachShow();
-}
-
-function hiveCoachEnd(){
-  document.querySelectorAll(".hive-tab").forEach(t=>t.style.outline="none");
-  document.getElementById("coachSvg").style.display = "none";
-  document.getElementById("coachBubble").style.display = "none";
-  document.getElementById("coachHighlight").style.display = "none";
-  // Remettre les handlers du coach principal
-  document.getElementById("coachNextBtn").onclick = coachNext;
-  document.querySelector(".coach-skip").onclick = coachEnd;
-  // Marquer le tour comme fait
-  state.hiveTourDone = true;
-  saveState();
-  showToast("✓ Tu connais maintenant toutes les fonctions !");
-}
-
-function initApp(){
-  if(!state.onboardingDone){
-    // Splash visible, app masquée en arrière-plan
-    showPage("home");
-  } else {
-    document.getElementById("splash").style.display = "none";
-    showPage("home");
-  }
-}
-
-/* ── Guide banner (affiché tant que le profil est vide) ── */
-function guideBanner(){
-  const hasProfile = state.profil?.nom || state.profil?.napi;
-  const hasHives = state.hives.length > 0;
-  if(hasProfile && hasHives) return "";
-  if(!hasProfile) return `
-    <div class="guide-banner">
-      <div class="guide-icon">👤</div>
-      <div class="guide-text">
-        <div class="guide-title">Complète ton profil</div>
-        <div class="guide-sub">Renseigne ton NAPI et tes infos apiculteur</div>
-      </div>
-      <button class="guide-btn" onclick="showPage('admin')">Aller →</button>
-    </div>`;
-  if(!hasHives) return `
-    <div class="guide-banner">
-      <div class="guide-icon">🏠</div>
-      <div class="guide-text">
-        <div class="guide-title">Ajoute ta première ruche</div>
-        <div class="guide-sub">Crée sa fiche et génère son QR code</div>
-      </div>
-      <button class="guide-btn" onclick="showPage('newHive')">Créer →</button>
-    </div>`;
-  return "";
-}
-
-function showPage(page){
-  state.page = page;
-  const qrRow = document.getElementById("heroHiveQrRow");
-  if(qrRow) qrRow.style.display = "none";
-  // Masquer le bouton aide ruche quand on quitte une fiche
-  document.getElementById("hiveHelpBtn")?.classList.remove("visible");
-  setNav(page);
-  let html = "";
-  if(page === "home"){ setHero("", "", false); html = home(); }
-  if(page === "scan"){ setHero("Scanner", "Ouvrir une ruche avec son QR Code", true); html = scan(); }
-  if(page === "ruchers"){ setHero("Ruchers", "Toutes tes ruches enregistrées", true); html = ruchers(); }
-  if(page === "newHive"){ setHero("Nouvelle ruche", "Créer une ruche et son QR Code", true); html = newHive(); }
-  if(page === "alerts"){ setHero("Alertes", "Actions à traiter", true); html = alerts(); }
-  if(page === "admin"){ setHero("Administration", "Profil apiculteur", true); html = admin(); }
-  if(page === "menu"){ setHero("Menu", "Navigation", true); html = menu(); }
-  document.getElementById("content").innerHTML = html;
-  if(page === "newHive") setTimeout(refreshNewHiveQr, 30);
-  updateStats();
-}
-
-function openHive(code){
-  const h = state.hives.find(x=>x.code===code);
-  if(!h){
-    alert("Ruche introuvable : " + code);
-    return;
-  }
-  state.hiveSection = "resume";
-  state.visitFormOpen = false;
-  state.queenFormOpen = false;
-  state.moduleFormOpen = null;
-  state.currentHive = h;
-  setHero("", "", true);
-  setNav("ruchers");
-  document.getElementById("pageHero").classList.add("hidden");
-  document.getElementById("heroHiveQrRow").style.display = "flex";
-  document.getElementById("heroHiveTitle").textContent = "Ruche " + h.name;
-  document.getElementById("heroHiveSubtitle").textContent = h.apiary;
-  document.getElementById("heroQrCode").textContent = h.code;
-  document.getElementById("content").innerHTML = hiveDetail(code);
-  drawAllQr(code);
-  // Afficher le bouton aide flottant
-  document.getElementById("hiveHelpBtn").classList.add("visible");
-  // Lancer le tour automatiquement la première fois
-  if(!state.hiveTourDone){
-    setTimeout(hiveCoachStart, 500);
-  }
-}
-
-function scanDemo(){
-  const code = document.getElementById("scanInput").value.trim().toUpperCase();
-  openHive(code);
-}
-
-initApp();
-
-/* ── Service Worker PWA ─────────────────────────── */
-if('serviceWorker' in navigator){
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .then(reg => console.log('[PWA] Service Worker enregistré', reg.scope))
-      .catch(err => console.warn('[PWA] SW erreur:', err));
+  ctx.fillStyle="#000";
+  [[0,0],[0,22],[22,0]].forEach(([fx,fy])=>{
+    ctx.fillRect((fx)*cell,(fy)*cell,7*cell,7*cell);
+    ctx.fillStyle="#fff";ctx.fillRect((fx+1)*cell,(fy+1)*cell,5*cell,5*cell);
+    ctx.fillStyle="#000";ctx.fillRect((fx+2)*cell,(fy+2)*cell,3*cell,3*cell);
+    ctx.fillStyle="#000";
   });
 }
 
-</script>
-</body>
-</html>
+>
