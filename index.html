@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝</title>
+  <title>Mes Abeilles 🐝 v28</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <style>
@@ -1760,6 +1760,40 @@
       width:100%;
     }
 
+  
+    /* v28 — Prochaine visite forcée dans résumé */
+    .resume-next-visit{
+      background:#fff7ed;
+      border:1px solid #fed7aa;
+      color:#7c2d12;
+      border-radius:18px;
+      padding:13px;
+      margin:12px 0;
+    }
+    .resume-next-visit.good{
+      background:#f0fdf4;
+      border-color:#bbf7d0;
+      color:#14532d;
+    }
+    .resume-next-visit-title{
+      font-weight:950;
+      margin-bottom:5px;
+    }
+    .resume-next-visit-text{
+      font-size:13px;
+      line-height:1.45;
+    }
+    .resume-next-visit button{
+      margin-top:10px;
+      width:100%;
+      border:0;
+      border-radius:14px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;
+      padding:11px 12px;
+      font-weight:950;
+    }
+
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
@@ -3339,6 +3373,134 @@ function saveMaterial(){
   state.hiveSection = "materiel";
   document.getElementById("content").innerHTML = hiveDetail(h.code);
   drawAllQr(h.code);
+}
+
+
+function mbParseDate(value){
+  if(!value) return null;
+  const s = String(value).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return new Date(Number(m[3]), Number(m[2])-1, Number(m[1]));
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function mbISO(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+
+function mbReminderDays(){
+  const paths = [
+    state.visitReminderDays,
+    state.rappelVisiteDays,
+    state.rappelVisite,
+    state.visitInterval,
+    state.alertVisitDays,
+    state.settings && state.settings.visitReminderDays,
+    state.alertSettings && state.alertSettings.visitReminderDays,
+    state.autoAlerts && state.autoAlerts.visitReminderDays
+  ];
+  for(const v of paths){
+    const n = Number(v);
+    if(Number.isFinite(n) && n > 0) return n;
+  }
+  return 5;
+}
+
+function mbLastVisit(h){
+  const visits = (h && h.visites) ? h.visites : [];
+  let best = null;
+  visits.forEach(v=>{
+    const d = mbParseDate(v.date || v.createdAt || v.day);
+    if(d && (!best || d > best)) best = d;
+  });
+  return best;
+}
+
+function mbFormatDate(d){
+  if(typeof formatDateFr === "function") return formatDateFr(mbISO(d));
+  return d.toLocaleDateString("fr-FR");
+}
+
+function renderResumeNextVisit(h){
+  const last = mbLastVisit(h);
+  if(!last){
+    return `
+      <div class="resume-next-visit">
+        <div class="resume-next-visit-title">📅 Prochaine visite</div>
+        <div class="resume-next-visit-text">Aucune visite enregistrée pour calculer la prochaine visite.</div>
+      </div>
+    `;
+  }
+
+  const days = mbReminderDays();
+  const next = new Date(last.getFullYear(), last.getMonth(), last.getDate());
+  next.setDate(next.getDate() + days);
+
+  const today = new Date();
+  const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const next0 = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+  const diff = Math.round((next0 - today0) / 86400000);
+  const due = diff <= 0;
+  const label = mbFormatDate(next);
+
+  return `
+    <div class="resume-next-visit ${due ? "" : "good"}">
+      <div class="resume-next-visit-title">📅 Prochaine visite : ${label}</div>
+      <div class="resume-next-visit-text">
+        ${due ? "Visite à prévoir maintenant." : "Prévue dans " + diff + " jour" + (diff > 1 ? "s" : "") + "."}
+        Rappel configuré tous les ${days} jours.
+      </div>
+      <button onclick="mbAddNextVisitCalendar('${h.code}')">📅 Ajouter au calendrier</button>
+    </div>
+  `;
+}
+
+function mbAddNextVisitCalendar(code){
+  const h = state.hives.find(x=>x.code === code) || state.currentHive;
+  const last = mbLastVisit(h);
+  if(!h || !last){
+    showToast("Aucune visite à programmer");
+    return;
+  }
+  const next = new Date(last.getFullYear(), last.getMonth(), last.getDate());
+  next.setDate(next.getDate() + mbReminderDays());
+  const date = mbISO(next);
+  const title = "Visite ruche " + (h.name || h.code);
+  const desc = "Ruche : " + (h.name || h.code) + "\\nRucher : " + (h.apiary || "") + "\\nRappel généré par Mes Abeilles.";
+
+  if(typeof downloadICS === "function"){
+    downloadICS(title, date, desc);
+    return;
+  }
+
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Mes Abeilles//FR",
+    "BEGIN:VEVENT",
+    "UID:" + Date.now() + "@mes-abeilles",
+    "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g,"").split(".")[0] + "Z",
+    "DTSTART;VALUE=DATE:" + date.replace(/-/g,""),
+    "SUMMARY:" + title,
+    "DESCRIPTION:" + desc.replace(/\\n/g,"\\\\n"),
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ].join("\\r\\n");
+
+  const blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "visite_" + (h.code || "ruche") + "_" + date + ".ics";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 500);
 }
 
 function hiveSectionContent(h){
