@@ -1726,6 +1726,40 @@
       margin-top:12px;
     }
 
+  
+    /* v27 — Prochaine visite visible */
+    .next-visit-card{
+      background:#fffbeb;
+      border:1px solid #fde68a;
+      border-radius:18px;
+      padding:13px;
+      margin:12px 0;
+      color:#78350f;
+    }
+    .next-visit-card.ok{
+      background:#f0fdf4;
+      border-color:#bbf7d0;
+      color:#14532d;
+    }
+    .next-visit-title{
+      font-weight:950;
+      margin-bottom:5px;
+    }
+    .next-visit-text{
+      font-size:13px;
+      line-height:1.45;
+    }
+    .next-visit-btn{
+      margin-top:10px;
+      border:0;
+      border-radius:14px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;
+      padding:11px 12px;
+      font-weight:950;
+      width:100%;
+    }
+
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
@@ -4278,6 +4312,143 @@ function getHiveGps(h){
   if(Number.isFinite(Number(h.lat)) && Number.isFinite(Number(h.lon))) return {lat:Number(h.lat), lon:Number(h.lon)};
   if(Number.isFinite(Number(h.latitude)) && Number.isFinite(Number(h.longitude))) return {lat:Number(h.latitude), lon:Number(h.longitude)};
   return null;
+}
+
+
+function parseVisitDate(value){
+  if(!value) return null;
+  if(value instanceof Date && !isNaN(value)) return value;
+  const s = String(value).trim();
+
+  // ISO yyyy-mm-dd
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
+
+  // fr dd/mm/yyyy
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return new Date(Number(m[3]), Number(m[2])-1, Number(m[1]));
+
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function dateISOFromDate(d){
+  if(!(d instanceof Date) || isNaN(d)) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysToDate(d, days){
+  const out = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  out.setDate(out.getDate() + Number(days || 0));
+  return out;
+}
+
+function getVisitReminderDays(){
+  const keys = [
+    "visitReminderDays",
+    "rappelVisiteDays",
+    "rappelVisite",
+    "visitInterval",
+    "visiteInterval",
+    "alertVisitDays"
+  ];
+  for(const k of keys){
+    const v = state[k] ?? state.settings?.[k] ?? state.alertSettings?.[k] ?? state.autoAlerts?.[k];
+    const n = Number(v);
+    if(Number.isFinite(n) && n > 0) return n;
+  }
+  return 5;
+}
+
+function lastVisitDateObj(h){
+  const visits = (h && h.visites) ? h.visites : [];
+  let best = null;
+  visits.forEach(v=>{
+    const d = parseVisitDate(v.date || v.createdAt || v.day);
+    if(d && (!best || d > best)) best = d;
+  });
+  return best;
+}
+
+function nextVisitDateObj(h){
+  const last = lastVisitDateObj(h);
+  if(!last) return null;
+  return addDaysToDate(last, getVisitReminderDays());
+}
+
+function nextVisitStatus(h){
+  const next = nextVisitDateObj(h);
+  if(!next) return {next:null, due:false, daysLeft:null};
+  const today = new Date();
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const n0 = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+  const diff = Math.round((n0 - t0) / 86400000);
+  return {next, due:diff <= 0, daysLeft:diff};
+}
+
+function renderNextVisitCard(h){
+  const st = nextVisitStatus(h);
+  if(!st.next){
+    return `
+      <div class="next-visit-card">
+        <div class="next-visit-title">📅 Prochaine visite</div>
+        <div class="next-visit-text">Aucune visite enregistrée pour calculer un rappel.</div>
+      </div>
+    `;
+  }
+  const label = formatDateFr(dateISOFromDate(st.next));
+  const days = getVisitReminderDays();
+  const text = st.due
+    ? `Visite à prévoir maintenant. Rappel configuré tous les ${days} jours.`
+    : `Prévue le <strong>${label}</strong>, soit dans ${st.daysLeft} jour${st.daysLeft > 1 ? "s" : ""}.`;
+  return `
+    <div class="next-visit-card ${st.due ? "" : "ok"}">
+      <div class="next-visit-title">📅 Prochaine visite : ${label}</div>
+      <div class="next-visit-text">${text}</div>
+      <button class="next-visit-btn" onclick="addNextVisitToCalendar('${h.code}')">📅 Ajouter au calendrier</button>
+    </div>
+  `;
+}
+
+function addNextVisitToCalendar(code){
+  const h = state.hives.find(x=>x.code === code) || state.currentHive;
+  if(!h) return;
+  const st = nextVisitStatus(h);
+  if(!st.next){
+    showToast("Aucune prochaine visite à ajouter");
+    return;
+  }
+  const date = dateISOFromDate(st.next);
+  const title = "Visite ruche " + (h.name || h.code);
+  const desc = "Ruche : " + (h.name || h.code) + "\\nRucher : " + (h.apiary || "") + "\\nRappel généré par Mes Abeilles.";
+  if(typeof downloadICS === "function"){
+    downloadICS(title, date, desc);
+  }else{
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Mes Abeilles//FR",
+      "BEGIN:VEVENT",
+      "UID:" + Date.now() + "@mes-abeilles",
+      "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g,"").split(".")[0] + "Z",
+      "DTSTART;VALUE=DATE:" + date.replace(/-/g,""),
+      "SUMMARY:" + title,
+      "DESCRIPTION:" + desc.replace(/\\n/g,"\\\\n"),
+      "END:VEVENT",
+      "END:VCALENDAR"
+    ].join("\\r\\n");
+    const blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "visite_" + (h.code || "ruche") + "_" + date + ".ics";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 500);
+  }
 }
 
 function renderHiveGpsSummary(h){
