@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v29</title>
+  <title>Mes Abeilles 🐝 v35</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <style>
@@ -1838,6 +1838,147 @@
       line-height:1.45;
     }
 
+  
+    /* v31 — Rappels métier calendrier */
+    .module-reminder-box{
+      background:#f0f9ff;
+      border:1px solid #bae6fd;
+      border-radius:18px;
+      padding:13px;
+      margin:12px 0;
+    }
+    .module-reminder-title{
+      color:#075985;
+      font-weight:950;
+      margin-bottom:8px;
+    }
+    .module-reminder-grid{
+      display:grid;
+      grid-template-columns:1fr 110px;
+      gap:10px;
+      align-items:end;
+    }
+    .calendar-inline-btn{
+      border:0;
+      border-radius:12px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;
+      padding:9px 10px;
+      font-weight:950;
+      font-size:12px;
+      margin-top:8px;
+    }
+
+  
+    /* v32 — Alertes regroupées par ruche */
+    .alert-summary-box{
+      background:#fff7ed;
+      border:1px solid #fed7aa;
+      color:#7c2d12;
+      border-radius:16px;
+      padding:12px;
+      margin-top:10px;
+      line-height:1.45;
+      font-size:14px;
+    }
+    .alert-summary-box strong{color:#9a3412}
+    .alert-summary-list{
+      margin:8px 0 0;
+      padding-left:18px;
+    }
+    .alert-summary-list li{margin:3px 0}
+    .alert-calendar-main{
+      width:100%;
+      border:0;
+      border-radius:14px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;
+      padding:12px 14px;
+      font-weight:950;
+      margin-top:10px;
+    }
+    .alert-calendar-note{
+      font-size:12px;
+      color:#92400e;
+      margin-top:6px;
+    }
+
+  
+    /* v33 — Suppression / masquage alertes */
+    .alert-detail-line{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:8px;
+      align-items:start;
+      margin:5px 0;
+    }
+    .alert-delete-btn{
+      border:0;
+      border-radius:10px;
+      background:#fee2e2;
+      color:#991b1b;
+      padding:6px 8px;
+      font-weight:950;
+      font-size:12px;
+    }
+    .alert-actions-small{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+      margin-top:10px;
+    }
+    .alert-clear-btn{
+      border:1px solid #fed7aa;
+      border-radius:14px;
+      background:#fff;
+      color:#9a3412;
+      padding:10px 12px;
+      font-weight:950;
+      font-size:12px;
+    }
+
+  
+    /* v35 — Conformité PDF légère */
+    .doc-upload.lightweight{
+      border-color:#bbf7d0;
+      background:linear-gradient(180deg,#fff,#f0fdf4);
+    }
+    .doc-storage-note{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px 12px;
+      color:#64748b;
+      font-size:12px;
+      line-height:1.45;
+      margin-top:8px;
+    }
+    .doc-link-row{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:8px;
+      margin-top:8px;
+    }
+    .doc-link-row input{
+      min-height:44px;
+      padding:10px 12px;
+      font-size:13px;
+      border-radius:12px;
+    }
+    .doc-link-save{
+      border:0;
+      border-radius:12px;
+      background:#dcfce7;
+      color:#166534;
+      padding:9px 10px;
+      font-weight:950;
+      font-size:12px;
+    }
+    .doc-open-btn.warning{
+      background:#fff7ed;
+      color:#9a3412;
+    }
+
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
@@ -2242,6 +2383,191 @@ function toggleNewHiveFields(type){
   document.getElementById("champsRuche").style.display     = type === "ruche"     ? "block" : "none";
   document.getElementById("champsRuchette").style.display  = type === "ruchette"  ? "block" : "none";
 }
+
+function hiveUsesCustomVisitInterval(h){
+  return Number.isFinite(Number(h?.visitReminderDays)) && Number(h.visitReminderDays) > 0;
+}
+
+function effectiveVisitIntervalLabel(h){
+  const days = hiveVisitIntervalDays(h);
+  return days + " jour" + (days > 1 ? "s" : "") + (hiveUsesCustomVisitInterval(h) ? " · spécifique à cette ruche" : " · réglage général");
+}
+
+
+function alertKey(text){
+  return String(text || "").trim().toLowerCase();
+}
+
+function isAlertDismissed(h, alertText){
+  if(!h) return false;
+  const dismissed = h.dismissedAlerts || [];
+  return dismissed.includes(alertKey(alertText));
+}
+
+function dismissAlert(code, encodedAlert){
+  const h = state.hives.find(x=>x.code === code);
+  if(!h) return;
+  const alertText = decodeURIComponent(encodedAlert || "");
+  if(!h.dismissedAlerts) h.dismissedAlerts = [];
+  const key = alertKey(alertText);
+  if(key && !h.dismissedAlerts.includes(key)) h.dismissedAlerts.push(key);
+
+  h.alertList = (h.alertList || []).filter(a => alertKey(a) !== key);
+  h.alerts = h.alertList.length;
+  saveState();
+  showToast("✓ Alerte supprimée");
+  if(state.page === "alerts") showPage("alerts");
+}
+
+function clearHiveAlerts(code){
+  const h = state.hives.find(x=>x.code === code);
+  if(!h) return;
+  if(!confirm("Supprimer / masquer toutes les alertes actuelles de cette ruche ?\\n\\nLes nouvelles alertes pourront réapparaître si la situation change.")) return;
+
+  if(!h.dismissedAlerts) h.dismissedAlerts = [];
+  (h.alertList || []).forEach(a=>{
+    const key = alertKey(a);
+    if(key && !h.dismissedAlerts.includes(key)) h.dismissedAlerts.push(key);
+  });
+
+  h.alertList = [];
+  h.alerts = 0;
+  saveState();
+  showToast("✓ Alertes supprimées");
+  if(state.page === "alerts") showPage("alerts");
+}
+
+function restoreHiveAlerts(code){
+  const h = state.hives.find(x=>x.code === code);
+  if(!h) return;
+  h.dismissedAlerts = [];
+  recomputeAutomaticAlerts(false);
+  saveState();
+  showToast("✓ Alertes réactivées");
+  if(state.page === "alerts") showPage("alerts");
+}
+
+function groupedAlertSummary(list){
+  const groups = {
+    urgent: [],
+    visite: [],
+    sanitaire: [],
+    reserves: [],
+    varroa: [],
+    frelons: [],
+    ruchette: [],
+    materiel: [],
+    conformite: [],
+    meteo: [],
+    autres: []
+  };
+
+  (list || []).forEach(a=>{
+    const s = String(a || "");
+    const l = s.toLowerCase();
+    if(l.includes("dépassée") || l.includes("urgent") || l.includes("maintenant") || l.includes("critique")) groups.urgent.push(s);
+    else if(l.includes("visite") || l.includes("prochaine")) groups.visite.push(s);
+    else if(l.includes("reine") || l.includes("ponte") || l.includes("couvain") || l.includes("cellules") || l.includes("colonie") || l.includes("score")) groups.sanitaire.push(s);
+    else if(l.includes("réserve") || l.includes("nourrissement") || l.includes("pollen")) groups.reserves.push(s);
+    else if(l.includes("varroa") || l.includes("traitement")) groups.varroa.push(s);
+    else if(l.includes("frelon")) groups.frelons.push(s);
+    else if(l.includes("ruchette")) groups.ruchette.push(s);
+    else if(l.includes("matériel")) groups.materiel.push(s);
+    else if(l.includes("conformité") || l.includes("napi") || l.includes("déclaration") || l.includes("registre") || l.includes("assurance")) groups.conformite.push(s);
+    else if(l.includes("météo") || l.includes("gel") || l.includes("vent") || l.includes("pluie") || l.includes("canicule")) groups.meteo.push(s);
+    else groups.autres.push(s);
+  });
+
+  const lines = [];
+  if(groups.urgent.length) lines.push("🚨 " + groups.urgent.length + " urgence(s)");
+  if(groups.visite.length) lines.push("📅 " + groups.visite.length + " rappel(s) visite");
+  if(groups.sanitaire.length) lines.push("🐝 " + groups.sanitaire.length + " point(s) colonie/reine");
+  if(groups.reserves.length) lines.push("🍯 " + groups.reserves.length + " point(s) réserves/nourrissement");
+  if(groups.varroa.length) lines.push("🦠 " + groups.varroa.length + " point(s) varroa/traitement");
+  if(groups.frelons.length) lines.push("🐝 " + groups.frelons.length + " point(s) frelons");
+  if(groups.ruchette.length) lines.push("🪣 " + groups.ruchette.length + " point(s) ruchette");
+  if(groups.materiel.length) lines.push("🧰 " + groups.materiel.length + " point(s) matériel");
+  if(groups.conformite.length) lines.push("📋 " + groups.conformite.length + " point(s) conformité");
+  if(groups.meteo.length) lines.push("🌦️ " + groups.meteo.length + " point(s) météo");
+  if(groups.autres.length) lines.push("⚠️ " + groups.autres.length + " autre(s) point(s)");
+
+  return {
+    lines,
+    details:[...new Set((list || []).filter(Boolean))]
+  };
+}
+
+function groupedAlertHTML(h, list, calendarEnabled){
+  const g = groupedAlertSummary(list);
+  const main = g.lines.length ? g.lines.join(" · ") : "Alerte à vérifier";
+  return `
+    <div class="alert-summary-box">
+      <strong>⚠️ Synthèse :</strong> ${main}
+      <div class="alert-summary-list">
+        ${g.details.slice(0,8).map(x=>`
+          <div class="alert-detail-line">
+            <div>• ${x}</div>
+            <button class="alert-delete-btn" onclick="event.stopPropagation(); dismissAlert('${h.code}', '${encodeURIComponent(x)}')">Supprimer</button>
+          </div>
+        `).join("")}
+        ${g.details.length > 8 ? `<div>+ ${g.details.length - 8} autre(s) point(s)</div>` : ""}
+      </div>
+      ${calendarEnabled ? `
+        <button class="alert-calendar-main" onclick="event.stopPropagation(); downloadGroupedAlertReminder('${h.code}')">📅 Ajouter un rappel global au calendrier</button>
+        <div class="alert-calendar-note">Un seul événement calendrier sera créé pour cette ruche, même s’il y a plusieurs alertes.</div>
+      ` : ""}
+      <div class="alert-actions-small">
+        <button class="alert-clear-btn" onclick="event.stopPropagation(); clearHiveAlerts('${h.code}')">Tout supprimer</button>
+        <button class="alert-clear-btn" onclick="event.stopPropagation(); restoreHiveAlerts('${h.code}')">Réactiver</button>
+      </div>
+    </div>
+  `;
+}
+
+function mostRelevantAlertDate(h){
+  const dates = [];
+
+  const due = nextVisitDueInfo ? nextVisitDueInfo(h) : null;
+  if(due && due.next) dates.push(due.next);
+
+  (h.traitements || []).forEach(t=>{
+    if(t.followupDate) dates.push(mbParseDate(t.followupDate));
+    if(t.retrait) dates.push(mbParseDate(t.retrait));
+  });
+  (h.nourrissements || []).forEach(n=>{ if(n.followupDate) dates.push(mbParseDate(n.followupDate)); });
+  (h.divisions || []).forEach(d=>{ if(d.followupDate) dates.push(mbParseDate(d.followupDate)); });
+
+  const valid = dates.filter(d=>d && !isNaN(d)).sort((a,b)=>a-b);
+  const today = new Date();
+  const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return valid.find(d=>d >= today0) || valid[0] || today0;
+}
+
+function downloadGroupedAlertReminder(code){
+  const h = state.hives.find(x=>x.code === code);
+  if(!h) return;
+  const list = Array.isArray(h.alertList) ? h.alertList : [];
+  const start = mostRelevantAlertDate(h);
+  const summary = groupedAlertSummary(list);
+  const title = "Mes Abeilles — Alertes " + (h.name || h.code);
+  const desc = [
+    "Ruche : " + (h.name || h.code),
+    "Code : " + (h.code || ""),
+    "Rucher : " + (h.apiary || ""),
+    "",
+    "Alertes :",
+    ...summary.details.map(x=>"- " + x)
+  ].join("\\n");
+  downloadCalendarEvent({
+    h,
+    start,
+    title,
+    desc,
+    filename:"alertes-" + (h.code || "ruche") + ".ics",
+    location:h.apiary || h.gps || ""
+  });
+}
+
 function alerts(){
   recomputeAutomaticAlerts(false);
   const s = getAlertSettings();
@@ -2262,7 +2588,7 @@ function alerts(){
         <div class="alert-setting-line">
           <label>📅 Rappel visite dépassée</label>
           <input id="alertVisitDays" type="number" min="1" max="120" value="${Number(s.visitDays || 5)}" onchange="saveAlertSettings()">
-          <div class="alert-meta">Intervalle par défaut si aucune fréquence spécifique n'a été choisie dans la visite.</div>
+          <div class="alert-meta">Intervalle général utilisé seulement pour les ruches sans fréquence spécifique. Les fréquences choisies lors d'une visite restent prioritaires.</div>
         </div>
         <div class="alert-setting-line">
           <label><input id="alertWeatherEnabled" type="checkbox" ${s.weather ? "checked" : ""} onchange="saveAlertSettings()"> 🌦️ Alertes météo</label>
@@ -2298,7 +2624,7 @@ function alerts(){
           <div class="record-head"><span>${h.type === "ruchette" ? "Ruchette" : "Ruche"} ${h.name}</span><span>${list.length} alerte(s)</span></div>
           <div class="record-body">${h.apiary} · ${h.code}</div>
           ${h.weatherSummary ? `<div class="weather-badge">🌦️ ${h.weatherSummary}</div>` : ""}
-          <div class="alert-list">${list.map(a=>`<div class="alert-item">⚠️ ${a}${s.calendar ? `<br><button class="calendar-btn" onclick="event.stopPropagation(); downloadAlertReminder('${h.code}', '${encodeURIComponent(a)}')">📅 Ajouter au calendrier</button>` : ""}</div>`).join("")}</div>
+          ${groupedAlertHTML(h, list, s.calendar)}
         </div>
       `).join("")}
     </section>
@@ -2322,6 +2648,12 @@ function admin(){
         <strong>Export vers PC</strong><br>
         Le bouton télécharge une sauvegarde <strong>.json</strong>. Si ton téléphone affiche une page avec du code, ce n'est pas une erreur : c'est le contenu de la sauvegarde. Utilise alors le menu du navigateur → <strong>Télécharger</strong> ou partage le fichier vers ton PC.
       </div>
+
+      <div class="export-help">
+        <strong>Stockage local Android</strong><br>
+        Les documents de conformité sont maintenant associés en mode léger : l'application garde le nom, la date et éventuellement un lien, mais ne stocke plus le fichier complet dans la sauvegarde locale.
+      </div>
+
 
       <div class="field"><label>Prénom</label><input id="adminPrenom" value="${p.prenom || ""}" placeholder="Ton prénom"></div>
       <div class="field"><label>Nom</label><input id="adminNom" value="${p.nom || ""}" placeholder="Ton nom"></div>
@@ -2606,6 +2938,7 @@ function automaticAlertClean(list){
     "Ruchette",
     "Matériel",
     "Conformité",
+    "Retrait traitement prévu",
     "Météo :"
   ];
   return (Array.isArray(list) ? list : []).filter(a => {
@@ -2628,8 +2961,8 @@ function daysBetweenISO(dateValue){
 }
 
 function hiveVisitIntervalDays(h){
-  const n = Number(h?.visitReminderDays);
-  if(Number.isFinite(n) && n > 0) return n;
+  const custom = Number(h?.visitReminderDays);
+  if(Number.isFinite(custom) && custom > 0) return custom;
   const s = getAlertSettings ? getAlertSettings() : {};
   const global = Number(s.visitDays || 5);
   return Number.isFinite(global) && global > 0 ? global : 5;
@@ -2701,6 +3034,31 @@ function buildSmartAlertsForHive(h){
   const mat = h.material || {};
   if(String(mat.condition || "").includes("remplacer")) alerts.push("Matériel : à remplacer");
   if(String(mat.condition || "").includes("surveiller")) alerts.push("Matériel : état à surveiller");
+
+  (h.traitements || []).forEach(t=>{
+    if(t.followupDate && mbIsVarroaTreatment(t.type)){
+      const a = mbAlertWithDate("Varroa", t.followupDate, "contrôle à prévoir", "contrôle à faire maintenant");
+      if(a) alerts.push(a);
+    }
+    if(t.retrait){
+      const a = mbAlertWithDate("Varroa", t.retrait, "retrait traitement à prévoir", "retrait traitement à faire maintenant");
+      if(a) alerts.push(a);
+    }
+  });
+
+  (h.nourrissements || []).forEach(n=>{
+    if(n.followupDate){
+      const a = mbAlertWithDate("Nourrissement", n.followupDate, "contrôle à prévoir", "contrôle à faire maintenant");
+      if(a) alerts.push(a);
+    }
+  });
+
+  (h.divisions || []).forEach(d=>{
+    if(d.followupDate){
+      const a = mbAlertWithDate("Ruchette", d.followupDate, "contrôle de ponte à prévoir", "contrôle de ponte à faire maintenant");
+      if(a) alerts.push(a);
+    }
+  });
 
   if(Array.isArray(h.weatherAlerts)) alerts.push(...h.weatherAlerts);
 
@@ -3020,6 +3378,8 @@ function saveModule(section){
       miel: val("divisionMiel","1"),
       cellule: val("divisionCellule","Oui"),
       reine: val("divisionReine","Non"),
+      followupDays: Number(val("divisionFollowupDays","10")),
+      followupDate: mbDateAddISO(val("divisionDate", todayISO()), Number(val("divisionFollowupDays","10"))),
       notes: val("divisionNotes","")
     };
     h.divisions.unshift(item);
@@ -3035,6 +3395,7 @@ function saveModule(section){
         tag:"purple",
         alerts:1,
         honey:0,
+        dismissedAlerts: [],
         origine:"Division de " + h.name,
         rucheOrigine:h.code,
         datePeuplement:item.date,
@@ -3082,6 +3443,8 @@ function saveModule(section){
       date: val("traitementDate", todayISO()),
       type: val("traitementType","Apivar (lanières)"),
       retrait: val("traitementRetrait",""),
+      followupDays: Number(val("traitementFollowupDays","7")),
+      followupDate: mbDateAddISO(val("traitementDate", todayISO()), Number(val("traitementFollowupDays","7"))),
       quantite: val("traitementQuantite","2 lanières"),
       notes: val("traitementNotes","")
     };
@@ -3118,6 +3481,8 @@ function saveModule(section){
       date: val("nourrissementDate", todayISO()),
       type: val("nourrissementType","Sirop 50/50"),
       quantite: val("nourrissementQuantite","2 L"),
+      followupDays: Number(val("nourrissementFollowupDays","3")),
+      followupDate: mbDateAddISO(val("nourrissementDate", todayISO()), Number(val("nourrissementFollowupDays","3"))),
       notes: val("nourrissementNotes","")
     };
     h.nourrissements.unshift(item);
@@ -3150,6 +3515,7 @@ function saveModule(section){
   }
 
   state.moduleFormOpen = null;
+  recomputeAutomaticAlerts(false);
   saveState();
   document.getElementById("content").innerHTML = hiveDetail(h.code);
   drawAllQr(h.code);
@@ -3647,7 +4013,7 @@ function renderResumeNextVisit(h){
       <div class="resume-next-visit-title">📅 Prochaine visite : ${label}</div>
       <div class="resume-next-visit-text">
         ${due ? "Visite à prévoir maintenant." : "Prévue dans " + diff + " jour" + (diff > 1 ? "s" : "") + "."}
-        Rappel configuré tous les ${days} jours.
+        Intervalle : ${effectiveVisitIntervalLabel(h)}.
       </div>
       <button onclick="mbAddNextVisitCalendar('${h.code}')">📅 Ajouter au calendrier</button>
     </div>
@@ -3665,35 +4031,8 @@ function mbAddNextVisitCalendar(code){
   next.setDate(next.getDate() + mbReminderDays(h));
   const date = mbISO(next);
   const title = "Visite ruche " + (h.name || h.code);
-  const desc = "Ruche : " + (h.name || h.code) + "\\nRucher : " + (h.apiary || "") + "\\nRappel généré par Mes Abeilles.";
-
-  if(typeof downloadICS === "function"){
-    downloadICS(title, date, desc);
-    return;
-  }
-
-  const ics = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Mes Abeilles//FR",
-    "BEGIN:VEVENT",
-    "UID:" + Date.now() + "@mes-abeilles",
-    "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g,"").split(".")[0] + "Z",
-    "DTSTART;VALUE=DATE:" + date.replace(/-/g,""),
-    "SUMMARY:" + title,
-    "DESCRIPTION:" + desc.replace(/\\n/g,"\\\\n"),
-    "END:VEVENT",
-    "END:VCALENDAR"
-  ].join("\\r\\n");
-
-  const blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "visite_" + (h.code || "ruche") + "_" + date + ".ics";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 500);
+  const desc = "Ruche : " + (h.name || h.code) + "\nRucher : " + (h.apiary || "") + "\nRappel généré par Mes Abeilles.";
+  downloadCalendarEvent({h, start:date, title, desc, filename:"visite_" + (h.code || "ruche") + "_" + date + ".ics", location:h.apiary || h.gps || ""});
 }
 
 function hiveSectionContent(h){
@@ -3823,11 +4162,12 @@ function hiveSectionContent(h){
         <div class="field"><label>Cadres de miel</label><input id="divisionMiel" type="number" value="1"></div>
         <div class="field"><label>Cellule royale</label><select id="divisionCellule"><option>Oui</option><option>Non</option></select></div>
         <div class="field"><label>Reine fécondée</label><select id="divisionReine"><option>Non</option><option>Oui</option></select></div>
+        ${moduleReminderControl("division", "Contrôle de ponte dans", 10)}
         <div class="field"><label>Notes</label><textarea id="divisionNotes"></textarea></div>
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('divisions')">Enregistrer la division</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"divisions","Aucune division enregistrée.", d => record(formatDateFr(d.date), "Division → " + d.newName, `${d.couvain} cadres couvain · ${d.miel} cadres miel · QR : ${d.newCode} · Cellule royale : ${d.cellule} · Reine fécondée : ${d.reine}`))}
+    ${moduleHistoryHTML(h,"divisions","Aucune division enregistrée.", d => record(formatDateFr(d.date), "Division → " + d.newName, `${d.couvain} cadres couvain · ${d.miel} cadres miel · QR : ${d.newCode} · Cellule royale : ${d.cellule} · Reine fécondée : ${d.reine}` + (d.followupDate ? ` · Contrôle ponte : ${formatDateFr(d.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${d.followupDate}',title:'Contrôle ponte ruchette ${d.newName}',desc:'Contrôle de ponte prévu après division. Ruchette : ${d.newName}.',filename:'controle-ponte-${d.newCode}.ics'})">📅 Ajouter au calendrier</button>` : "")))}
   `;
   
   if(s === "actions") return `
@@ -3882,12 +4222,13 @@ function hiveSectionContent(h){
         <div class="field"><label>Type</label><select id="traitementType"><option>Apivar (lanières)</option><option>Apitraz (lanières)</option><option>Apistan (lanières)</option><option>VarroMed</option><option>Api-Bioxal</option><option>Acide oxalique</option><option>Acide formique</option><option>Thymol</option><option>MAQS</option><option>Comptage varroa</option><option>Désinfection matériel</option><option>Contrôle maladie</option><option>Contrôle fausse teigne</option></select></div>
         <div class="field"><label>Date pose / action</label><input id="traitementDate" type="date" value="${todayISO()}"></div>
         <div class="field"><label>Retrait prévu</label><input id="traitementRetrait" type="date"></div>
+        ${moduleReminderControl("traitement", "Contrôle varroa dans", 7)}
         <div class="field"><label>Quantité / dose</label><input id="traitementQuantite" placeholder="Ex : 2 lanières"></div>
         <div class="field"><label>Notes</label><textarea id="traitementNotes"></textarea></div>
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('traitements')">Enregistrer le traitement</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"traitements","Aucun traitement enregistré.", t => record(formatDateFr(t.date), t.type, `${t.quantite || "—"}` + (t.retrait ? ` · Retrait prévu : ${formatDateFr(t.retrait)}` : "") + (t.notes ? ` · ${t.notes}` : "")))}
+    ${moduleHistoryHTML(h,"traitements","Aucun traitement enregistré.", t => record(formatDateFr(t.date), t.type, `${t.quantite || "—"}` + (t.retrait ? ` · Retrait prévu : ${formatDateFr(t.retrait)}` : "") + (t.followupDate ? ` · Contrôle : ${formatDateFr(t.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${t.followupDate}',title:'Contrôle traitement ${t.type}',desc:'Contrôle après traitement. Ruche : ${h.name} (${h.code}).',filename:'controle-traitement-${h.code}.ics'})">📅 Ajouter au calendrier</button>` : "") + (t.notes ? ` · ${t.notes}` : "")))}
   `;
   
   if(s === "frelons") return `
@@ -3918,11 +4259,12 @@ function hiveSectionContent(h){
         <div class="field"><label>Date</label><input id="nourrissementDate" type="date" value="${todayISO()}"></div>
         <div class="field"><label>Type</label><select id="nourrissementType"><option>Sirop 50/50</option><option>Sirop 70/30</option><option>Candi</option><option>Protéines</option></select></div>
         <div class="field"><label>Quantité</label><input id="nourrissementQuantite" placeholder="Ex : 2 L, 1 kg"></div>
+        ${moduleReminderControl("nourrissement", "Contrôle nourrissement dans", 3)}
         <div class="field"><label>Notes</label><textarea id="nourrissementNotes"></textarea></div>
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('nourrissement')">Enregistrer</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"nourrissements","Aucun nourrissement enregistré.", n => record(formatDateFr(n.date), n.type, `${n.quantite || "—"}` + (n.notes ? ` · ${n.notes}` : "")))}
+    ${moduleHistoryHTML(h,"nourrissements","Aucun nourrissement enregistré.", n => record(formatDateFr(n.date), n.type, `${n.quantite || "—"}` + (n.followupDate ? ` · Contrôle : ${formatDateFr(n.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${n.followupDate}',title:'Contrôle nourrissement ${h.name}',desc:'Contrôle nourrissement. Ruche : ${h.name} (${h.code}).',filename:'controle-nourrissement-${h.code}.ics'})">📅 Ajouter au calendrier</button>` : "") + (n.notes ? ` · ${n.notes}` : "")))}
   `;
   
   if(s === "transhumance") return `
@@ -4139,13 +4481,17 @@ function normalizeHives(){
   });
 }
 
-function storageState(stripImages=false){
+function storageState(mode="full"){
   const copy = JSON.parse(JSON.stringify(state));
   copy.savedAt = new Date().toISOString();
-  copy.appVersion = "v21";
-  if(stripImages && Array.isArray(copy.hives)){
+  copy.appVersion = "v35";
+
+  const stripPhotos = mode === true || mode === "light" || mode === "tiny";
+  const stripDocuments = mode === "tiny";
+
+  if(Array.isArray(copy.hives)){
     copy.hives.forEach(h=>{
-      if(Array.isArray(h.photos)){
+      if(stripPhotos && Array.isArray(h.photos)){
         h.photos.forEach(p=>{
           if(p.dataUrl){
             p.dataUrl = "";
@@ -4153,8 +4499,30 @@ function storageState(stripImages=false){
           }
         });
       }
+      if(stripDocuments && Array.isArray(h.documents)){
+        h.documents.forEach(d=>{
+          if(d.dataUrl){
+            d.dataUrl = "";
+            d.fileRemoved = true;
+          }
+        });
+      }
     });
   }
+
+  if(copy.complianceDocs){
+    Object.values(copy.complianceDocs).forEach(d=>{
+      // v35 : les nouveaux justificatifs ne stockent plus le fichier complet.
+      // Les anciens dataUrl sont conservés tant que possible, puis supprimés en mode tiny.
+      if(stripDocuments && d && d.dataUrl){
+        d.dataUrl = "";
+        d.fileRemoved = true;
+        d.storageMode = d.storageMode || "legacy-stripped";
+      }
+      if(d && d.tempObjectUrl) delete d.tempObjectUrl;
+    });
+  }
+
   return copy;
 }
 
@@ -4166,37 +4534,54 @@ function tryWriteStorage(key, data){
 function saveState(){
   normalizeHives();
 
+  function writePrimaryAndOptionalBackup(data, label){
+    const raw = JSON.stringify(data);
+
+    // Sur Android, deux grosses copies localStorage peuvent dépasser le quota.
+    try{ localStorage.removeItem(LS_BACKUP_KEY); }catch(e){}
+
+    localStorage.setItem(LS_KEY, raw);
+
+    // Backup local uniquement si le fichier reste petit.
+    if(raw.length < 1800000){
+      try{ localStorage.setItem(LS_BACKUP_KEY, raw); }catch(e){ console.warn("[Mes Abeilles] Backup local ignoré", e); }
+    }
+
+    if(label) showToast(label);
+    return true;
+  }
+
   try{
-    const full = storageState(false);
+    const full = storageState("full");
     const fullString = JSON.stringify(full);
 
-    // Si les photos rendent le fichier trop gros, on garde les données métiers
-    // et on supprime uniquement les aperçus image.
-    if(fullString.length > 4200000){
-      const light = storageState(true);
-      tryWriteStorage(LS_KEY, light);
-      tryWriteStorage(LS_BACKUP_KEY, light);
-      console.warn("[Mes Abeilles] Sauvegarde allégée : aperçus photos retirés pour éviter la limite navigateur.");
-      showToast("✓ Données sauvegardées · photos allégées");
-      return true;
+    if(fullString.length <= 3900000){
+      return writePrimaryAndOptionalBackup(full, "");
     }
 
-    localStorage.setItem(LS_KEY, fullString);
-    localStorage.setItem(LS_BACKUP_KEY, fullString);
-    return true;
+    console.warn("[Mes Abeilles] Données volumineuses, sauvegarde allégée tentée.");
   } catch(e){
-    console.warn("[Mes Abeilles] Sauvegarde complète impossible, tentative allégée", e);
-    try{
-      const light = storageState(true);
-      tryWriteStorage(LS_KEY, light);
-      tryWriteStorage(LS_BACKUP_KEY, light);
-      showToast("⚠️ Sauvegarde allégée : certaines images ne sont pas conservées");
-      return true;
-    } catch(err){
-      console.error("[Mes Abeilles] Échec sauvegarde", err);
-      alert("La sauvegarde locale a échoué. Android/Chrome bloque ou limite le stockage. Fais un export JSON depuis Administration pour sécuriser tes données.");
-      return false;
+    console.warn("[Mes Abeilles] Préparation sauvegarde complète impossible", e);
+  }
+
+  try{
+    const light = storageState("light");
+    const lightString = JSON.stringify(light);
+
+    if(lightString.length <= 3900000){
+      return writePrimaryAndOptionalBackup(light, "✓ Données sauvegardées · photos allégées");
     }
+  } catch(e){
+    console.warn("[Mes Abeilles] Sauvegarde allégée impossible", e);
+  }
+
+  try{
+    const tiny = storageState("tiny");
+    return writePrimaryAndOptionalBackup(tiny, "⚠️ Données sauvées · fichiers trop lourds non conservés localement");
+  } catch(err){
+    console.error("[Mes Abeilles] Échec sauvegarde", err);
+    alert("La sauvegarde locale a échoué : le stockage Android/Chrome est plein ou bloqué. Fais un export JSON depuis Administration, puis supprime quelques photos/documents lourds dans l'application.");
+    return false;
   }
 }
 
@@ -4270,6 +4655,49 @@ function fakeSave(label){
 }
 
 /* ── Export / Import PC ───────────────────────────── */
+
+function normalizeStateForExport(inputState, includeHeavyFiles=false){
+  const copy = JSON.parse(JSON.stringify(inputState || state));
+  copy.exportedAt = new Date().toISOString();
+  copy.appVersion = "v35";
+
+  if(!includeHeavyFiles){
+    if(Array.isArray(copy.hives)){
+      copy.hives.forEach(h=>{
+        if(Array.isArray(h.photos)){
+          h.photos.forEach(p=>{
+            if(p.dataUrl){
+              p.dataUrl = "";
+              p.previewRemoved = true;
+            }
+          });
+        }
+        if(Array.isArray(h.documents)){
+          h.documents.forEach(d=>{
+            if(d.dataUrl){
+              d.dataUrl = "";
+              d.fileRemoved = true;
+            }
+          });
+        }
+      });
+    }
+
+    if(copy.complianceDocs){
+      Object.values(copy.complianceDocs).forEach(d=>{
+        if(d && d.dataUrl){
+          d.dataUrl = "";
+          d.fileRemoved = true;
+          d.storageMode = d.storageMode || "legacy-export-light";
+        }
+        if(d && d.tempObjectUrl) delete d.tempObjectUrl;
+      });
+    }
+  }
+
+  return copy;
+}
+
 function exportData(){
   const exportState = (typeof normalizeStateForExport === "function") ? normalizeStateForExport(state, false) : state;
   const json = JSON.stringify(exportState, null, 2);
@@ -4353,73 +4781,146 @@ function safeDocTitle(t){
   return String(t || "Document").replace(/'/g,"\'").replace(/"/g,"&quot;");
 }
 
+const complianceTempUrls = {};
+
 function docField(bucketId, title="Document"){
   const fid = "file_"+bucketId;
   const doc = complianceDoc(bucketId);
   const titleSafe = safeDocTitle(title);
+  const hasDoc = !!doc;
+  const isLight = doc && (doc.storageMode === "external" || doc.storageMode === "link" || doc.storageMode === "metadata");
+  const canOpenNow = doc && (doc.dataUrl || doc.externalUrl || complianceTempUrls[bucketId]);
   return `
-    <div class="doc-upload">
-      <input type="file" accept="image/*,.pdf" id="${fid}" class="file-hidden" onchange="saveComplianceDocument('${bucketId}','${titleSafe}',this)">
-      <button class="compliance-doc-btn ${doc ? 'done' : ''}" onclick="fileUpload('${fid}')">
-        ${doc ? '✅' : '📎'} ${title}
+    <div class="doc-upload ${hasDoc ? 'lightweight' : ''}">
+      <input type="file" accept=".pdf,image/*" id="${fid}" class="file-hidden" onchange="saveComplianceDocument('${bucketId}','${titleSafe}',this)">
+      <button class="compliance-doc-btn ${hasDoc ? 'done' : ''}" onclick="fileUpload('${fid}')">
+        ${hasDoc ? '✅' : '📎'} ${title}
       </button>
       <div class="file-actions">
-        <button class="file-btn" onclick="fileUpload('${fid}')">📁 Fichier</button>
+        <button class="file-btn" onclick="fileUpload('${fid}')">📄 Associer PDF / fichier</button>
         <button class="file-btn primary" onclick="scanDocument('${fid}')">📷 Scanner</button>
       </div>
+
+      <div class="doc-link-row">
+        <input id="link_${bucketId}" placeholder="Ou coller un lien Google Drive / PDF">
+        <button class="doc-link-save" onclick="saveComplianceLink('${bucketId}','${titleSafe}')">Lier</button>
+      </div>
+
       ${doc ? `
-        <div class="compliance-doc-meta">📄 ${doc.name || 'Justificatif'} · ${doc.size || ''} · ${formatDateFr(doc.date)}</div>
+        <div class="compliance-doc-meta">📄 ${doc.name || 'Justificatif'} · ${doc.size || ''} · ${formatDateFr(doc.date)}${isLight ? ' · stockage léger' : ''}</div>
         <div class="compliance-doc-actions">
-          <button class="doc-open-btn" onclick="openComplianceDocument('${bucketId}')">👁️ Ouvrir</button>
+          <button class="doc-open-btn ${canOpenNow ? '' : 'warning'}" onclick="openComplianceDocument('${bucketId}')">${canOpenNow ? '👁️ Ouvrir' : '🔁 Réassocier'}</button>
           <button class="doc-remove-btn" onclick="removeComplianceDocument('${bucketId}')">Supprimer</button>
         </div>` : `<div class="mini-help">Aucun justificatif associé</div>`}
+
+      <div class="doc-storage-note">
+        v35 : l'application enregistre surtout le nom, la date et le lien du document. Le fichier complet n'est plus stocké dans la sauvegarde locale, pour éviter de saturer Chrome Android.
+      </div>
     </div>`;
 }
 
 function saveComplianceDocument(bucketId, title, input){
   const file = input && input.files ? input.files[0] : null;
   if(!file) return;
-  if(file.size > 1800000){
-    alert("Ce fichier est trop lourd pour être gardé dans l'application hors ligne. Essaie une photo plus légère ou un PDF compressé.");
-    input.value = "";
+
+  if(!state.complianceDocs) state.complianceDocs = {};
+  if(complianceTempUrls[bucketId]) URL.revokeObjectURL(complianceTempUrls[bucketId]);
+
+  // Lien temporaire valable tant que l'application reste ouverte.
+  complianceTempUrls[bucketId] = URL.createObjectURL(file);
+
+  state.complianceDocs[bucketId] = {
+    id: "compliance_" + bucketId + "_" + Date.now(),
+    bucketId,
+    title: title || "Document",
+    date: todayISO(),
+    name: file.name,
+    type: file.type || "application/octet-stream",
+    size: Math.round(file.size / 1024) + " Ko",
+    storageMode: "external",
+    dataUrl: ""
+  };
+
+  saveState();
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+  }
+
+  showToast("✓ Document associé sans alourdir la sauvegarde");
+  alert("Document associé. Il est ouvrable pendant cette session. Pour le retrouver après redémarrage, garde le PDF dans ton téléphone ou ajoute un lien Drive/PDF dans le champ prévu.");
+}
+
+function saveComplianceLink(bucketId, title){
+  const input = document.getElementById("link_" + bucketId);
+  const url = String(input?.value || "").trim();
+  if(!url){
+    showToast("Colle d'abord un lien vers le document");
     return;
   }
-  const reader = new FileReader();
-  reader.onload = function(){
-    if(!state.complianceDocs) state.complianceDocs = {};
-    state.complianceDocs[bucketId] = {
-      id: "compliance_" + bucketId + "_" + Date.now(),
-      bucketId,
-      title: title || "Document",
-      date: todayISO(),
-      name: file.name,
-      type: file.type || "application/octet-stream",
-      size: Math.round(file.size / 1024) + " Ko",
-      dataUrl: String(reader.result || "")
-    };
-    saveState();
-    const h = state.currentHive || state.hives[0];
-    if(h){
-      document.getElementById("content").innerHTML = hiveDetail(h.code);
-      drawAllQr(h.code);
-    }
-    showToast("✓ Justificatif enregistré");
+
+  if(!/^https?:\/\//i.test(url)){
+    alert("Colle un lien complet commençant par https://");
+    return;
+  }
+
+  if(!state.complianceDocs) state.complianceDocs = {};
+  state.complianceDocs[bucketId] = {
+    id: "compliance_link_" + bucketId + "_" + Date.now(),
+    bucketId,
+    title: title || "Document",
+    date: todayISO(),
+    name: title || "Document lié",
+    type: "text/uri-list",
+    size: "lien externe",
+    storageMode: "link",
+    externalUrl: url,
+    dataUrl: ""
   };
-  reader.readAsDataURL(file);
+
+  saveState();
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+  }
+  showToast("✓ Lien document enregistré");
 }
 
 function openComplianceDocument(bucketId){
   const doc = complianceDoc(bucketId);
-  if(!doc || !doc.dataUrl){ showToast("⚠️ Aucun document à ouvrir"); return; }
-  const win = window.open("", "_blank");
-  if(!win){ alert("Autorise les pop-ups pour ouvrir le document."); return; }
-  const isImg = (doc.type || "").startsWith("image/");
-  win.document.write(`<!DOCTYPE html><html><head><title>${doc.name || 'Document'}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header>${doc.title || 'Document'} · ${doc.name || ''}</header><div class="wrap">${isImg ? `<img src="${doc.dataUrl}">` : `<iframe src="${doc.dataUrl}"></iframe>`}</div></body></html>`);
-  win.document.close();
+  if(!doc){ showToast("⚠️ Aucun document à ouvrir"); return; }
+
+  if(doc.externalUrl){
+    window.open(doc.externalUrl, "_blank", "noopener");
+    return;
+  }
+
+  if(complianceTempUrls[bucketId]){
+    window.open(complianceTempUrls[bucketId], "_blank", "noopener");
+    return;
+  }
+
+  // Compatibilité avec les anciens justificatifs stockés dans l'app.
+  if(doc.dataUrl){
+    const win = window.open("", "_blank");
+    if(!win){ alert("Autorise les pop-ups pour ouvrir le document."); return; }
+    const isImg = (doc.type || "").startsWith("image/");
+    win.document.write(`<!DOCTYPE html><html><head><title>${doc.name || 'Document'}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header>${doc.title || 'Document'} · ${doc.name || ''}</header><div class="wrap">${isImg ? `<img src="${doc.dataUrl}">` : `<iframe src="${doc.dataUrl}"></iframe>`}</div></body></html>`);
+    win.document.close();
+    return;
+  }
+
+  alert("Le document est associé mais le fichier local n'est pas disponible dans cette session. Réassocie le PDF/fichier, ou ajoute un lien Drive/PDF pour l'ouvrir à tout moment.");
 }
 
 function removeComplianceDocument(bucketId){
   if(!confirm("Supprimer ce justificatif ?")) return;
+  if(complianceTempUrls[bucketId]){
+    URL.revokeObjectURL(complianceTempUrls[bucketId]);
+    delete complianceTempUrls[bucketId];
+  }
   if(state.complianceDocs) delete state.complianceDocs[bucketId];
   saveState();
   const h = state.currentHive || state.hives[0];
@@ -4429,6 +4930,7 @@ function removeComplianceDocument(bucketId){
   }
   showToast("✓ Justificatif supprimé");
 }
+
 
 function drawAllQr(code){
   drawQr("heroQr", code);
@@ -4772,41 +5274,7 @@ function renderNextVisitCard(h){
 }
 
 function addNextVisitToCalendar(code){
-  const h = state.hives.find(x=>x.code === code) || state.currentHive;
-  if(!h) return;
-  const st = nextVisitStatus(h);
-  if(!st.next){
-    showToast("Aucune prochaine visite à ajouter");
-    return;
-  }
-  const date = dateISOFromDate(st.next);
-  const title = "Visite ruche " + (h.name || h.code);
-  const desc = "Ruche : " + (h.name || h.code) + "\\nRucher : " + (h.apiary || "") + "\\nRappel généré par Mes Abeilles.";
-  if(typeof downloadICS === "function"){
-    downloadICS(title, date, desc);
-  }else{
-    const ics = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//Mes Abeilles//FR",
-      "BEGIN:VEVENT",
-      "UID:" + Date.now() + "@mes-abeilles",
-      "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g,"").split(".")[0] + "Z",
-      "DTSTART;VALUE=DATE:" + date.replace(/-/g,""),
-      "SUMMARY:" + title,
-      "DESCRIPTION:" + desc.replace(/\\n/g,"\\\\n"),
-      "END:VEVENT",
-      "END:VCALENDAR"
-    ].join("\\r\\n");
-    const blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "visite_" + (h.code || "ruche") + "_" + date + ".ics";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 500);
-  }
+  return mbAddNextVisitCalendar(code);
 }
 
 function renderHiveGpsSummary(h){
@@ -4977,7 +5445,7 @@ function createHiveDemo(){
     date: new Date().toLocaleDateString("fr-FR"),
     theme: type === "ruchette" ? "lavender" : "acacia",
     tag: type === "ruchette" ? "purple" : "orange",
-    alerts: 0, honey: 0,
+    alerts: 0, honey: 0, dismissedAlerts: [],
     material:{type:materialType, frames:materialFrames, condition:"Bon", changedAt:todayISO(), notes:""},
     materialType:materialType,
     frames:materialFrames,
@@ -5080,7 +5548,7 @@ function recomputeAutomaticAlerts(notify=false){
   state.hives.forEach(h=>{
     const manual = automaticAlertClean(h.alertList);
     const smart = buildSmartAlertsForHive(h);
-    h.alertList = [...new Set([...manual, ...smart].filter(Boolean))];
+    h.alertList = [...new Set([...manual, ...smart].filter(Boolean))].filter(a => !isAlertDismissed(h, a));
     h.alerts = h.alertList.length;
   });
 
@@ -5091,7 +5559,7 @@ function recomputeAutomaticAlerts(notify=false){
     const manual = automaticAlertClean(h.alertList);
     const smart = buildSmartAlertsForHive(h);
     const complianceAlerts = missing.map(x => "Conformité : " + x + " manquant");
-    h.alertList = [...new Set([...manual, ...smart, ...complianceAlerts].filter(Boolean))];
+    h.alertList = [...new Set([...manual, ...smart, ...complianceAlerts].filter(Boolean))].filter(a => !isAlertDismissed(h, a));
     h.alerts = h.alertList.length;
   }
 
@@ -5229,6 +5697,138 @@ function calendarOnboardingChoice(enable){
   if(state.page === "alerts") showPage("alerts");
 }
 
+
+function mbDateAddISO(dateISO, days){
+  const d = mbParseDate ? mbParseDate(dateISO) : new Date(dateISO);
+  if(!d || isNaN(d)) return todayISO();
+  d.setDate(d.getDate() + Number(days || 0));
+  return mbISO ? mbISO(d) : d.toISOString().slice(0,10);
+}
+
+function mbReminderStatus(dateISO){
+  const d = mbParseDate ? mbParseDate(dateISO) : new Date(dateISO);
+  if(!d || isNaN(d)) return null;
+  const today = new Date();
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((x - t) / 86400000);
+  return {date:d, diff, label:(mbFormatDate ? mbFormatDate(d) : d.toLocaleDateString("fr-FR"))};
+}
+
+function mbAlertWithDate(prefix, dateISO, futureText, dueText){
+  const st = mbReminderStatus(dateISO);
+  if(!st) return null;
+  if(st.diff <= 0) return `${prefix} : ${dueText || "à faire maintenant"} — ${st.label}`;
+  if(st.diff <= 3) return `${prefix} : ${futureText || "à prévoir"} dans ${st.diff} jour${st.diff>1?"s":""} — ${st.label}`;
+  return `${prefix} : prévu le ${st.label}`;
+}
+
+function mbIsVarroaTreatment(type){
+  const s = String(type || "").toLowerCase();
+  return ["varroa","apivar","apitraz","apistan","varromed","api-bioxal","oxalique","formique","thymol","maqs","comptage"].some(x=>s.includes(x));
+}
+
+function mbExtractDateFromAlert(alertText){
+  const s = String(alertText || "");
+  let m = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
+  m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return new Date(Number(m[3]), Number(m[2])-1, Number(m[1]));
+  return null;
+}
+
+function mbIcsEscape(value){
+  return String(value || "")
+    .replace(/\\/g,"\\\\")
+    .replace(/\r?\n/g,"\\n")
+    .replace(/,/g,"\\,")
+    .replace(/;/g,"\\;");
+}
+
+function mbIcsDateTime(date){
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toISOString().replace(/[-:]/g,"").split(".")[0] + "Z";
+}
+
+function mbIcsDateOnly(date){
+  const d = date instanceof Date ? date : new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}${m}${day}`;
+}
+
+function mbDownloadCalendarEvent({h, start, title, desc, filename, allDay=true, location=""}){
+  const startDate = start instanceof Date ? start : (mbParseDate ? mbParseDate(start) : new Date(start));
+  if(!startDate || isNaN(startDate)){
+    showToast("Date calendrier invalide");
+    return;
+  }
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "PRODID:-//Mes Abeilles//Rappels//FR",
+    "BEGIN:VEVENT",
+    "UID:" + (h?.code || "mes-abeilles") + "-" + Date.now() + "@mesabeilles.local",
+    "DTSTAMP:" + mbIcsDateTime(new Date())
+  ];
+
+  if(allDay){
+    const end = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    end.setDate(end.getDate() + 1);
+    lines.push("DTSTART;VALUE=DATE:" + mbIcsDateOnly(startDate));
+    lines.push("DTEND;VALUE=DATE:" + mbIcsDateOnly(end));
+  }else{
+    const end = new Date(startDate.getTime() + 60*60*1000);
+    lines.push("DTSTART:" + mbIcsDateTime(startDate));
+    lines.push("DTEND:" + mbIcsDateTime(end));
+  }
+
+  lines.push("SUMMARY:" + mbIcsEscape(title || "Rappel Mes Abeilles"));
+  lines.push("DESCRIPTION:" + mbIcsEscape(desc || "Rappel généré par Mes Abeilles."));
+  lines.push("LOCATION:" + mbIcsEscape(location || h?.apiary || h?.gps || ""));
+  lines.push("STATUS:CONFIRMED");
+  lines.push("TRANSP:OPAQUE");
+  lines.push("BEGIN:VALARM");
+  lines.push("TRIGGER:-PT12H");
+  lines.push("ACTION:DISPLAY");
+  lines.push("DESCRIPTION:" + mbIcsEscape(title || "Rappel Mes Abeilles"));
+  lines.push("END:VALARM");
+  lines.push("END:VEVENT");
+  lines.push("END:VCALENDAR");
+
+  const ics = lines.join("\r\n") + "\r\n";
+  const blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename || "mes-abeilles-rappel.ics";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 600);
+  showToast("✓ Rappel calendrier préparé");
+}
+
+function moduleReminderControl(section, label, defaultDays){
+  return `
+    <div class="module-reminder-box">
+      <div class="module-reminder-title">📅 Rappel calendrier</div>
+      <div class="module-reminder-grid">
+        <div class="field" style="margin-bottom:0">
+          <label>${label}</label>
+          <input id="${section}FollowupDays" type="number" min="1" max="120" value="${defaultDays}">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>jours</label>
+          <div class="mini-help">après l'action</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function suggestedDateForAlert(h, alertText){
   const txt = String(alertText || "").toLowerCase();
   const d = new Date();
@@ -5250,28 +5850,8 @@ function downloadAlertReminder(code, encodedAlert){
   downloadCalendarEvent({h, start, title, desc, filename:`alerte-${h.code}.ics`});
 }
 
-function downloadCalendarEvent({h, start, title, desc, filename}){
-  const end = new Date(start.getTime() + 60*60*1000);
-  const clean = s => String(s || "").replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/,/g,"\\,").replace(/;/g,"\\;");
-  const ics = [
-    "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Mes Abeilles//Alertes//FR","BEGIN:VEVENT",
-    "UID:" + (h?.code || "mes-abeilles") + "-" + Date.now() + "@mesabeilles",
-    "DTSTAMP:" + icsDate(new Date()),
-    "DTSTART:" + icsDate(start),
-    "DTEND:" + icsDate(end),
-    "SUMMARY:" + clean(title),
-    "DESCRIPTION:" + clean(desc),
-    h?.gps ? "LOCATION:" + clean(h.gps) : "LOCATION:" + clean(h?.apiary || ""),
-    "END:VEVENT","END:VCALENDAR"
-  ].join("\r\n");
-  const blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename || "mes-abeilles-rappel.ics";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();}, 500);
-  showToast("✓ Rappel calendrier préparé");
+function downloadCalendarEvent({h, start, title, desc, filename, location, allDay=true}){
+  mbDownloadCalendarEvent({h, start, title, desc, filename, location, allDay});
 }
 
 function downloadVisitReminder(code){
