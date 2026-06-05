@@ -1613,6 +1613,40 @@
       line-height:1.45;
     }
 
+  
+    /* v25 — Onglet Matériel */
+    .material-current-card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:22px;
+      padding:16px;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+      margin-bottom:14px;
+    }
+    .material-current-title{
+      font-weight:950;
+      font-size:18px;
+      color:#0f172a;
+      margin-bottom:8px;
+    }
+    .material-status{
+      display:inline-flex;
+      border-radius:999px;
+      padding:7px 11px;
+      font-weight:950;
+      font-size:13px;
+      margin-top:8px;
+    }
+    .material-status.good{background:#dcfce7;color:#15803d}
+    .material-status.watch{background:#fef3c7;color:#b45309}
+    .material-status.bad{background:#fee2e2;color:#dc2626}
+    .material-history-note{
+      font-size:13px;
+      color:#64748b;
+      line-height:1.45;
+      margin-top:6px;
+    }
+
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
@@ -1955,12 +1989,22 @@ function newHive(){
 
       <!-- Champs ruche standard -->
       <div id="champsRuche">
-        <div class="field"><label>Type de ruche</label>
-          <select>
-            <option>Dadant 10 cadres</option>
-            <option>Dadant 12 cadres</option>
-            <option>Warré</option>
+        <div class="field"><label>Type de matériel</label>
+          <select id="newHiveMaterialType">
+            <option>Dadant</option>
+            <option>Voirnot</option>
             <option>Langstroth</option>
+            <option>Warré</option>
+            <option>Autre</option>
+          </select>
+        </div>
+        <div class="field"><label>Nombre de cadres corps</label>
+          <select id="newHiveFrames">
+            <option>10</option>
+            <option>12</option>
+            <option>8</option>
+            <option>6</option>
+            <option>Autre</option>
           </select>
         </div>
       </div>
@@ -2186,6 +2230,7 @@ function hiveDetail(code){
     <div class="hive-content-wrap">
       <nav class="hive-tabs" id="hiveTabs">
         ${tabButton("resume","🏠","Résumé")}
+        ${tabButton("materiel","🧰","Matériel")}
         ${isRuchette ? tabButton("ruchette","🪣","Ruchette") : ""}
         ${tabButton("visites","📅","Visites")}
         ${tabButton("reine","♛","Reine")}
@@ -2543,7 +2588,7 @@ function saveQueen(){
 function ensureModuleArrays(h){
   ensureHiveArrays(h);
   ensureQueenArrays(h);
-  ["divisions","hausses","recoltes","traitements","frelons","nourrissements","pesees","transhumances","photos","documents"].forEach(k=>{
+  ["divisions","hausses","recoltes","traitements","frelons","nourrissements","pesees","transhumances","photos","documents","materialHistory"].forEach(k=>{
     if(!h[k]) h[k] = [];
   });
   return h;
@@ -2618,6 +2663,11 @@ function saveModule(section){
         rucheOrigine:h.code,
         datePeuplement:item.date,
         taille:"5 cadres",
+        material:{type:"Ruchette", frames:"5 cadres", condition:"Bon", changedAt:item.date, notes:"Créée depuis une division"},
+        materialType:"Ruchette",
+        frames:"5 cadres",
+        haussesEnPlace:0,
+        materialHistory:[],
         visites:[], reines:[], divisions:[], hausses:[], recoltes:[], traitements:[], frelons:[], nourrissements:[], pesees:[], transhumances:[], photos:[], documents:[]
       });
     }
@@ -2737,7 +2787,8 @@ function sectionLabel(section){
     frelons:"Frelons",
     nourrissement:"Nourrissement",
     pesees:"Pesée",
-    transhumance:"Transhumance"
+    transhumance:"Transhumance",
+    materiel:"Matériel"
   }[section] || "Élément";
 }
 
@@ -2951,6 +3002,208 @@ function openHiveDocument(docId){
 }
 
 
+
+function ensureMaterial(h){
+  if(!h) return {};
+  ensureModuleArrays(h);
+  if(!h.material) h.material = {};
+
+  // Migration douce des anciennes données : rien n'est supprimé.
+  if(!h.material.type){
+    if(h.type === "ruchette"){
+      h.material.type = "Ruchette";
+      h.material.frames = h.taille || "5 cadres";
+    }else{
+      h.material.type = h.materialType || "Dadant";
+      h.material.frames = h.frames || h.cadres || 10;
+    }
+  }
+  if(!h.material.condition) h.material.condition = "Bon";
+  if(!h.material.changedAt) h.material.changedAt = "";
+  if(!h.material.notes) h.material.notes = "";
+  if(!h.materialHistory) h.materialHistory = [];
+  return h.material;
+}
+
+function activeHaussesCount(h){
+  ensureModuleArrays(h);
+  if(typeof h.haussesEnPlace === "number") return Math.max(0, h.haussesEnPlace);
+  let count = 0;
+  (h.hausses || []).slice().reverse().forEach(x=>{
+    const n = Math.max(0, Number(x.nombre || 0));
+    const action = String(x.action || "").toLowerCase();
+    if(action.includes("pos")) count += n;
+    if(action.includes("retir")) count -= n;
+    if(count < 0) count = 0;
+  });
+  return Math.max(0, count);
+}
+
+function formatHaussesCount(n){
+  n = Number(n || 0);
+  if(n <= 0) return "Aucune";
+  if(n === 1) return "1 hausse";
+  return n + " hausses";
+}
+
+function materialSummaryText(h){
+  const m = ensureMaterial(h);
+  const type = m.type || (h.type === "ruchette" ? "Ruchette" : "Dadant");
+  const frames = m.frames || (h.type === "ruchette" ? (h.taille || "5 cadres") : "10");
+  const framesText = String(frames).includes("cadre") ? frames : (frames + " cadres");
+  return type + " " + framesText;
+}
+
+function materialConditionClass(value){
+  const v = String(value || "").toLowerCase();
+  if(v.includes("remplacer") || v.includes("abî") || v.includes("abim")) return "bad";
+  if(v.includes("surveiller") || v.includes("moyen")) return "watch";
+  return "good";
+}
+
+function materialHistoryHTML(h){
+  ensureMaterial(h);
+  if(!h.materialHistory || !h.materialHistory.length){
+    return '<div class="empty-history">Aucun changement de matériel enregistré.</div>';
+  }
+  return h.materialHistory.map(x => record(
+    formatDateFr(x.date),
+    x.title || "Changement matériel",
+    [
+      x.before ? "Avant : " + x.before : "",
+      x.after ? "Après : " + x.after : "",
+      x.condition ? "État : " + x.condition : "",
+      x.hausses !== undefined ? "Hausses : " + formatHaussesCount(x.hausses) : "",
+      x.notes ? "Notes : " + x.notes : ""
+    ].filter(Boolean).join(" · ")
+  )).join("");
+}
+
+function materialSectionHTML(h){
+  const m = ensureMaterial(h);
+  const hausses = activeHaussesCount(h);
+  const conditionClass = materialConditionClass(m.condition);
+  return `
+    <h2 class="detail-title">🧰 Matériel</h2>
+    <div class="detail-sub">Type de ruche, nombre de cadres, état du matériel et hausses en place.</div>
+
+    <div class="material-current-card">
+      <div class="material-current-title">Matériel actuel</div>
+      <div class="info-grid">
+        ${infoBox("🏠 Corps", materialSummaryText(h))}
+        ${infoBox("🍯 Hausse en place", formatHaussesCount(hausses))}
+        ${infoBox("Dernier changement", m.changedAt ? formatDateFr(m.changedAt) : "—")}
+      </div>
+      <span class="material-status ${conditionClass}">État : ${m.condition || "Bon"}</span>
+      ${m.notes ? `<div class="material-history-note">${m.notes}</div>` : ""}
+    </div>
+
+    <div class="module-form-card">
+      <div class="visit-form-head">
+        <h3 style="margin:0">Modifier le matériel</h3>
+      </div>
+
+      <div class="field">
+        <label>Type de ruche</label>
+        <select id="materialType">
+          ${["Dadant","Voirnot","Langstroth","Warré","Ruchette","Autre"].map(x=>`<option ${String(m.type||"Dadant")===x?'selected':''}>${x}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Nombre de cadres corps</label>
+        <select id="materialFrames">
+          ${["6","8","10","12","Autre"].map(x=>`<option ${String(m.frames||"10")===x?'selected':''}>${x}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>État du matériel</label>
+        <select id="materialCondition">
+          ${["Bon","À surveiller","À remplacer"].map(x=>`<option ${String(m.condition||"Bon")===x?'selected':''}>${x}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Nombre de hausses en place</label>
+        <input id="materialHausses" type="number" min="0" value="${hausses}">
+      </div>
+
+      <div class="field">
+        <label>Date du changement</label>
+        <input id="materialChangedAt" type="date" value="${m.changedAt || todayISO()}">
+      </div>
+
+      <div class="field">
+        <label>Notes</label>
+        <textarea id="materialNotes" placeholder="Ex : transfert dans une ruche neuve, passage 10 cadres vers 12 cadres…">${m.notes || ""}</textarea>
+      </div>
+
+      <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveMaterial()">Enregistrer le matériel</button>
+    </div>
+
+    <h3 style="margin:18px 0 10px">Historique matériel</h3>
+    ${materialHistoryHTML(h)}
+  `;
+}
+
+function saveMaterial(){
+  const h = state.currentHive || state.hives[0];
+  if(!h) return;
+  ensureMaterial(h);
+
+  const before = materialSummaryText(h);
+  const beforeHausses = activeHaussesCount(h);
+
+  const newType = val("materialType", h.material.type || "Dadant");
+  const newFrames = val("materialFrames", h.material.frames || "10");
+  const newCondition = val("materialCondition", h.material.condition || "Bon");
+  const newHausses = Math.max(0, Number(val("materialHausses", beforeHausses)));
+  const changedAt = val("materialChangedAt", todayISO());
+  const notes = val("materialNotes", "");
+
+  h.material = {
+    type:newType,
+    frames:newFrames,
+    condition:newCondition,
+    changedAt:changedAt,
+    notes:notes
+  };
+  h.materialType = newType;
+  h.frames = newFrames;
+  h.haussesEnPlace = newHausses;
+
+  const after = materialSummaryText(h);
+  if(!h.materialHistory) h.materialHistory = [];
+  h.materialHistory.unshift({
+    id:"material_" + Date.now(),
+    date:changedAt,
+    title:"Modification matériel",
+    before:before,
+    after:after,
+    condition:newCondition,
+    hausses:newHausses,
+    notes:notes
+  });
+
+  if(beforeHausses !== newHausses){
+    h.hausses.unshift({
+      id:"hausse_material_" + Date.now(),
+      date:changedAt,
+      action:newHausses > beforeHausses ? "Hausse posée" : "Hausse retirée",
+      nombre:Math.abs(newHausses - beforeHausses),
+      retrait:"",
+      notes:"Mise à jour depuis l'onglet Matériel"
+    });
+  }
+
+  saveState();
+  showToast("✓ Matériel enregistré");
+  state.hiveSection = "materiel";
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+}
+
 function hiveSectionContent(h){
   const s = state.hiveSection;
   const isRuchette = h.type === "ruchette";
@@ -2968,8 +3221,8 @@ function hiveSectionContent(h){
       ${isRuchette ? infoBox("Type", "Ruchette") : infoBox("Miel récolté", h.honey + " kg")}
       ${infoBox("Reine", "Présente · Marquée")}
       ${infoBox("Force", h.alerts ? "Faible" : "En développement")}
-      ${isRuchette ? infoBox("Origine", h.origine || "—") : infoBox("Hausses actives", "2")}
-      ${infoBox("Type matériel", isRuchette ? (h.taille || "5 cadres") : "Dadant 10 cadres")}
+      ${isRuchette ? infoBox("Origine", h.origine || "—") : infoBox("🍯 Hausse en place", formatHaussesCount(activeHaussesCount(h)))}
+      ${infoBox("🏠 Matériel", materialSummaryText(h))}
     </div>
     <div style="height:16px"></div>
     ${isRuchette ? `
@@ -2987,6 +3240,8 @@ function hiveSectionContent(h){
       <button class="danger-btn" onclick="deleteHive('${h.code}')">🗑️ Supprimer cette ${isRuchette ? "ruchette" : "ruche"}</button>
     </div>
   `;
+
+  if(s === "materiel") return materialSectionHTML(h);
 
   if(s === "ruchette") return `
     <h2 class="detail-title">🪣 Suivi ruchette</h2>
@@ -3975,6 +4230,14 @@ function convertirEnRuche(code){
   h.theme  = "acacia";
   h.tag    = "orange";
   h.honey  = h.honey || 0;
+  h.material = h.material || {};
+  h.material.type = h.material.type === "Ruchette" ? "Dadant" : (h.material.type || "Dadant");
+  h.material.frames = h.material.frames === "5 cadres" ? "10" : (h.material.frames || "10");
+  h.material.condition = h.material.condition || "Bon";
+  h.material.changedAt = todayISO();
+  h.haussesEnPlace = Number(h.haussesEnPlace || 0);
+  if(!h.materialHistory) h.materialHistory = [];
+  h.materialHistory.unshift({id:"material_" + Date.now(), date:todayISO(), title:"Conversion ruchette en ruche", before:"Ruchette", after:materialSummaryText(h), condition:h.material.condition, hausses:h.haussesEnPlace, notes:"Conversion depuis le bouton ruchette"});
   saveState();
   showToast("✓ Ruchette convertie en ruche !");
   state.hiveSection = "resume";
@@ -4073,13 +4336,21 @@ function createHiveDemo(){
   const apiary = document.getElementById("newHiveApiary")?.value || "Nouveau rucher";
   const type   = document.getElementById("newHiveType")?.value || "ruche";
   const gps    = document.getElementById("newHiveGps")?.value.trim() || "";
+  const materialType = type === "ruchette" ? "Ruchette" : (document.getElementById("newHiveMaterialType")?.value || "Dadant");
+  const materialFrames = type === "ruchette" ? "5 cadres" : (document.getElementById("newHiveFrames")?.value || "10");
   state.hives.push({
     code, name, apiary, type, gps,
     status: type === "ruchette" ? "En cours d'établissement" : "Bonne activité",
     date: new Date().toLocaleDateString("fr-FR"),
     theme: type === "ruchette" ? "lavender" : "acacia",
     tag: type === "ruchette" ? "purple" : "orange",
-    alerts: 0, honey: 0, visites: [], reines: [], divisions: [], hausses: [], recoltes: [], traitements: [], frelons: [], nourrissements: [], pesees: [], transhumances: [], photos: [], documents: []
+    alerts: 0, honey: 0,
+    material:{type:materialType, frames:materialFrames, condition:"Bon", changedAt:todayISO(), notes:""},
+    materialType:materialType,
+    frames:materialFrames,
+    haussesEnPlace:0,
+    materialHistory:[],
+    visites: [], reines: [], divisions: [], hausses: [], recoltes: [], traitements: [], frelons: [], nourrissements: [], pesees: [], transhumances: [], photos: [], documents: []
   });
   saveState();
   showToast("✓ " + (type === "ruchette" ? "Ruchette" : "Ruche") + " " + code + " créée");

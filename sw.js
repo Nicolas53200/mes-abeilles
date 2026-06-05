@@ -1,4 +1,4 @@
-const CACHE_NAME = "mes-abeilles-v24";
+const CACHE_NAME = "mes-abeilles-v25";
 const APP_SHELL = ["./", "./index.html", "./manifest.json", "./icon192.png"];
 
 self.addEventListener("install", event => {
