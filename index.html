@@ -1647,6 +1647,85 @@
       margin-top:6px;
     }
 
+  
+
+    /* v26 — Rappels calendrier clairs */
+    .calendar-onboarding{
+      position:fixed;
+      inset:0;
+      z-index:340;
+      display:none;
+      align-items:flex-end;
+      justify-content:center;
+      background:rgba(3,7,18,.58);
+      padding:18px;
+    }
+    .calendar-onboarding.open{display:flex}
+    .calendar-onboarding-panel{
+      width:min(430px,100%);
+      background:#fff;
+      border-radius:28px;
+      padding:22px;
+      box-shadow:0 24px 70px rgba(0,0,0,.36);
+    }
+    .calendar-onboarding-icon{font-size:38px;margin-bottom:8px}
+    .calendar-onboarding-title{
+      font-size:24px;
+      font-weight:950;
+      letter-spacing:-.04em;
+      color:#0f172a;
+      margin-bottom:8px;
+    }
+    .calendar-onboarding-text{
+      color:#64748b;
+      line-height:1.5;
+      font-size:14px;
+      margin-bottom:16px;
+    }
+    .calendar-onboarding-list{
+      display:grid;
+      gap:8px;
+      margin-bottom:18px;
+    }
+    .calendar-onboarding-list div{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px 12px;
+      color:#334155;
+      font-weight:850;
+      font-size:13px;
+    }
+    .calendar-onboarding-actions{display:grid;grid-template-columns:1fr;gap:10px}
+    .calendar-primary-btn{
+      border:0;
+      border-radius:18px;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#120d05;
+      padding:15px;
+      font-weight:950;
+      font-size:15px;
+    }
+    .calendar-secondary-btn{
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fff;
+      color:#0f172a;
+      padding:14px;
+      font-weight:950;
+      font-size:15px;
+    }
+    .calendar-info-card{
+      background:#fff7ed;
+      border:1px solid #fed7aa;
+      color:#7c2d12;
+      border-radius:18px;
+      padding:12px;
+      font-size:13px;
+      line-height:1.45;
+      margin-top:12px;
+    }
+
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
@@ -1660,6 +1739,28 @@
   </div>
 
   <div id="toast" class="toast"></div>
+
+  <div id="calendarOnboarding" class="calendar-onboarding" onclick="calendarOnboardingChoice(false)">
+    <div class="calendar-onboarding-panel" onclick="event.stopPropagation()">
+      <div class="calendar-onboarding-icon">📅</div>
+      <div class="calendar-onboarding-title">Rappels calendrier</div>
+      <div class="calendar-onboarding-text">
+        Mes Abeilles peut préparer des rappels à ajouter dans le calendrier de ton téléphone. Tu gardes toujours la main : le téléphone te demandera de valider chaque événement.
+      </div>
+      <div class="calendar-onboarding-list">
+        <div>🐝 Visites de ruches à prévoir</div>
+        <div>🧪 Traitements et contrôles varroa</div>
+        <div>🍯 Nourrissement, hausses et récolte</div>
+        <div>📋 Conformité et documents importants</div>
+      </div>
+      <div class="calendar-onboarding-actions">
+        <button class="calendar-primary-btn" onclick="calendarOnboardingChoice(true)">✅ Oui, proposer les rappels</button>
+        <button class="calendar-secondary-btn" onclick="calendarOnboardingChoice(false)">Plus tard</button>
+      </div>
+      <div class="calendar-info-card">Important : l'application ne modifie pas ton agenda toute seule. Elle prépare un rappel, puis tu confirmes dans Google Agenda / Calendrier.</div>
+    </div>
+  </div>
+
 
   <div id="scoreModal" class="score-modal" onclick="closeScoreModal(event)">
     <div class="score-modal-panel" onclick="event.stopPropagation()">
@@ -1817,6 +1918,7 @@ const state = {
   alertSettings: { visitDays: 21, notifications: false, weather: true, calendar: true, quietHours: true, lastWeatherCheck: "" },
   hives: [],
   onboardingDone: false,
+  calendarPromptDone: false,
   hiveTourDone: false
 };
 loadState();
@@ -2055,19 +2157,20 @@ function alerts(){
           <div class="alert-meta">Utilise les coordonnées GPS de la ruche/rucher. Nécessite Internet.</div>
         </div>
         <div class="alert-setting-line">
-          <label><input id="alertCalendarEnabled" type="checkbox" ${s.calendar ? "checked" : ""} onchange="saveAlertSettings()"> 🗓️ Liens calendrier</label>
-          <div class="alert-meta">Ajoute un bouton .ics pour programmer la prochaine visite dans ton agenda.</div>
+          <label><input id="alertCalendarEnabled" type="checkbox" ${s.calendar ? "checked" : ""} onchange="saveAlertSettings()"> 📅 Proposer les rappels calendrier</label>
+          <div class="alert-meta">Affiche un bouton “Ajouter au calendrier” sur les alertes. Le téléphone te demandera de valider chaque rappel.</div>
         </div>
         <div class="alert-setting-line">
           <label><input id="alertNotificationsEnabled" type="checkbox" ${s.notifications ? "checked" : ""} onchange="saveAlertSettings()"> 🔔 Notifications téléphone</label>
           <div class="alert-meta">État actuel : <strong>${notificationState}</strong>. Fonctionne surtout quand l'app est ouverte ou relancée.</div>
         </div>
       </div>
-      <div class="alert-actions-row">
+      <div class="alert-actions-row" style="grid-template-columns:1fr 1fr 1fr">
         <button class="assist-btn" onclick="requestNotificationPermission()">Autoriser les notifications</button>
+        <button class="assist-btn secondary" onclick="showCalendarOnboarding(true)">Configurer calendrier</button>
         <button class="assist-btn secondary" onclick="refreshWeatherAlerts(true)">Vérifier météo maintenant</button>
       </div>
-      <div class="alert-meta">Note : sur GitHub Pages, les vraies notifications push quand l'app est totalement fermée nécessitent un serveur push. Ici, l'app déclenche les notifications au lancement, au retour au premier plan et via le service worker quand le navigateur le permet.</div>
+      <div class="alert-meta">Calendrier : Mes Abeilles prépare un fichier de rappel que tu valides dans l’agenda du téléphone. Notifications : sur GitHub Pages, les vraies notifications push quand l’app est totalement fermée nécessitent un serveur push.</div>
     </section>`;
 
   if(!items.length){
@@ -2083,7 +2186,7 @@ function alerts(){
           <div class="record-head"><span>${h.type === "ruchette" ? "Ruchette" : "Ruche"} ${h.name}</span><span>${list.length} alerte(s)</span></div>
           <div class="record-body">${h.apiary} · ${h.code}</div>
           ${h.weatherSummary ? `<div class="weather-badge">🌦️ ${h.weatherSummary}</div>` : ""}
-          <div class="alert-list">${list.map(a=>`<div class="alert-item">⚠️ ${a}${s.calendar && isVisitDueAlert(a) ? `<br><button class="calendar-btn" onclick="event.stopPropagation(); downloadVisitReminder('${h.code}')">🗓️ Ajouter au calendrier</button>` : ""}</div>`).join("")}</div>
+          <div class="alert-list">${list.map(a=>`<div class="alert-item">⚠️ ${a}${s.calendar ? `<br><button class="calendar-btn" onclick="event.stopPropagation(); downloadAlertReminder('${h.code}', '${encodeURIComponent(a)}')">📅 Ajouter au calendrier</button>` : ""}</div>`).join("")}</div>
         </div>
       `).join("")}
     </section>
@@ -3711,6 +3814,7 @@ function mergeLoadedState(saved){
   if(saved.profil) state.profil = saved.profil;
   if(saved.alertSettings) state.alertSettings = {...getAlertSettings(), ...saved.alertSettings};
   if(typeof saved.onboardingDone === "boolean") state.onboardingDone = saved.onboardingDone;
+  if(typeof saved.calendarPromptDone === "boolean") state.calendarPromptDone = saved.calendarPromptDone;
   if(typeof saved.hiveTourDone === "boolean") state.hiveTourDone = saved.hiveTourDone;
   return Array.isArray(saved.hives) || !!saved.profil;
 }
@@ -4402,7 +4506,7 @@ function updateStats(){
 
 /* ── Alertes avancées : notifications, météo, calendrier ───────────── */
 function getAlertSettings(){
-  const defaults = { visitDays:21, notifications:false, weather:true, calendar:true, quietHours:true, lastWeatherCheck:"" };
+  const defaults = { visitDays:21, notifications:false, weather:true, calendar:false, quietHours:true, lastWeatherCheck:"" };
   return {...defaults, ...(state.alertSettings || {})};
 }
 
@@ -4575,31 +4679,76 @@ function icsDate(d){
   return d.toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,"");
 }
 
-function downloadVisitReminder(code){
+
+function showCalendarOnboarding(force=false){
+  const el = document.getElementById("calendarOnboarding");
+  if(!el) return;
+  if(!force && state.calendarPromptDone) return;
+  el.classList.add("open");
+}
+
+function calendarOnboardingChoice(enable){
+  const el = document.getElementById("calendarOnboarding");
+  if(el) el.classList.remove("open");
+  state.calendarPromptDone = true;
+  state.alertSettings = {...getAlertSettings(), calendar: !!enable};
+  saveState();
+  showToast(enable ? "✓ Rappels calendrier activés" : "Rappels calendrier désactivés");
+  if(state.page === "alerts") showPage("alerts");
+}
+
+function suggestedDateForAlert(h, alertText){
+  const txt = String(alertText || "").toLowerCase();
+  const d = new Date();
+  d.setHours(9,0,0,0);
+  if(txt.includes("visite")) return nextVisitDateForHive(h);
+  if(txt.includes("varroa") || txt.includes("traitement")) d.setDate(d.getDate() + 7);
+  else if(txt.includes("météo") || txt.includes("meteo") || txt.includes("frelon") || txt.includes("reine") || txt.includes("ponte")) d.setDate(d.getDate() + 1);
+  else d.setDate(d.getDate() + 3);
+  return d;
+}
+
+function downloadAlertReminder(code, encodedAlert){
   const h = state.hives.find(x=>x.code === code);
   if(!h) return;
-  const start = nextVisitDateForHive(h);
+  const alertText = decodeURIComponent(encodedAlert || "Alerte Mes Abeilles");
+  const start = suggestedDateForAlert(h, alertText);
+  const title = `Mes Abeilles — ${alertText}`;
+  const desc = `Rappel généré par Mes Abeilles. Ruche : ${h.name} (${h.code}). Rucher : ${h.apiary}.`;
+  downloadCalendarEvent({h, start, title, desc, filename:`alerte-${h.code}.ics`});
+}
+
+function downloadCalendarEvent({h, start, title, desc, filename}){
   const end = new Date(start.getTime() + 60*60*1000);
-  const title = `Visite ruche ${h.name} (${h.code})`;
-  const desc = `Rappel généré par Mes Abeilles. Rucher : ${h.apiary}.`;
+  const clean = s => String(s || "").replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/,/g,"\\,").replace(/;/g,"\\;");
   const ics = [
     "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Mes Abeilles//Alertes//FR","BEGIN:VEVENT",
-    "UID:" + h.code + "-" + Date.now() + "@mesabeilles",
+    "UID:" + (h?.code || "mes-abeilles") + "-" + Date.now() + "@mesabeilles",
     "DTSTAMP:" + icsDate(new Date()),
     "DTSTART:" + icsDate(start),
     "DTEND:" + icsDate(end),
-    "SUMMARY:" + title.replace(/\n/g," "),
-    "DESCRIPTION:" + desc.replace(/\n/g," "),
-    h.gps ? "LOCATION:" + h.gps : "LOCATION:" + (h.apiary || ""),
+    "SUMMARY:" + clean(title),
+    "DESCRIPTION:" + clean(desc),
+    h?.gps ? "LOCATION:" + clean(h.gps) : "LOCATION:" + clean(h?.apiary || ""),
     "END:VEVENT","END:VCALENDAR"
   ].join("\r\n");
   const blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `rappel-${h.code}.ics`;
+  a.download = filename || "mes-abeilles-rappel.ics";
   document.body.appendChild(a);
   a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();}, 500);
+  showToast("✓ Rappel calendrier préparé");
+}
+
+function downloadVisitReminder(code){
+  const h = state.hives.find(x=>x.code === code);
+  if(!h) return;
+  const start = nextVisitDateForHive(h);
+  const title = `Visite ruche ${h.name} (${h.code})`;
+  const desc = `Rappel généré par Mes Abeilles. Rucher : ${h.apiary}.`;
+  downloadCalendarEvent({h, start, title, desc, filename:`rappel-${h.code}.ics`});
 }
 
 function setupAlertEngine(){
@@ -4705,6 +4854,7 @@ function splashFinish(){
   showPage("home");
   // Lancer le tour guidé après que la page soit rendue
   setTimeout(coachStart, 400);
+  setTimeout(()=>showCalendarOnboarding(false), 900);
 }
 
 /* ── Coach marks — tour guidé ────────────────────── */
@@ -5126,6 +5276,7 @@ function initApp(){
   } else {
     document.getElementById("splash").style.display = "none";
     showPage("home");
+    setTimeout(()=>showCalendarOnboarding(false), 900);
   }
 }
 
