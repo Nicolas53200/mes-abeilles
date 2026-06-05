@@ -1509,7 +1509,49 @@
 .weather-badge{display:inline-flex;gap:6px;align-items:center;background:#eef6ff;color:#1e3a8a;border:1px solid #bfdbfe;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:950;margin-top:8px}
 @media (max-width:390px){.alert-settings-grid,.alert-actions-row{grid-template-columns:1fr}}
 
-</style>
+
+    /* v23 — Suppression ruche + export plus clair */
+    .danger-zone{
+      margin-top:18px;
+      background:#fff7f7;
+      border:1px solid #fecaca;
+      border-radius:22px;
+      padding:14px;
+    }
+    .danger-title{
+      font-weight:950;
+      color:#991b1b;
+      margin-bottom:6px;
+    }
+    .danger-text{
+      color:#7f1d1d;
+      font-size:13px;
+      line-height:1.45;
+      margin-bottom:12px;
+    }
+    .danger-btn{
+      width:100%;
+      border:0;
+      border-radius:16px;
+      background:#dc2626;
+      color:#fff;
+      padding:14px;
+      font-weight:950;
+      font-size:15px;
+    }
+    .export-help{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:13px;
+      color:#475569;
+      font-size:13px;
+      line-height:1.45;
+      margin-bottom:14px;
+    }
+    .export-help strong{color:#0f172a}
+
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 </head>
@@ -1955,7 +1997,10 @@ function admin(){
           <input type="file" accept=".json" class="file-hidden" onchange="importData(this)">
         </label>
       </div>
-      <div class="notice" style="margin-bottom:16px">L'export génère un fichier <strong>.json</strong> que tu peux sauvegarder sur PC ou partager.</div>
+      <div class="export-help">
+        <strong>Export vers PC</strong><br>
+        Le bouton télécharge une sauvegarde <strong>.json</strong>. Si ton téléphone affiche une page avec du code, ce n'est pas une erreur : c'est le contenu de la sauvegarde. Utilise alors le menu du navigateur → <strong>Télécharger</strong> ou partage le fichier vers ton PC.
+      </div>
 
       <div class="field"><label>Prénom</label><input id="adminPrenom" value="${p.prenom || ""}" placeholder="Ton prénom"></div>
       <div class="field"><label>Nom</label><input id="adminNom" value="${p.nom || ""}" placeholder="Ton nom"></div>
@@ -2871,6 +2916,12 @@ function hiveSectionContent(h){
       </button>
       <div style="font-size:12px;color:#64748b;text-align:center;margin-top:8px">La colonie est prête ? Convertis cette ruchette en ruche.</div>
     ` : ''}
+
+    <div class="danger-zone">
+      <div class="danger-title">Zone sensible</div>
+      <div class="danger-text">Supprime cette ${isRuchette ? "ruchette" : "ruche"} uniquement si elle a été créée par erreur ou si tu veux vraiment la retirer de l'application. L'export PC reste conseillé avant suppression.</div>
+      <button class="danger-btn" onclick="deleteHive('${h.code}')">🗑️ Supprimer cette ${isRuchette ? "ruchette" : "ruche"}</button>
+    </div>
   `;
 
   if(s === "ruchette") return `
@@ -3405,14 +3456,39 @@ function fakeSave(label){
 
 /* ── Export / Import PC ───────────────────────────── */
 function exportData(){
-  const json = JSON.stringify(state, null, 2);
-  const blob = new Blob([json], {type:"application/json"});
+  const exportState = (typeof normalizeStateForExport === "function") ? normalizeStateForExport(state, false) : state;
+  const json = JSON.stringify(exportState, null, 2);
+  const filename = "mes_abeilles_export_" + new Date().toISOString().slice(0,10) + ".json";
+  const blob = new Blob([json], {type:"application/json;charset=utf-8"});
+  const file = new File([blob], filename, {type:"application/json"});
+
+  // Sur mobile, le partage est souvent plus fiable que le téléchargement classique.
+  if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+    navigator.share({
+      files:[file],
+      title:"Export Mes Abeilles",
+      text:"Sauvegarde Mes Abeilles"
+    }).then(()=>showToast("✓ Export prêt à partager"))
+      .catch(()=>downloadExportBlob(blob, filename));
+    return;
+  }
+
+  downloadExportBlob(blob, filename);
+}
+
+function downloadExportBlob(blob, filename){
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "mes_abeilles_export_" + new Date().toISOString().slice(0,10) + ".json";
+  a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(()=>{
+    if(a.parentNode) a.parentNode.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 800);
   showToast("✓ Export téléchargé");
 }
 
@@ -3569,31 +3645,165 @@ function drawQr(id, text){
     });
   }
 
-  drawFallbackQr(c, value);
-  return Promise.resolve(false);
+  const fallbackOk = drawFallbackQr(c, value);
+  return Promise.resolve(!!fallbackOk);
 }
 
 function drawFallbackQr(c, text){
-  // Secours visuel si la librairie QR n'a pas encore chargé.
-  const ctx=c.getContext("2d"), cells=29, cell=Math.floor(c.width/cells);
-  ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
-  function finder(x,y){ctx.fillStyle="#000";ctx.fillRect(x*cell,y*cell,7*cell,7*cell);ctx.fillStyle="#fff";ctx.fillRect((x+1)*cell,(y+1)*cell,5*cell,5*cell);ctx.fillStyle="#000";ctx.fillRect((x+2)*cell,(y+2)*cell,3*cell,3*cell)}
-  finder(1,1);finder(21,1);finder(1,21);
-  let seed=0;for(let i=0;i<text.length;i++)seed=(seed*31+text.charCodeAt(i))>>>0;
-  for(let y=0;y<cells;y++)for(let x=0;x<cells;x++){
-    if((x<9&&y<9)||(x>19&&y<9)||(x<9&&y>19))continue;
-    seed=(seed*1664525+1013904223)>>>0;
-    if(seed%100<42){ctx.fillStyle="#000";ctx.fillRect(x*cell,y*cell,cell,cell)}
+  // Générateur QR local réel pour les codes simples de l'app (ex : RUCHE-001).
+  // Il évite de dépendre du CDN si la connexion ou le Service Worker bloque la librairie QRCode.
+  const value = String(text || "").trim().toUpperCase();
+  try{
+    const modules = makeLocalQrV1L(value);
+    paintQrModules(c, modules);
+    c.dataset.qrValue = value;
+    return true;
+  }catch(e){
+    // Dernier secours visuel, normalement jamais utilisé pour les codes RUCHE-001.
+    const ctx=c.getContext("2d"), cells=29, cell=Math.floor(c.width/cells);
+    ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
+    function finder(x,y){ctx.fillStyle="#000";ctx.fillRect(x*cell,y*cell,7*cell,7*cell);ctx.fillStyle="#fff";ctx.fillRect((x+1)*cell,(y+1)*cell,5*cell,5*cell);ctx.fillStyle="#000";ctx.fillRect((x+2)*cell,(y+2)*cell,3*cell,3*cell)}
+    finder(1,1);finder(21,1);finder(1,21);
+    ctx.fillStyle="#000";ctx.font="14px system-ui";ctx.fillText(value, 12, c.height-12);
+    return false;
   }
 }
+
+function paintQrModules(canvas, modules){
+  const ctx = canvas.getContext("2d");
+  const n = modules.length;
+  const quiet = 4;
+  const total = n + quiet * 2;
+  const size = Math.min(canvas.width, canvas.height);
+  const cell = Math.floor(size / total);
+  const offset = Math.floor((size - cell * total) / 2);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#000";
+  for(let y=0;y<n;y++){
+    for(let x=0;x<n;x++){
+      if(modules[y][x]) ctx.fillRect(offset + (x+quiet)*cell, offset + (y+quiet)*cell, cell, cell);
+    }
+  }
+}
+
+function makeLocalQrV1L(text){
+  const ALPHA = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
+  if(!text || text.length > 25 || ![...text].every(ch => ALPHA.includes(ch))){
+    throw new Error("Code QR local trop long ou caractère non supporté");
+  }
+  const bits = [];
+  const put = (num, len) => { for(let i=len-1;i>=0;i--) bits.push((num >>> i) & 1); };
+  put(0b0010, 4); // mode alphanumérique
+  put(text.length, 9);
+  for(let i=0;i+1<text.length;i+=2){
+    put(ALPHA.indexOf(text[i]) * 45 + ALPHA.indexOf(text[i+1]), 11);
+  }
+  if(text.length % 2) put(ALPHA.indexOf(text[text.length-1]), 6);
+  const dataCodewords = 19; // QR version 1-L
+  const maxBits = dataCodewords * 8;
+  put(0, Math.min(4, maxBits - bits.length));
+  while(bits.length % 8) bits.push(0);
+  const data = [];
+  for(let i=0;i<bits.length;i+=8){
+    let b=0; for(let j=0;j<8;j++) b=(b<<1)|bits[i+j];
+    data.push(b);
+  }
+  for(let pad=0; data.length < dataCodewords; pad++) data.push(pad % 2 ? 0x11 : 0xec);
+  const ecc = qrReedSolomon(data, 7);
+  const codewords = data.concat(ecc);
+
+  const n = 21;
+  const m = Array.from({length:n}, () => Array(n).fill(null));
+  const reserved = Array.from({length:n}, () => Array(n).fill(false));
+  const set = (x,y,v,res=true) => { if(x>=0&&x<n&&y>=0&&y<n){m[y][x]=!!v; if(res) reserved[y][x]=true;} };
+  const finder = (x,y) => {
+    for(let dy=-1;dy<=7;dy++) for(let dx=-1;dx<=7;dx++){
+      const xx=x+dx, yy=y+dy;
+      if(xx<0||xx>=n||yy<0||yy>=n) continue;
+      const dark = dx>=0&&dx<=6&&dy>=0&&dy<=6&&(dx===0||dx===6||dy===0||dy===6||(dx>=2&&dx<=4&&dy>=2&&dy<=4));
+      set(xx,yy,dark,true);
+    }
+  };
+  finder(0,0); finder(n-7,0); finder(0,n-7);
+  for(let i=8;i<n-8;i++){
+    set(i,6,i%2===0,true);
+    set(6,i,i%2===0,true);
+  }
+  set(8,13,true,true); // dark module version 1
+  for(let i=0;i<9;i++) { reserved[8][i]=true; reserved[i][8]=true; }
+  for(let i=n-8;i<n;i++) { reserved[8][i]=true; reserved[i][8]=true; }
+
+  const allBits=[];
+  for(const cw of codewords) for(let i=7;i>=0;i--) allBits.push((cw>>>i)&1);
+  let bitIndex=0, upward=true;
+  for(let x=n-1; x>0; x-=2){
+    if(x===6) x--;
+    for(let yi=0; yi<n; yi++){
+      const y = upward ? n-1-yi : yi;
+      for(let dx=0; dx<2; dx++){
+        const xx = x-dx;
+        if(reserved[y][xx]) continue;
+        let bit = bitIndex < allBits.length ? allBits[bitIndex++] : 0;
+        const mask = ((xx + y) % 2) === 0; // masque 0
+        set(xx,y, mask ? !bit : !!bit, false);
+      }
+    }
+    upward = !upward;
+  }
+  addFormatInfo(m, reserved, 1, 0); // niveau L, masque 0
+  return m;
+}
+
+function addFormatInfo(m, reserved, ecLevelBits, mask){
+  const n=21;
+  let data = (ecLevelBits << 3) | mask;
+  let v = data << 10;
+  const poly = 0b10100110111;
+  for(let i=14;i>=10;i--) if((v >> i) & 1) v ^= poly << (i-10);
+  const format = ((data << 10) | v) ^ 0b101010000010010;
+  const bit = i => ((format >> i) & 1) === 1;
+  const coords1 = [[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[7,8],[8,8],[8,7],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0]];
+  const coords2 = [[20,8],[19,8],[18,8],[17,8],[16,8],[15,8],[14,8],[13,8],[8,20],[8,19],[8,18],[8,17],[8,16],[8,15],[8,14]];
+  for(let i=0;i<15;i++){
+    const [x1,y1]=coords1[i], [x2,y2]=coords2[i];
+    m[y1][x1]=bit(i); reserved[y1][x1]=true;
+    m[y2][x2]=bit(i); reserved[y2][x2]=true;
+  }
+}
+
+function qrReedSolomon(data, degree){
+  const gfExp = new Array(512), gfLog = new Array(256);
+  let x=1;
+  for(let i=0;i<255;i++){
+    gfExp[i]=x; gfLog[x]=i;
+    x <<= 1;
+    if(x & 0x100) x ^= 0x11d;
+  }
+  for(let i=255;i<512;i++) gfExp[i]=gfExp[i-255];
+  const mul = (a,b) => (a && b) ? gfExp[gfLog[a] + gfLog[b]] : 0;
+  let gen=[1];
+  for(let i=0;i<degree;i++){
+    const next = new Array(gen.length+1).fill(0);
+    for(let j=0;j<gen.length;j++){
+      next[j] ^= gen[j];
+      next[j+1] ^= mul(gen[j], gfExp[i]);
+    }
+    gen=next;
+  }
+  const res = new Array(degree).fill(0);
+  for(const b of data){
+    const factor = b ^ res.shift();
+    res.push(0);
+    for(let i=0;i<degree;i++) res[i] ^= mul(gen[i+1], factor);
+  }
+  return res;
+}
+
 async function printQr(){
   const h=state.currentHive||state.hives[0];
   document.getElementById("printHiveName").textContent=h.code+" · Ruche "+h.name;
-  const ok = await drawQr("printQr", h.code);
-  if(!ok && window.QRCode === undefined){
-    alert("Le générateur de QR code n'est pas encore chargé. Vérifie la connexion internet puis réessaie dans quelques secondes.");
-    return;
-  }
+  await drawQr("printQr", h.code);
   setTimeout(() => window.print(), 80);
 }
 
@@ -3602,11 +3812,7 @@ async function printCustomQr(code, label){
   if(!clean){ alert("Code QR vide."); return; }
   const title = document.getElementById("printHiveName");
   if(title) title.textContent = clean + " · " + (label || "Mes Abeilles");
-  const ok = await drawQr("printQr", clean);
-  if(!ok && window.QRCode === undefined){
-    alert("Le générateur de QR code n'est pas encore chargé. Vérifie la connexion internet puis réessaie dans quelques secondes.");
-    return;
-  }
+  await drawQr("printQr", clean);
   setTimeout(() => window.print(), 80);
 }
 
@@ -3624,6 +3830,37 @@ function convertirEnRuche(code){
   showToast("✓ Ruchette convertie en ruche !");
   state.hiveSection = "resume";
   openHive(code);
+}
+
+function deleteHive(code){
+  const h = state.hives.find(x => x.code === code);
+  if(!h) return;
+
+  const label = (h.type === "ruchette" ? "la ruchette" : "la ruche") + " " + (h.name || h.code);
+  const first = confirm("Supprimer " + label + " ?\n\nCette action retirera aussi ses visites, documents, QR code et alertes de l'application.\n\nConseil : fais un export PC avant.");
+  if(!first) return;
+
+  const typed = prompt("Pour confirmer, tape exactement le code : " + h.code);
+  if(String(typed || "").trim().toUpperCase() !== String(h.code || "").toUpperCase()){
+    showToast("Suppression annulée");
+    return;
+  }
+
+  state.hives = state.hives.filter(x => x.code !== code);
+
+  if(state.currentHive && state.currentHive.code === code){
+    state.currentHive = state.hives[0] || null;
+  }
+
+  if(state.complianceDocs){
+    Object.keys(state.complianceDocs).forEach(k=>{
+      if(k.includes(code)) delete state.complianceDocs[k];
+    });
+  }
+
+  saveState();
+  showToast("✓ Ruche supprimée");
+  showPage(state.hives.length ? "ruchers" : "home");
 }
 
 function nextHiveCode(){
