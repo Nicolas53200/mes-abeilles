@@ -1794,6 +1794,50 @@
       font-weight:950;
     }
 
+  
+    /* v30 — Alertes métier + intervalle visite par ruche */
+    .followup-card{
+      background:#fffbeb;
+      border:1px solid #fde68a;
+      border-radius:18px;
+      padding:13px;
+      margin:12px 0;
+    }
+    .followup-title{
+      font-weight:950;
+      color:#78350f;
+      margin-bottom:8px;
+    }
+    .followup-options{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:8px;
+      margin-bottom:10px;
+    }
+    .followup-option{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      background:#fff;
+      border:1px solid #fde68a;
+      border-radius:14px;
+      padding:10px;
+      font-weight:900;
+      color:#78350f;
+      font-size:13px;
+    }
+    .followup-option input{width:auto;min-height:auto}
+    .followup-custom{
+      display:none;
+      margin-top:8px;
+    }
+    .followup-custom.visible{display:block}
+    .auto-alert-note{
+      font-size:12px;
+      color:#92400e;
+      line-height:1.45;
+    }
+
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
@@ -2217,8 +2261,8 @@ function alerts(){
       <div class="alert-settings-grid">
         <div class="alert-setting-line">
           <label>📅 Rappel visite dépassée</label>
-          <input id="alertVisitDays" type="number" min="1" max="120" value="${Number(s.visitDays || 21)}" onchange="saveAlertSettings()">
-          <div class="alert-meta">Une alerte apparaît si une ruche n'a pas été visitée depuis ce nombre de jours.</div>
+          <input id="alertVisitDays" type="number" min="1" max="120" value="${Number(s.visitDays || 5)}" onchange="saveAlertSettings()">
+          <div class="alert-meta">Intervalle par défaut si aucune fréquence spécifique n'a été choisie dans la visite.</div>
         </div>
         <div class="alert-setting-line">
           <label><input id="alertWeatherEnabled" type="checkbox" ${s.weather ? "checked" : ""} onchange="saveAlertSettings()"> 🌦️ Alertes météo</label>
@@ -2511,6 +2555,158 @@ function visitHistoryHTML(h){
   }).join("");
 }
 
+
+function isCustomVisitFollowup(h){
+  const v = Number(h?.visitReminderDays || 5);
+  return ![3,5,7,15].includes(v);
+}
+
+function visitFollowupRadio(h, value){
+  const current = Number(h?.visitReminderDays || 5);
+  const isCustom = value === "custom";
+  const checked = isCustom ? isCustomVisitFollowup(h) : current === Number(value);
+  const label = isCustom ? "Personnalisé" : "Dans " + value + " jours";
+  return `
+    <label class="followup-option">
+      <input type="radio" name="visitFollowupDays" value="${value}" ${checked ? "checked" : ""} onchange="toggleVisitFollowupCustom()">
+      ${label}
+    </label>
+  `;
+}
+
+function toggleVisitFollowupCustom(){
+  const selected = document.querySelector('input[name="visitFollowupDays"]:checked')?.value;
+  const wrap = document.getElementById("visitFollowupCustomWrap");
+  if(wrap) wrap.classList.toggle("visible", selected === "custom");
+}
+
+function selectedVisitFollowupDays(){
+  const selected = document.querySelector('input[name="visitFollowupDays"]:checked')?.value || "5";
+  if(selected === "custom"){
+    return Math.max(1, Math.min(120, Number(document.getElementById("visitFollowupCustom")?.value || 5)));
+  }
+  return Math.max(1, Math.min(120, Number(selected || 5)));
+}
+
+function automaticAlertClean(list){
+  const prefixes = [
+    "Visite dépassée",
+    "Visite à programmer",
+    "Prochaine visite",
+    "Reine",
+    "Ponte",
+    "Réserves",
+    "Nourrissement",
+    "Varroa",
+    "Frelons",
+    "Essaimage",
+    "Cellules royales",
+    "Colonie faible",
+    "Score colonie",
+    "Ruchette",
+    "Matériel",
+    "Conformité",
+    "Météo :"
+  ];
+  return (Array.isArray(list) ? list : []).filter(a => {
+    const s = String(a || "");
+    return !prefixes.some(p => s.startsWith(p));
+  });
+}
+
+function latestVisit(h){
+  return (h && Array.isArray(h.visites) && h.visites.length) ? h.visites[0] : null;
+}
+
+function daysBetweenISO(dateValue){
+  const d = mbParseDate ? mbParseDate(dateValue) : new Date(dateValue);
+  if(!d || isNaN(d)) return null;
+  const today = new Date();
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.floor((t - x) / 86400000);
+}
+
+function hiveVisitIntervalDays(h){
+  const n = Number(h?.visitReminderDays);
+  if(Number.isFinite(n) && n > 0) return n;
+  const s = getAlertSettings ? getAlertSettings() : {};
+  const global = Number(s.visitDays || 5);
+  return Number.isFinite(global) && global > 0 ? global : 5;
+}
+
+function nextVisitDueInfo(h){
+  const v = latestVisit(h);
+  if(!v) return null;
+  const last = mbParseDate ? mbParseDate(v.date) : new Date(v.date);
+  if(!last || isNaN(last)) return null;
+  const days = hiveVisitIntervalDays(h);
+  const next = new Date(last.getFullYear(), last.getMonth(), last.getDate());
+  next.setDate(next.getDate() + days);
+  const today = new Date();
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const diff = Math.round((next - t) / 86400000);
+  return {last, next, days, diff};
+}
+
+function complianceMissingLabels(){
+  const p = state.profil || {};
+  const docs = state.complianceDocs || {};
+  const missing = [];
+  if(!p.napi && !docs.napi) missing.push("NAPI");
+  if(!docs.decl_ruches) missing.push("déclaration annuelle");
+  if(!docs.registre) missing.push("registre sanitaire");
+  if((p.type === "vente" || p.type === "pro") && !docs.assurance) missing.push("assurance");
+  return missing;
+}
+
+function buildSmartAlertsForHive(h){
+  const alerts = [];
+  const v = latestVisit(h);
+
+  const due = nextVisitDueInfo(h);
+  if(due){
+    if(due.diff <= 0) alerts.push(`Visite dépassée : prochaine visite prévue depuis ${Math.abs(due.diff)} jour${Math.abs(due.diff)>1?"s":""}`);
+    else if(due.diff <= 2) alerts.push(`Visite à programmer bientôt : dans ${due.diff} jour${due.diff>1?"s":""}`);
+    else alerts.push(`Prochaine visite : ${mbFormatDate ? mbFormatDate(due.next) : due.next.toLocaleDateString("fr-FR")} (${due.days} jours)`);
+  }
+
+  if(v){
+    if(v.reine !== "Oui") alerts.push("Reine : présence à vérifier");
+    if(v.reineVue !== "Oui" && (v.reine === "Incertain" || v.ponte === "À vérifier")) alerts.push("Reine : non vue, contrôle conseillé");
+    if(v.ponte === "Absente" || v.ponte === "À vérifier") alerts.push("Ponte : contrôle à prévoir");
+    if(v.couvain === "Faible" || v.couvain === "Absent") alerts.push("Colonie faible : couvain à surveiller");
+    if(v.cellules === "Oui") alerts.push("Essaimage : cellules royales observées");
+    if(v.cellules === "À surveiller") alerts.push("Cellules royales : surveillance conseillée");
+    if(v.force === "Faible") alerts.push("Colonie faible : population faible");
+    if(v.reserves === "Faibles") alerts.push("Nourrissement : réserves faibles");
+    if(v.reserves === "Moyennes") alerts.push("Réserves : à recontrôler");
+    if(v.pollen === "Faible") alerts.push("Réserves : pollen faible");
+    if(v.varroa === "Présence forte" || v.varroa === "Traitement à prévoir") alerts.push("Varroa : traitement ou contrôle urgent");
+    if(v.varroa === "Présence faible") alerts.push("Varroa : surveillance à prévoir");
+    if(v.frelons === "Forte pression" || v.frelons === "Piège à poser") alerts.push("Frelons : piégeage/surveillance à prévoir");
+
+    if(Array.isArray(h.visites) && h.visites.length > 1 && typeof h.visites[1].score === "number" && typeof v.score === "number"){
+      const drop = h.visites[1].score - v.score;
+      if(drop >= 15) alerts.push("Score colonie : baisse rapide de " + drop + " points");
+    }
+  }
+
+  if(h.type === "ruchette"){
+    const age = daysBetweenISO(h.createdAt || h.date || (v && v.date));
+    if(age !== null && age >= 3 && !v) alerts.push("Ruchette : premier contrôle à prévoir");
+    if(age !== null && age >= 10) alerts.push("Ruchette : vérifier ponte et développement");
+  }
+
+  const mat = h.material || {};
+  if(String(mat.condition || "").includes("remplacer")) alerts.push("Matériel : à remplacer");
+  if(String(mat.condition || "").includes("surveiller")) alerts.push("Matériel : état à surveiller");
+
+  if(Array.isArray(h.weatherAlerts)) alerts.push(...h.weatherAlerts);
+
+  return [...new Set(alerts.filter(Boolean))];
+}
+
 function visitFormHTML(h){
   const d = todayISO();
   return `
@@ -2531,6 +2727,24 @@ function visitFormHTML(h){
       <div class="field"><label>Pollen</label><select id="visitPollen"><option>Normal</option><option>Abondant</option><option>Faible</option></select></div>
       <div class="field"><label>Varroa</label><select id="visitVarroa"><option>Non contrôlé</option><option>Comptage OK</option><option>Présence faible</option><option>Présence forte</option><option>Traitement à prévoir</option></select></div>
       <div class="field"><label>Frelons</label><select id="visitFrelons"><option>Non</option><option>Quelques-uns</option><option>Forte pression</option><option>Piège à poser</option><option>Piège posé</option></select></div>
+      <div class="followup-card">
+        <div class="followup-title">📅 Quand souhaites-tu revoir cette ruche ?</div>
+        <div class="followup-options">
+          ${visitFollowupRadio(h, 3)}
+          ${visitFollowupRadio(h, 5)}
+          ${visitFollowupRadio(h, 7)}
+          ${visitFollowupRadio(h, 15)}
+          ${visitFollowupRadio(h, "custom")}
+        </div>
+        <div id="visitFollowupCustomWrap" class="followup-custom ${isCustomVisitFollowup(h) ? "visible" : ""}">
+          <div class="field" style="margin-bottom:0">
+            <label>Nombre de jours personnalisé</label>
+            <input id="visitFollowupCustom" type="number" min="1" max="120" value="${Number(h.visitReminderDays || 5)}">
+          </div>
+        </div>
+        <div class="auto-alert-note">Ce choix est enregistré uniquement pour cette ruche/ruchette. Les prochaines visites et alertes seront calculées avec cet intervalle.</div>
+      </div>
+
       <div class="field"><label>Notes</label><textarea id="visitNotes" placeholder="Observations, cadres vus, actions à prévoir…"></textarea></div>
 
       <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px" onclick="saveVisit()">Enregistrer la visite</button>
@@ -2557,8 +2771,10 @@ function saveVisit(){
     pollen: document.getElementById("visitPollen")?.value || "Normal",
     varroa: document.getElementById("visitVarroa")?.value || "Non contrôlé",
     frelons: document.getElementById("visitFrelons")?.value || "Non",
+    followupDays: selectedVisitFollowupDays(),
     notes: document.getElementById("visitNotes")?.value.trim() || ""
   };
+  h.visitReminderDays = visit.followupDays;
 
   const scoreResult = calculateVisitScore(visit);
   visit.score = scoreResult.score;
@@ -2570,19 +2786,8 @@ function saveVisit(){
   h.date = formatDateFr(visit.date);
   updateHiveStatusFromScore(h, scoreResult);
 
-  const alerts = [];
-  if(visit.reine !== "Oui") alerts.push("Vérifier présence de reine");
-  if(visit.ponte === "Absente" || visit.ponte === "À vérifier") alerts.push("Contrôler la ponte");
-  if(visit.reserves === "Faibles") alerts.push("Prévoir nourrissement");
-  if(visit.varroa === "Présence forte" || visit.varroa === "Traitement à prévoir") alerts.push("Traitement varroa à prévoir");
-  if(visit.frelons === "Forte pression" || visit.frelons === "Piège à poser") alerts.push("Surveiller / piéger les frelons");
-
-  if(h.visites.length > 1 && typeof h.visites[1].score === "number" && h.visites[1].score - visit.score >= 15){
-    alerts.push("Dégradation rapide détectée : -" + (h.visites[1].score - visit.score) + " points");
-  }
-
-  h.alerts = alerts.length;
-  h.alertList = alerts;
+  // Les alertes sont recalculées par le moteur centralisé pour éviter les doublons.
+  h.alertList = automaticAlertClean(h.alertList);
   recomputeAutomaticAlerts(false);
 
   state.hiveSection = "visites";
@@ -2838,7 +3043,9 @@ function saveModule(section){
         materialType:"Ruchette",
         frames:"5 cadres",
         haussesEnPlace:0,
+    visitReminderDays:5,
         materialHistory:[],
+        visitReminderDays:5,
         visites:[], reines:[], divisions:[], hausses:[], recoltes:[], traitements:[], frelons:[], nourrissements:[], pesees:[], transhumances:[], photos:[], documents:[]
       });
     }
@@ -3394,22 +3601,8 @@ function mbISO(d){
   return `${y}-${m}-${day}`;
 }
 
-function mbReminderDays(){
-  const paths = [
-    state.visitReminderDays,
-    state.rappelVisiteDays,
-    state.rappelVisite,
-    state.visitInterval,
-    state.alertVisitDays,
-    state.settings && state.settings.visitReminderDays,
-    state.alertSettings && state.alertSettings.visitReminderDays,
-    state.autoAlerts && state.autoAlerts.visitReminderDays
-  ];
-  for(const v of paths){
-    const n = Number(v);
-    if(Number.isFinite(n) && n > 0) return n;
-  }
-  return 5;
+function mbReminderDays(h){
+  return hiveVisitIntervalDays(h || state.currentHive || (state.hives && state.hives[0]));
 }
 
 function mbLastVisit(h){
@@ -3438,7 +3631,7 @@ function renderResumeNextVisit(h){
     `;
   }
 
-  const days = mbReminderDays();
+  const days = mbReminderDays(h);
   const next = new Date(last.getFullYear(), last.getMonth(), last.getDate());
   next.setDate(next.getDate() + days);
 
@@ -3469,7 +3662,7 @@ function mbAddNextVisitCalendar(code){
     return;
   }
   const next = new Date(last.getFullYear(), last.getMonth(), last.getDate());
-  next.setDate(next.getDate() + mbReminderDays());
+  next.setDate(next.getDate() + mbReminderDays(h));
   const date = mbISO(next);
   const title = "Visite ruche " + (h.name || h.code);
   const desc = "Ruche : " + (h.name || h.code) + "\\nRucher : " + (h.apiary || "") + "\\nRappel généré par Mes Abeilles.";
@@ -4842,13 +5035,13 @@ function updateStats(){
 
 /* ── Alertes avancées : notifications, météo, calendrier ───────────── */
 function getAlertSettings(){
-  const defaults = { visitDays:21, notifications:false, weather:true, calendar:false, quietHours:true, lastWeatherCheck:"" };
+  const defaults = { visitDays:5, notifications:false, weather:true, calendar:false, quietHours:true, lastWeatherCheck:"" };
   return {...defaults, ...(state.alertSettings || {})};
 }
 
 function saveAlertSettings(){
   const current = getAlertSettings();
-  const days = Number(document.getElementById("alertVisitDays")?.value || current.visitDays || 21);
+  const days = Number(document.getElementById("alertVisitDays")?.value || current.visitDays || 5);
   state.alertSettings = {
     ...current,
     visitDays: Math.max(1, Math.min(120, days)),
@@ -4884,21 +5077,24 @@ function isVisitDueAlert(a){
 }
 
 function recomputeAutomaticAlerts(notify=false){
-  const s = getAlertSettings();
   state.hives.forEach(h=>{
-    const base = Array.isArray(h.alertList) ? h.alertList.filter(a => !String(a).startsWith("Visite dépassée") && !String(a).startsWith("Visite à programmer") && !String(a).startsWith("Météo :")) : [];
-
-    const d = daysSinceLastVisit(h);
-    if(d !== null && d >= Number(s.visitDays || 21)){
-      base.push(`Visite dépassée : ${d} jours sans contrôle`);
-    }else if(d !== null && d >= Math.max(1, Number(s.visitDays || 21) - 3)){
-      base.push(`Visite à programmer bientôt : ${d} jours depuis le dernier contrôle`);
-    }
-
-    if(Array.isArray(h.weatherAlerts)) base.push(...h.weatherAlerts);
-    h.alertList = [...new Set(base.filter(Boolean))];
+    const manual = automaticAlertClean(h.alertList);
+    const smart = buildSmartAlertsForHive(h);
+    h.alertList = [...new Set([...manual, ...smart].filter(Boolean))];
     h.alerts = h.alertList.length;
   });
+
+  // Alertes conformité globales rattachées à la première ruche pour badge/liste si besoin.
+  const missing = complianceMissingLabels();
+  if(missing.length && state.hives.length){
+    const h = state.hives[0];
+    const manual = automaticAlertClean(h.alertList);
+    const smart = buildSmartAlertsForHive(h);
+    const complianceAlerts = missing.map(x => "Conformité : " + x + " manquant");
+    h.alertList = [...new Set([...manual, ...smart, ...complianceAlerts].filter(Boolean))];
+    h.alerts = h.alertList.length;
+  }
+
   updateStats();
   if(notify) notifyActiveAlerts();
 }
