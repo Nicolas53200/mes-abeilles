@@ -1352,6 +1352,67 @@
       .actions { grid-template-columns: 1fr 1fr 1fr; }
     }
 
+/* v21 — Documents conformité liés et consultables */
+.compliance-card.has-doc{
+  border-color:#86efac;
+  background:linear-gradient(180deg,#ffffff,#f0fdf4);
+}
+.compliance-card.has-doc .compliance-title::after{
+  content:"  ✓";
+  color:#16a34a;
+}
+.compliance-doc-btn{
+  width:100%;
+  border:1px solid var(--line);
+  background:#fff;
+  color:#0b1328;
+  border-radius:16px;
+  padding:13px 12px;
+  font-weight:950;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  margin-top:10px;
+}
+.compliance-doc-btn.done{
+  background:#dcfce7;
+  border-color:#86efac;
+  color:#166534;
+}
+.compliance-doc-meta{
+  background:#fff;
+  border:1px solid #bbf7d0;
+  color:#166534;
+  border-radius:14px;
+  padding:10px 12px;
+  margin-top:10px;
+  font-size:13px;
+  font-weight:850;
+}
+.compliance-doc-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:8px;
+}
+.doc-open-btn{
+  border:0;
+  border-radius:12px;
+  background:#eef6ff;
+  color:#1e3a8a;
+  padding:9px 10px;
+  font-weight:950;
+}
+.doc-remove-btn{
+  border:0;
+  border-radius:12px;
+  background:#fff1f2;
+  color:#be123c;
+  padding:9px 10px;
+  font-weight:950;
+}
+
     @media print{
       body *{visibility:hidden}
       .print-only,.print-only *{visibility:visible}
@@ -1768,7 +1829,7 @@ function newHive(){
           <div>
             <strong>QR code</strong>
             <div style="color:#64748b;font-size:13px;margin-top:4px">À imprimer et coller sur la ruche ou ruchette.</div>
-            <button class="assist-btn secondary" style="margin-top:8px" onclick="drawQr('printQr', document.getElementById('newHiveQr').value); window.print()">Imprimer</button>
+            <button class="assist-btn secondary" style="margin-top:8px" onclick="printCustomQr(document.getElementById('newHiveQr').value, 'Nouvelle ruche')">Imprimer</button>
           </div>
         </div>
       </div>
@@ -2753,12 +2814,33 @@ function saveHiveFile(kind){
   }
 
   if(kind === "documents"){
-    h.documents.unshift(item);
-    saveState();
-    document.getElementById("content").innerHTML = hiveDetail(h.code);
-    drawAllQr(h.code);
-    showToast("✓ Document enregistré");
+    if(file.size > 1800000){
+      alert("Ce document est trop lourd pour être consultable hors ligne. Essaie un fichier plus léger.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(){
+      item.type = file.type || "application/octet-stream";
+      item.dataUrl = String(reader.result || "");
+      h.documents.unshift(item);
+      saveState();
+      document.getElementById("content").innerHTML = hiveDetail(h.code);
+      drawAllQr(h.code);
+      showToast("✓ Document enregistré");
+    };
+    reader.readAsDataURL(file);
   }
+}
+
+function openHiveDocument(docId){
+  const h = state.currentHive || state.hives[0];
+  const doc = h && Array.isArray(h.documents) ? h.documents.find(d=>d.id===docId) : null;
+  if(!doc || !doc.dataUrl){ showToast("⚠️ Document non consultable"); return; }
+  const win = window.open("", "_blank");
+  if(!win){ alert("Autorise les pop-ups pour ouvrir le document."); return; }
+  const isImg = (doc.type || "").startsWith("image/");
+  win.document.write(`<!DOCTYPE html><html><head><title>${doc.name || 'Document'}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header>${doc.category || 'Document'} · ${doc.name || ''}</header><div class="wrap">${isImg ? `<img src="${doc.dataUrl}">` : `<iframe src="${doc.dataUrl}"></iframe>`}</div></body></html>`);
+  win.document.close();
 }
 
 
@@ -3110,6 +3192,7 @@ function hiveSectionContent(h){
         <div class="record-head"><span>${d.category || "Document"}</span><span>${formatDateFr(d.date)}</span></div>
         <div class="record-body">${d.desc || ""}</div>
         <div class="doc-chip"><span>📄 ${d.name || "Fichier"}</span><span>${d.size || ""}</span></div>
+        ${d.dataUrl ? `<button class="doc-open-btn" style="width:100%;margin-top:8px" onclick="openHiveDocument('${d.id}')">👁️ Ouvrir le document</button>` : `<div class="mini-help">Ancien document référencé, fichier non consultable.</div>`}
       </div>
     `)}
   `;
@@ -3139,15 +3222,16 @@ function proposeDivisionQr(){
   if(input) input.value = nextHiveCode();
 }function complianceCard(title, status, type, items, bucketId){
   const bid = bucketId || title.replace(/\W/g,'_').slice(0,20);
-  return `<div class="compliance-card">
+  const hasDoc = !!complianceDoc(bid);
+  return `<div class="compliance-card ${hasDoc ? 'has-doc' : ''}">
     <div class="compliance-head">
       <div class="compliance-title">${title}</div>
-      <span class="tag ${type}">${status}</span>
+      <span class="tag ${hasDoc ? 'ok' : type}">${hasDoc ? 'Justificatif OK' : status}</span>
     </div>
     <div class="checklist">
-      ${items.map(item=>`<label class="checkline"><input type="checkbox"><span>${item}</span></label>`).join("")}
+      ${items.map(item=>`<label class="checkline"><input type="checkbox" ${hasDoc ? 'checked' : ''}><span>${item}</span></label>`).join("")}
     </div>
-    ${docField(bid)}
+    ${docField(bid, title)}
   </div>`;
 }
 function documentBucket(title, desc, bucketId){
@@ -3170,6 +3254,7 @@ function fieldInput(label, type="text", placeholder=""){
 }
 function normalizeHives(){
   state.alertSettings = getAlertSettings();
+  if(!state.complianceDocs) state.complianceDocs = {};
   if(!Array.isArray(state.hives)) state.hives = [];
   state.hives.forEach(h=>{
     if(!h.visites) h.visites = [];
@@ -3192,7 +3277,7 @@ function normalizeHives(){
 function storageState(stripImages=false){
   const copy = JSON.parse(JSON.stringify(state));
   copy.savedAt = new Date().toISOString();
-  copy.appVersion = "v18";
+  copy.appVersion = "v21";
   if(stripImages && Array.isArray(copy.hives)){
     copy.hives.forEach(h=>{
       if(Array.isArray(h.photos)){
@@ -3368,18 +3453,90 @@ function onFileSelected(inputId, labelId){
   showToast("✓ Fichier sélectionné");
 }
 
-function docField(bucketId){
+function complianceDoc(bucketId){
+  if(!state.complianceDocs) state.complianceDocs = {};
+  return state.complianceDocs[bucketId] || null;
+}
+
+function safeDocTitle(t){
+  return String(t || "Document").replace(/'/g,"\'").replace(/"/g,"&quot;");
+}
+
+function docField(bucketId, title="Document"){
   const fid = "file_"+bucketId;
-  const lid = "flabel_"+bucketId;
+  const doc = complianceDoc(bucketId);
+  const titleSafe = safeDocTitle(title);
   return `
     <div class="doc-upload">
-      <div id="${lid}" class="mini-help">Aucun fichier sélectionné</div>
-      <input type="file" accept="image/*,.pdf" id="${fid}" class="file-hidden" multiple onchange="onFileSelected('${fid}','${lid}')">
+      <input type="file" accept="image/*,.pdf" id="${fid}" class="file-hidden" onchange="saveComplianceDocument('${bucketId}','${titleSafe}',this)">
+      <button class="compliance-doc-btn ${doc ? 'done' : ''}" onclick="fileUpload('${fid}')">
+        ${doc ? '✅' : '📎'} ${title}
+      </button>
       <div class="file-actions">
         <button class="file-btn" onclick="fileUpload('${fid}')">📁 Fichier</button>
         <button class="file-btn primary" onclick="scanDocument('${fid}')">📷 Scanner</button>
       </div>
+      ${doc ? `
+        <div class="compliance-doc-meta">📄 ${doc.name || 'Justificatif'} · ${doc.size || ''} · ${formatDateFr(doc.date)}</div>
+        <div class="compliance-doc-actions">
+          <button class="doc-open-btn" onclick="openComplianceDocument('${bucketId}')">👁️ Ouvrir</button>
+          <button class="doc-remove-btn" onclick="removeComplianceDocument('${bucketId}')">Supprimer</button>
+        </div>` : `<div class="mini-help">Aucun justificatif associé</div>`}
     </div>`;
+}
+
+function saveComplianceDocument(bucketId, title, input){
+  const file = input && input.files ? input.files[0] : null;
+  if(!file) return;
+  if(file.size > 1800000){
+    alert("Ce fichier est trop lourd pour être gardé dans l'application hors ligne. Essaie une photo plus légère ou un PDF compressé.");
+    input.value = "";
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(){
+    if(!state.complianceDocs) state.complianceDocs = {};
+    state.complianceDocs[bucketId] = {
+      id: "compliance_" + bucketId + "_" + Date.now(),
+      bucketId,
+      title: title || "Document",
+      date: todayISO(),
+      name: file.name,
+      type: file.type || "application/octet-stream",
+      size: Math.round(file.size / 1024) + " Ko",
+      dataUrl: String(reader.result || "")
+    };
+    saveState();
+    const h = state.currentHive || state.hives[0];
+    if(h){
+      document.getElementById("content").innerHTML = hiveDetail(h.code);
+      drawAllQr(h.code);
+    }
+    showToast("✓ Justificatif enregistré");
+  };
+  reader.readAsDataURL(file);
+}
+
+function openComplianceDocument(bucketId){
+  const doc = complianceDoc(bucketId);
+  if(!doc || !doc.dataUrl){ showToast("⚠️ Aucun document à ouvrir"); return; }
+  const win = window.open("", "_blank");
+  if(!win){ alert("Autorise les pop-ups pour ouvrir le document."); return; }
+  const isImg = (doc.type || "").startsWith("image/");
+  win.document.write(`<!DOCTYPE html><html><head><title>${doc.name || 'Document'}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header>${doc.title || 'Document'} · ${doc.name || ''}</header><div class="wrap">${isImg ? `<img src="${doc.dataUrl}">` : `<iframe src="${doc.dataUrl}"></iframe>`}</div></body></html>`);
+  win.document.close();
+}
+
+function removeComplianceDocument(bucketId){
+  if(!confirm("Supprimer ce justificatif ?")) return;
+  if(state.complianceDocs) delete state.complianceDocs[bucketId];
+  saveState();
+  const h = state.currentHive || state.hives[0];
+  if(h){
+    document.getElementById("content").innerHTML = hiveDetail(h.code);
+    drawAllQr(h.code);
+  }
+  showToast("✓ Justificatif supprimé");
 }
 
 function drawAllQr(code){
@@ -3390,22 +3547,30 @@ function drawAllQr(code){
 }
 function drawQr(id, text){
   const c = document.getElementById(id);
-  if(!c) return;
+  if(!c) return Promise.resolve(false);
 
   const value = String(text || "").trim();
   if(window.QRCode && QRCode.toCanvas){
-    QRCode.toCanvas(c, value, {
-      errorCorrectionLevel: "M",
-      margin: 2,
-      width: c.width,
-      color: { dark: "#000000", light: "#ffffff" }
-    }, function(err){
-      if(err) drawFallbackQr(c, value);
+    return new Promise(resolve => {
+      QRCode.toCanvas(c, value, {
+        errorCorrectionLevel: "H",
+        margin: 3,
+        width: c.width,
+        color: { dark: "#000000", light: "#ffffff" }
+      }, function(err){
+        if(err){
+          drawFallbackQr(c, value);
+          resolve(false);
+        }else{
+          c.dataset.qrValue = value;
+          resolve(true);
+        }
+      });
     });
-    return;
   }
 
   drawFallbackQr(c, value);
+  return Promise.resolve(false);
 }
 
 function drawFallbackQr(c, text){
@@ -3421,11 +3586,28 @@ function drawFallbackQr(c, text){
     if(seed%100<42){ctx.fillStyle="#000";ctx.fillRect(x*cell,y*cell,cell,cell)}
   }
 }
-function printQr(){
+async function printQr(){
   const h=state.currentHive||state.hives[0];
   document.getElementById("printHiveName").textContent=h.code+" · Ruche "+h.name;
-  drawQr("printQr", h.code);
-  window.print();
+  const ok = await drawQr("printQr", h.code);
+  if(!ok && window.QRCode === undefined){
+    alert("Le générateur de QR code n'est pas encore chargé. Vérifie la connexion internet puis réessaie dans quelques secondes.");
+    return;
+  }
+  setTimeout(() => window.print(), 80);
+}
+
+async function printCustomQr(code, label){
+  const clean = String(code || "").trim().toUpperCase();
+  if(!clean){ alert("Code QR vide."); return; }
+  const title = document.getElementById("printHiveName");
+  if(title) title.textContent = clean + " · " + (label || "Mes Abeilles");
+  const ok = await drawQr("printQr", clean);
+  if(!ok && window.QRCode === undefined){
+    alert("Le générateur de QR code n'est pas encore chargé. Vérifie la connexion internet puis réessaie dans quelques secondes.");
+    return;
+  }
+  setTimeout(() => window.print(), 80);
 }
 
 
@@ -4438,13 +4620,16 @@ async function qrScanLoop(){
 
   try{
     if(video.readyState >= 2){
+      let detected = "";
+
       if(qrBarcodeDetector){
         const codes = await qrBarcodeDetector.detect(video);
         if(codes && codes.length){
-          handleScannedCode(codes[0].rawValue || codes[0].displayValue);
-          return;
+          detected = codes[0].rawValue || codes[0].displayValue || "";
         }
-      }else if(window.jsQR){
+      }
+
+      if(!detected && window.jsQR){
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         const w = video.videoWidth || 640;
         const h = video.videoHeight || 480;
@@ -4452,11 +4637,17 @@ async function qrScanLoop(){
         canvas.height = h;
         ctx.drawImage(video, 0, 0, w, h);
         const imageData = ctx.getImageData(0, 0, w, h);
-        const result = jsQR(imageData.data, w, h);
-        if(result && result.data){
-          handleScannedCode(result.data);
-          return;
-        }
+        const result = jsQR(imageData.data, w, h, { inversionAttempts: "attemptBoth" });
+        if(result && result.data) detected = result.data;
+      }
+
+      if(detected){
+        handleScannedCode(detected);
+        return;
+      }
+
+      if(!qrBarcodeDetector && !window.jsQR){
+        setScannerStatus("Caméra active, mais le lecteur QR n'est pas chargé. Vérifie la connexion internet ou saisis le code manuellement.");
       }
     }
   }catch(e){
@@ -4469,11 +4660,17 @@ async function qrScanLoop(){
 function normalizeScannedCode(value){
   let code = String(value || "").trim();
 
-  // Accepte aussi un QR contenant une URL avec ?code=RUCHE-001 ou #RUCHE-001.
+  // Accepte un QR contenant seulement RUCHE-001,
+  // ou une URL avec ?code=RUCHE-001, #RUCHE-001, ou /RUCHE-001.
   try{
     const url = new URL(code);
-    code = url.searchParams.get("code") || url.hash.replace("#","") || code;
+    const fromHash = (url.hash || "").replace("#", "");
+    const fromPath = (url.pathname || "").split("/").filter(Boolean).pop() || "";
+    code = url.searchParams.get("code") || fromHash || fromPath || code;
   }catch(e){}
+
+  const match = String(code).match(/RUCHE[-_ ]?\d+/i);
+  if(match) code = match[0].replace(/[ _]/g, "-");
 
   return code.trim().toUpperCase();
 }
@@ -4484,6 +4681,7 @@ function handleScannedCode(value){
   if(input) input.value = code;
 
   stopQrScanner();
+  if(navigator.vibrate) navigator.vibrate(120);
   setScannerStatus("QR code détecté : " + code);
 
   setTimeout(() => openHive(code), 150);
