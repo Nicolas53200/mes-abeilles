@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v28</title>
+  <title>Mes Abeilles 🐝 v29</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <style>
@@ -3523,6 +3523,9 @@ function hiveSectionContent(h){
       ${isRuchette ? infoBox("Origine", h.origine || "—") : infoBox("🍯 Hausse en place", formatHaussesCount(activeHaussesCount(h)))}
       ${infoBox("🏠 Matériel", materialSummaryText(h))}
     </div>
+
+    ${renderResumeNextVisit(h)}
+
     <div style="height:16px"></div>
     ${isRuchette ? `
       <button class="convert-btn" onclick="convertirEnRuche('${h.code}')">
