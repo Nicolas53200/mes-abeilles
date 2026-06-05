@@ -1551,6 +1551,68 @@
     }
     .export-help strong{color:#0f172a}
 
+  
+    /* v24 — Géolocalisation visible dans le résumé */
+    .gps-summary-card{
+      background:#f0fdf4;
+      border:1px solid #bbf7d0;
+      border-radius:20px;
+      padding:14px;
+      margin:14px 0;
+    }
+    .gps-summary-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:8px;
+    }
+    .gps-summary-title{
+      font-weight:950;
+      color:#14532d;
+      font-size:16px;
+    }
+    .gps-summary-coords{
+      color:#166534;
+      font-size:13px;
+      line-height:1.45;
+      word-break:break-word;
+      margin-bottom:10px;
+    }
+    .gps-summary-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+    }
+    .gps-map-btn{
+      border:0;
+      border-radius:14px;
+      background:linear-gradient(135deg,#16a34a,#86efac);
+      color:#052e16;
+      padding:11px 10px;
+      font-weight:950;
+      font-size:13px;
+    }
+    .gps-copy-btn{
+      border:1px solid #bbf7d0;
+      border-radius:14px;
+      background:#fff;
+      color:#14532d;
+      padding:11px 10px;
+      font-weight:950;
+      font-size:13px;
+    }
+    .gps-empty-card{
+      background:#f8fafc;
+      border:1px dashed #cbd5e1;
+      border-radius:20px;
+      padding:14px;
+      margin:14px 0;
+      color:#64748b;
+      font-size:13px;
+      line-height:1.45;
+    }
+
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
@@ -2917,7 +2979,9 @@ function hiveSectionContent(h){
       <div style="font-size:12px;color:#64748b;text-align:center;margin-top:8px">La colonie est prête ? Convertis cette ruchette en ruche.</div>
     ` : ''}
 
-    <div class="danger-zone">
+    ${renderHiveGpsSummary(h)}
+
+        <div class="danger-zone">
       <div class="danger-title">Zone sensible</div>
       <div class="danger-text">Supprime cette ${isRuchette ? "ruchette" : "ruche"} uniquement si elle a été créée par erreur ou si tu veux vraiment la retirer de l'application. L'export PC reste conseillé avant suppression.</div>
       <button class="danger-btn" onclick="deleteHive('${h.code}')">🗑️ Supprimer cette ${isRuchette ? "ruchette" : "ruche"}</button>
@@ -3816,6 +3880,91 @@ async function printCustomQr(code, label){
   setTimeout(() => window.print(), 80);
 }
 
+
+
+function getHiveGps(h){
+  if(!h) return null;
+  const candidates = [
+    h.gps,
+    h.location,
+    h.coords,
+    h.position,
+    h.geo,
+    h.geolocation,
+    h.apiaryGps,
+    h.apiaryLocation
+  ];
+
+  for(const c of candidates){
+    if(!c) continue;
+
+    if(typeof c === "string"){
+      const nums = c.match(/-?\d+(?:\.\d+)?/g);
+      if(nums && nums.length >= 2){
+        const lat = parseFloat(nums[0]);
+        const lon = parseFloat(nums[1]);
+        if(Number.isFinite(lat) && Number.isFinite(lon)) return {lat, lon};
+      }
+    }
+
+    if(typeof c === "object"){
+      const lat = c.lat ?? c.latitude ?? c.coords?.latitude;
+      const lon = c.lon ?? c.lng ?? c.longitude ?? c.coords?.longitude;
+      if(Number.isFinite(Number(lat)) && Number.isFinite(Number(lon))){
+        return {lat:Number(lat), lon:Number(lon)};
+      }
+    }
+  }
+
+  if(Number.isFinite(Number(h.lat)) && Number.isFinite(Number(h.lon))) return {lat:Number(h.lat), lon:Number(h.lon)};
+  if(Number.isFinite(Number(h.latitude)) && Number.isFinite(Number(h.longitude))) return {lat:Number(h.latitude), lon:Number(h.longitude)};
+  return null;
+}
+
+function renderHiveGpsSummary(h){
+  const gps = getHiveGps(h);
+  if(!gps){
+    return `
+      <div class="gps-empty-card">
+        <strong>📍 Localisation</strong><br>
+        Aucune position GPS enregistrée pour cette ruche. Tu peux la renseigner lors de la création ou via le bouton GPS si disponible.
+      </div>
+    `;
+  }
+
+  const lat = Number(gps.lat).toFixed(6);
+  const lon = Number(gps.lon).toFixed(6);
+  return `
+    <div class="gps-summary-card">
+      <div class="gps-summary-head">
+        <div class="gps-summary-title">📍 Position GPS enregistrée</div>
+      </div>
+      <div class="gps-summary-coords">
+        Latitude : <strong>${lat}</strong><br>
+        Longitude : <strong>${lon}</strong>
+      </div>
+      <div class="gps-summary-actions">
+        <button class="gps-map-btn" onclick="openHiveMap('${lat}','${lon}')">🗺️ Ouvrir la carte</button>
+        <button class="gps-copy-btn" onclick="copyHiveGps('${lat}','${lon}')">📋 Copier</button>
+      </div>
+    </div>
+  `;
+}
+
+function openHiveMap(lat, lon){
+  const q = encodeURIComponent(lat + "," + lon);
+  const url = "https://www.google.com/maps/search/?api=1&query=" + q;
+  window.open(url, "_blank", "noopener");
+}
+
+function copyHiveGps(lat, lon){
+  const value = lat + ", " + lon;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(value).then(()=>showToast("✓ Coordonnées copiées"));
+  }else{
+    prompt("Coordonnées GPS", value);
+  }
+}
 
 function convertirEnRuche(code){
   const h = state.hives.find(x => x.code === code);
