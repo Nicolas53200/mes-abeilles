@@ -782,17 +782,20 @@
       background-size:auto, auto, 72px 62px;
       display:flex;flex-direction:column;
       align-items:center;justify-content:space-between;
-      padding:60px 32px calc(40px + env(safe-area-inset-bottom,0px));
+      overflow:hidden;
+      padding:30px 24px calc(20px + env(safe-area-inset-bottom,0px));
       transition:opacity .5s;
-    
     }
     .splash.out{opacity:0;pointer-events:none}
     .splash-top{
       display:flex;flex-direction:column;align-items:center;
-      flex:1;justify-content:center;gap:0;
+      flex:1;justify-content:flex-start;gap:0;
+      overflow-y:auto;
+      padding-top:20px;
+      -webkit-overflow-scrolling:touch;
     }
     .splash-glow{
-      width:160px;height:160px;border-radius:36px;
+      width:130px;height:130px;border-radius:30px;
       background:radial-gradient(circle,rgba(255,122,24,.18),transparent 70%);
       display:flex;align-items:center;justify-content:center;
       overflow:hidden;
@@ -805,8 +808,8 @@
       50%{box-shadow:0 0 70px 20px rgba(255,210,74,.3)}
     }
     .splash-title{
-      font-size:38px;font-weight:950;letter-spacing:-.05em;
-      color:#fff;text-align:center;line-height:1.05;margin-bottom:16px;
+      font-size:32px;font-weight:950;letter-spacing:-.05em;
+      color:#fff;text-align:center;line-height:1.05;margin-bottom:10px;
     }
     .splash-title span{
       background:linear-gradient(135deg,#ff7a18,#ffd24a);
@@ -816,7 +819,7 @@
       font-size:16px;color:#7a8eaa;text-align:center;line-height:1.6;max-width:280px;
     }
     .splash-features{
-      display:flex;flex-direction:column;gap:12px;width:100%;margin:32px 0;
+      display:flex;flex-direction:column;gap:8px;width:100%;margin:16px 0;
     }
     .splash-feat{
       display:flex;align-items:center;gap:14px;
@@ -833,6 +836,7 @@
       padding:20px;
       box-shadow:0 14px 36px rgba(255,122,24,.4);
       letter-spacing:-.02em;
+      flex-shrink:0;
     }
 
     /* ── Coach marks (tour guidé) ───────────────────── */
@@ -1489,14 +1493,14 @@ function admin(){
       </div>
       <div class="notice" style="margin-bottom:16px">L'export génère un fichier <strong>.json</strong> que tu peux sauvegarder sur PC ou partager.</div>
 
-      <div class="field"><label>Prénom</label><input id="adminPrenom" value="${p.prenom || ""}" placeholder="Ton prénom"></div>
-      <div class="field"><label>Nom</label><input id="adminNom" value="${p.nom || ""}" placeholder="Ton nom"></div>
-      <div class="field"><label>Entreprise</label><input id="adminEntreprise" value="${p.entreprise || ""}" placeholder="Ex : Rucher des Collines"></div>
-      <div class="field"><label>NAPI</label><input id="adminNapi" value="${p.napi || ""}" placeholder="Numéro d'apiculteur"></div>
-      <div class="field"><label>SIRET</label><input id="adminSiret" value="${p.siret || ""}" placeholder="Numéro SIRET"></div>
-      <div class="field"><label>Adresse</label><input id="adminAdresse" value="${p.adresse || ""}" placeholder="Adresse de l'entreprise"></div>
-      <div class="field"><label>Téléphone</label><input id="adminTelephone" value="${p.telephone || ""}" placeholder="Téléphone"></div>
-      <div class="field"><label>Email</label><input id="adminEmail" value="${p.email || ""}" placeholder="Email"></div>
+      <div class="field"><label>Prénom</label><input id="adminPrenom" value="${p.prenom || ''}" placeholder="Ton prénom"></div>
+      <div class="field"><label>Nom</label><input id="adminNom" value="${p.nom || ''}" placeholder="Ton nom"></div>
+      <div class="field"><label>Entreprise</label><input id="adminEntreprise" value="${p.entreprise || ''}" placeholder="Ex : Rucher des Collines"></div>
+      <div class="field"><label>NAPI</label><input id="adminNapi" value="${p.napi || ''}" placeholder="Numéro d'apiculteur"></div>
+      <div class="field"><label>SIRET</label><input id="adminSiret" value="${p.siret || ''}" placeholder="Numéro SIRET"></div>
+      <div class="field"><label>Adresse</label><input id="adminAdresse" value="${p.adresse || ''}" placeholder="Adresse de l'entreprise"></div>
+      <div class="field"><label>Téléphone</label><input id="adminTelephone" value="${p.telephone || ''}" placeholder="Téléphone"></div>
+      <div class="field"><label>Email</label><input id="adminEmail" value="${p.email || ''}" placeholder="Email"></div>
 
       <div class="field"><label>Logo</label>
         <input type="file" accept="image/*" id="adminLogo" class="file-hidden" onchange="onFileSelected('adminLogo','adminLogoLabel')">
