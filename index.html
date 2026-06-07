@@ -1353,6 +1353,59 @@
       .actions { grid-template-columns: 1fr 1fr 1fr; }
     }
 
+/* ── Grille navigation ruche (Option B) ── */
+.hive-grid-nav{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  padding:4px 0 16px;
+}
+.hive-grid-btn{
+  background:var(--card);
+  border:1.5px solid #e2e8f0;
+  border-radius:18px;
+  padding:16px 10px 14px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:7px;
+  cursor:pointer;
+  transition:transform .12s,box-shadow .12s;
+  position:relative;
+}
+.hive-grid-btn:active{transform:scale(.96)}
+.hive-grid-btn .hgb-icon{font-size:28px;line-height:1}
+.hive-grid-btn .hgb-label{font-size:13px;font-weight:800;color:var(--text);text-align:center;letter-spacing:-.01em}
+.hive-grid-btn .hgb-badge{
+  position:absolute;top:10px;right:10px;
+  background:#ef4444;color:#fff;
+  font-size:10px;font-weight:800;
+  padding:2px 6px;border-radius:999px;
+  min-width:18px;text-align:center;
+}
+.hive-grid-btn.hgb-accent{
+  background:linear-gradient(135deg,#fff7ed,#fff);
+  border-color:#fed7aa;
+}
+/* Bouton retour section */
+.hive-section-back{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background:var(--card);
+  border:1.5px solid #e2e8f0;
+  border-radius:14px;
+  color:var(--text);
+  font-size:16px;
+  font-weight:800;
+  cursor:pointer;
+  padding:12px 18px;
+  margin-bottom:18px;
+  width:100%;
+  letter-spacing:-.02em;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+}
+.hive-section-back span{font-size:20px;line-height:1}
 /* ── Carte globale ── */
 .map-global-wrap{
   position:relative;
@@ -3209,34 +3262,79 @@ function hiveDetail(code){
   const h = state.hives.find(x=>x.code===code) || state.hives[0];
   state.currentHive = h;
   const isRuchette = h.type === "ruchette";
+
+  // Si on est sur la page d'accueil de la ruche (resume ET pas de section active)
+  if(state.hiveSection === "grid" || state.hiveSection === "resume"){
+    // Afficher la grille uniquement quand hiveSection === "grid"
+    // "resume" garde l'ancien comportement pour les accès directs
+  }
+
+  // Grille d'accueil
+  if(state.hiveSection === "grid"){
+    const alertCount = Number(h.alerts || 0);
+    const visitCount = Array.isArray(h.visites) ? h.visites.length : 0;
+    const traitCount = Array.isArray(h.traitements) ? h.traitements.length : 0;
+    const frelonCount = Array.isArray(h.frelons) ? h.frelons.length : 0;
+    const photosCount = Array.isArray(h.photos) ? h.photos.length : 0;
+    const haussesCount = Array.isArray(h.hausses) ? h.hausses.length : 0;
+
+    const gridBtn = (section, icon, label, badge="", accent=false) => `
+      <button class="hive-grid-btn${accent?" hgb-accent":""}" onclick="setHiveSection('${section}')">
+        ${badge ? `<div class="hgb-badge">${badge}</div>` : ""}
+        <div class="hgb-icon">${icon}</div>
+        <div class="hgb-label">${label}</div>
+      </button>`;
+
+    return `
+      <div class="hive-content-wrap">
+        <section class="detail-panel">
+          <div class="hive-grid-nav">
+            ${gridBtn("resume","🏠","Résumé","",true)}
+            ${gridBtn("visites","📅","Visites", visitCount > 0 ? visitCount : "")}
+            ${gridBtn("materiel","🧰","Matériel")}
+            ${gridBtn("reine","♛","Reine")}
+            ${gridBtn("actions","✅","Actions", alertCount > 0 ? alertCount : "")}
+            ${gridBtn("traitements","🛡️","Traitements", traitCount > 0 ? traitCount : "")}
+            ${gridBtn("frelons","🐝","Frelons", frelonCount > 0 ? frelonCount : "")}
+            ${gridBtn("nourrissement","🧃","Nourrissement")}
+            ${!isRuchette ? gridBtn("hausses","📦","Hausses", haussesCount > 0 ? haussesCount : "") : ""}
+            ${!isRuchette ? gridBtn("miel","🍯","Miel") : ""}
+            ${isRuchette ? gridBtn("ruchette","🪣","Ruchette") : ""}
+            ${gridBtn("divisions","🔀","Divisions")}
+            ${!isRuchette ? gridBtn("transhumance","🚚","Transhumance") : ""}
+            ${!isRuchette ? gridBtn("pesees","⚖️","Pesées") : ""}
+            ${gridBtn("photos","📷","Photos", photosCount > 0 ? photosCount : "")}
+            ${!isRuchette ? gridBtn("conformite","📋","Conformité") : ""}
+            ${gridBtn("documents","📁","Documents")}
+            ${gridBtn("qrcode","⌗","QR Code")}
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  // Vue section avec bouton retour
   return `
     <div class="hive-content-wrap">
-      <nav class="hive-tabs" id="hiveTabs">
-        ${tabButton("resume","🏠","Résumé")}
-        ${tabButton("materiel","🧰","Matériel")}
-        ${isRuchette ? tabButton("ruchette","🪣","Ruchette") : ""}
-        ${tabButton("visites","📅","Visites")}
-        ${tabButton("reine","♛","Reine")}
-        ${tabButton("divisions","🔀","Divisions")}
-        ${tabButton("actions","✅","Actions")}
-        ${!isRuchette ? tabButton("hausses","📦","Hausses") : ""}
-        ${!isRuchette ? tabButton("miel","🍯","Miel") : ""}
-        ${tabButton("traitements","🛡️","Traitements")}
-        ${tabButton("frelons","🐝","Frelons")}
-        ${tabButton("nourrissement","🧃","Nourrissement")}
-        ${!isRuchette ? tabButton("transhumance","🚚","Transhumance") : ""}
-        ${!isRuchette ? tabButton("pesees","⚖️","Pesées") : ""}
-        ${tabButton("photos","📷","Photos")}
-        ${!isRuchette ? tabButton("conformite","📋","Conformité") : ""}
-        ${tabButton("documents","📁","Documents")}
-        ${tabButton("qrcode","⌗","QR Code")}
-      </nav>
-
       <section class="detail-panel" id="hiveDetailContent">
+        <button class="hive-section-back" onclick="setHiveSection('grid')">
+          <span>←</span> ${sectionLabel(state.hiveSection)}
+        </button>
         ${hiveSectionContent(h)}
       </section>
     </div>
   `;
+}
+
+function sectionLabel(s){
+  const labels = {
+    resume:"Résumé", materiel:"Matériel", visites:"Visites", reine:"Reine",
+    divisions:"Divisions", actions:"Actions", hausses:"Hausses", miel:"Miel",
+    traitements:"Traitements", frelons:"Frelons", nourrissement:"Nourrissement",
+    transhumance:"Transhumance", pesees:"Pesées", photos:"Photos",
+    conformite:"Conformité", documents:"Documents", qrcode:"QR Code", ruchette:"Ruchette"
+  };
+  return labels[s] || s;
 }
 
 function tabButton(section, icon, label){
@@ -3252,10 +3350,6 @@ function setHiveSection(section){
   const h = state.currentHive;
   document.getElementById("content").innerHTML = hiveDetail(h.code);
   drawAllQr(h.code);
-  setTimeout(()=>{
-    const active = document.querySelector(".hive-tab.active");
-    if(active) active.scrollIntoView({behavior:"smooth", inline:"center", block:"nearest"});
-  }, 20);
 }
 
 function ensureHiveArrays(h){
@@ -4471,6 +4565,31 @@ function mbAddNextVisitCalendar(code){
   downloadCalendarEvent({h, start:date, title, desc, filename:"visite_" + (h.code || "ruche") + "_" + date + ".ics", location:h.apiary || h.gps || ""});
 }
 
+function resumeVisitesRow(h){
+  const ns = nextVisitStatus(h);
+  let nextLabel, nextStyle = "";
+  if(!ns.next){
+    nextLabel = "Non planifiée";
+    nextStyle = "color:#94a3b8";
+  } else if(ns.due){
+    nextLabel = "À visiter !";
+    nextStyle = "color:#dc2626;font-weight:900";
+  } else {
+    nextLabel = "Dans " + ns.daysLeft + " jour" + (ns.daysLeft > 1 ? "s" : "");
+    nextStyle = ns.daysLeft <= 3 ? "color:#f59e0b;font-weight:900" : "";
+  }
+  return `
+    <div class="info-box" style="cursor:pointer" onclick="setHiveSection('visites')">
+      <div class="label">📅 Dernière visite</div>
+      <div class="value">${h.date || "—"}</div>
+    </div>
+    <div class="info-box" style="cursor:pointer" onclick="setHiveSection('visites')">
+      <div class="label">🔜 Prochaine visite</div>
+      <div class="value" style="${nextStyle}">${nextLabel}</div>
+    </div>
+  `;
+}
+
 function hiveSectionContent(h){
   const s = state.hiveSection;
   const isRuchette = h.type === "ruchette";
@@ -4484,16 +4603,14 @@ function hiveSectionContent(h){
     <button class="assist-btn secondary" style="margin:0 0 14px" onclick="changeHiveApiary('${h.code}')">📍 Choisir / changer le rucher</button>
     <div class="info-grid">
       ${statusScoreHTML(h)}
-      ${infoBox("Dernière visite", h.date)}
       ${infoBox("Code QR", h.code)}
+      ${resumeVisitesRow(h)}
       ${isRuchette ? infoBox("Type", "Ruchette") : infoBox("Miel récolté", h.honey + " kg")}
       ${infoBox("Reine", "Présente · Marquée")}
       ${infoBox("Force", h.alerts ? "Faible" : "En développement")}
       ${isRuchette ? infoBox("Origine", h.origine || "—") : infoBox("🍯 Hausse en place", formatHaussesCount(activeHaussesCount(h)))}
       ${infoBox("🏠 Matériel", materialSummaryText(h))}
     </div>
-
-    ${renderResumeNextVisit(h)}
 
     <div style="height:16px"></div>
     ${isRuchette ? `
@@ -7084,7 +7201,7 @@ function openHive(code){
     alert("Ruche introuvable : " + code);
     return;
   }
-  state.hiveSection = "resume";
+  state.hiveSection = "grid";
   state.visitFormOpen = false;
   state.queenFormOpen = false;
   state.moduleFormOpen = null;
