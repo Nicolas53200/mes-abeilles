@@ -7,9 +7,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v35</title>
+  <title>Mes Abeilles 🐝 v36.2</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
+  <link rel="icon" href="./icon192.png">
   <style>
     :root{
       --nav:#071225;
@@ -652,9 +653,9 @@
     .stat-value{font-size:22px}
     .pill{padding:9px 14px;margin-top:6px}
     .sheet{margin-top:-42px;padding:22px 16px 0}
-    .actions{gap:12px;margin-bottom:18px}
-    .big-action{min-height:78px;border-radius:22px;font-size:18px;padding:14px;gap:10px}
-    .big-action .action-icon{font-size:30px}
+    .actions{gap:10px;margin-bottom:18px;grid-template-columns:1fr 1fr 1fr}
+    .big-action{min-height:78px;border-radius:22px;font-size:15px;padding:10px 8px;gap:7px}
+    .big-action .action-icon{font-size:26px}
     .section-title{font-size:28px}
     .see-all{padding:10px 15px}
     .carousel{gap:12px;margin-right:-16px}
@@ -1352,6 +1353,68 @@
       .actions { grid-template-columns: 1fr 1fr 1fr; }
     }
 
+/* ── Carte globale ── */
+.map-global-wrap{
+  position:relative;
+  border-radius:26px;
+  /* overflow:hidden retiré — il empêche le rendu des tuiles Leaflet */
+  margin:0 0 18px;
+  box-shadow:var(--shadow);
+}
+#globalMap{
+  width:100%;
+  height:calc(100vh - 260px);
+  min-height:340px;
+  background:#e8eff6;
+  border-radius:26px;
+  z-index:0;
+}
+.map-legend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 14px;
+  padding:12px 4px 4px;
+}
+.map-legend-item{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:13px;
+  font-weight:700;
+  color:var(--text);
+}
+.map-legend-dot{
+  width:13px;height:13px;
+  border-radius:50%;
+  flex-shrink:0;
+  border:2px solid rgba(0,0,0,.15);
+}
+.map-no-gps{
+  background:var(--card);
+  border-radius:18px;
+  padding:16px;
+  margin-top:14px;
+  font-size:14px;
+  color:var(--muted);
+  line-height:1.5;
+}
+.map-no-gps strong{color:var(--text)}
+/* Popup Leaflet custom */
+.bee-popup{min-width:190px;font-family:Inter,system-ui,sans-serif}
+.bee-popup-name{font-size:16px;font-weight:950;letter-spacing:-.03em;margin-bottom:4px}
+.bee-popup-apiary{font-size:12px;color:#64748b;margin-bottom:8px;font-weight:700}
+.bee-popup-row{display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:3px}
+.bee-popup-status{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:800;background:#fef9c3;color:#78350f;margin-bottom:8px}
+.bee-popup-status.ok{background:#dcfce7;color:#166534}
+.bee-popup-status.warn{background:#fee2e2;color:#991b1b}
+.bee-popup-btn{
+  display:block;width:100%;text-align:center;
+  background:linear-gradient(135deg,#ff7a18,#ffd24a);
+  color:#090f1f;border:0;border-radius:12px;
+  padding:8px 0;font-size:14px;font-weight:950;
+  cursor:pointer;margin-top:8px;
+}
+
 /* v21 — Documents conformité liés et consultables */
 .compliance-card.has-doc{
   border-color:#86efac;
@@ -1412,6 +1475,125 @@
   padding:9px 10px;
   font-weight:950;
 }
+
+/* v36.2 — Ruchers : tableau de bord par emplacement */
+.apiary-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:0 0 14px;
+}
+.apiary-filter-title{font-size:15px;color:#64748b;font-weight:900}
+.apiary-filter-title strong{color:#0b1328}
+.apiary-clear-btn{
+  border:1px solid var(--line);
+  background:#fff;
+  color:#0b1328;
+  border-radius:999px;
+  padding:10px 14px;
+  font-weight:950;
+  box-shadow:0 6px 16px rgba(15,23,42,.05);
+}
+.apiary-clear-btn.active{
+  background:linear-gradient(135deg,#ff7a18,#ffd24a);
+  border-color:#ffd24a;
+  color:#120d05;
+}
+.apiary-dashboard{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:12px;
+  margin:0 0 18px;
+}
+.apiary-card{
+  width:100%;
+  border:1px solid var(--line);
+  background:linear-gradient(180deg,#ffffff,#f8fafc);
+  border-radius:22px;
+  padding:15px;
+  text-align:left;
+  box-shadow:0 10px 24px rgba(15,23,42,.07);
+  position:relative;
+  overflow:hidden;
+}
+.apiary-card::after{
+  content:"";
+  position:absolute;
+  right:-22px;
+  top:-22px;
+  width:84px;
+  height:84px;
+  border-radius:50%;
+  background:linear-gradient(135deg,var(--apiary-c1,#ff7a18),var(--apiary-c2,#ffd24a));opacity:.18;
+}
+.apiary-card.active{
+  border-color:#ffb11f;
+  background:linear-gradient(135deg,#ff7a18,#ffd24a);
+  color:#120d05;
+  box-shadow:0 14px 30px rgba(255,122,24,.26);
+}
+.apiary-card.active .apiary-card-title,
+.apiary-card.active .apiary-card-meta{color:#120d05}
+.apiary-card-title{font-weight:950;font-size:17px;color:#0b1328;margin-bottom:5px;position:relative;z-index:1}
+.apiary-card-meta{font-size:13px;color:#64748b;font-weight:850;line-height:1.35;position:relative;z-index:1}
+.apiary-card-count{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:34px;
+  height:28px;
+  border-radius:999px;
+  background:#eef2ff;
+  color:#1e3a8a;
+  font-weight:950;
+  font-size:13px;
+  margin-left:6px;
+}
+.apiary-card.active .apiary-card-count{background:rgba(18,13,5,.14);color:#120d05}
+@media (min-width:768px){.apiary-dashboard{grid-template-columns:repeat(3,1fr)}.apiary-card{min-height:104px}}
+
+/* v36.2 — Sélecteur rucher propre + couleurs par rucher */
+.hive-card{transition:transform .18s ease, box-shadow .18s ease}
+.hive-card:hover{transform:translateY(-2px)}
+.hive-image.apiary-gradient{
+  background:linear-gradient(135deg,var(--hive-c1,#b7e4c7),var(--hive-c2,#fef9c3)) !important;
+}
+.apiary-color-dot{
+  display:inline-block;width:10px;height:10px;border-radius:50%;
+  background:linear-gradient(135deg,var(--apiary-c1,#ff7a18),var(--apiary-c2,#ffd24a));
+  margin-right:7px;vertical-align:middle;
+  box-shadow:0 0 0 3px rgba(255,255,255,.7);
+}
+.apiary-card-actions{position:absolute;right:10px;bottom:10px;z-index:2;display:flex;gap:6px}
+.apiary-delete-btn{
+  border:0;border-radius:999px;background:rgba(255,255,255,.86);color:#be123c;
+  font-weight:950;padding:7px 10px;font-size:12px;box-shadow:0 4px 12px rgba(15,23,42,.12)
+}
+.apiary-card.active .apiary-delete-btn{background:rgba(255,255,255,.72);color:#7f1d1d}
+.apiary-picker-backdrop{
+  position:fixed;inset:0;background:rgba(3,7,18,.58);z-index:340;
+  display:flex;align-items:flex-end;justify-content:center;padding:14px;
+}
+.apiary-picker-panel{
+  width:min(430px,100%);max-height:86vh;overflow:auto;background:#fff;
+  border-radius:28px 28px 22px 22px;padding:20px;box-shadow:0 -18px 50px rgba(0,0,0,.28);
+}
+.apiary-picker-title{font-size:24px;font-weight:950;letter-spacing:-.04em;margin-bottom:6px;color:#0b1328}
+.apiary-picker-sub{color:#64748b;font-size:14px;line-height:1.45;margin-bottom:14px}
+.apiary-choice-list{display:grid;gap:9px;margin:12px 0 16px}
+.apiary-choice{
+  border:1px solid var(--line);background:#f8fafc;border-radius:18px;padding:14px;
+  display:flex;gap:12px;align-items:center;font-weight:950;color:#0b1328;cursor:pointer;
+}
+.apiary-choice input{width:22px;min-height:22px;flex:0 0 22px;margin:0}
+.apiary-choice.selected{border-color:#ffb11f;background:#fff7ed;box-shadow:0 8px 18px rgba(255,122,24,.12)}
+.apiary-picker-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.apiary-picker-actions .assist-btn{width:100%;justify-content:center}
+.apiary-new-inline{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px}
+@media (min-width:768px){.apiary-picker-backdrop{align-items:center}.apiary-picker-panel{border-radius:30px}}
+
 
     @media print{
       body *{visibility:hidden}
@@ -1980,6 +2162,8 @@
     }
 
   </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 </head>
@@ -2054,7 +2238,7 @@
         </div>
       </div>
     </div>
-    <button class="splash-btn" onclick="splashFinish()">Découvrir l'application 🚀</button>
+    <button id="splashDiscoverBtn" class="splash-btn" type="button" onclick="window.splashFinish && window.splashFinish()">Découvrir l'application 🚀</button>
   </div>
 
   <!-- Coach marks (tour guidé) -->
@@ -2144,6 +2328,7 @@
   </div>
 
 <script>
+const APP_VERSION = "v36.2";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -2170,6 +2355,7 @@ const state = {
   profil: {},
   alertSettings: { visitDays: 21, notifications: false, weather: true, calendar: true, quietHours: true, lastWeatherCheck: "" },
   hives: [],
+  apiaries: [],
   onboardingDone: false,
   calendarPromptDone: false,
   hiveTourDone: false
@@ -2179,16 +2365,20 @@ loadState();
 function hiveCard(h){
   const warn = h.alerts > 0;
   const isRuchette = h.type === "ruchette";
+  const apiaryName = apiaryNameForHive(h) || "Sans rucher";
+  const colors = colorForApiary(apiaryName, h.code);
+  const imageClass = isRuchette ? "" : "apiary-gradient";
+  const imageStyle = isRuchette ? "" : `style="--hive-c1:${colors[0]};--hive-c2:${colors[1]}"`;
   return `
     <article class="hive-card ${isRuchette ? 'is-ruchette' : ''}" onclick="openHive('${h.code}')">
-      <div class="hive-image ${isRuchette ? '' : h.theme}">
+      <div class="hive-image ${imageClass}" ${imageStyle}>
         <div class="flower-texture"></div>
         <div class="code-tag ${h.tag === 'orange' ? 'orange' : ''}">${h.code}</div>
       </div>
       <div class="hive-body">
         ${isRuchette ? '<div class="ruchette-badge">🪣 Ruchette</div>' : ''}
-        <h3 class="hive-title">${isRuchette ? 'Ruchette' : 'Ruche'} ${h.name}</h3>
-        <div class="hive-apiary">${h.apiary}</div>
+        <h3 class="hive-title">${isRuchette ? 'Ruchette' : 'Ruche'} ${escapeHtml(h.name)}</h3>
+        <div class="hive-apiary"><span class="apiary-color-dot" style="--apiary-c1:${colors[0]};--apiary-c2:${colors[1]}"></span>${escapeHtml(apiaryName)}</div>
         <div class="hive-status ${warn ? 'warn' : ''}">
           <span class="status-dot"></span>${h.statusIcon ? h.statusIcon + " " : ""}${h.status || latestVisitScore(h).status.label}
         </div>
@@ -2222,6 +2412,10 @@ function home(){
       <button class="big-action" onclick="showPage('newHive')">
         <span class="action-icon">⊕</span>
         <span>Nouvelle<br>ruche</span>
+      </button>
+      <button class="big-action" onclick="showPage('mapGlobal')" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff">
+        <span class="action-icon">🗺️</span>
+        <span>Carte<br>du rucher</span>
       </button>
     </div>
 
@@ -2268,13 +2462,239 @@ function scan(){
   `;
 }
 
+function escapeHtml(value){
+  return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+
+
+function hashString(value){
+  let hash = 0;
+  String(value || "").split("").forEach(ch=>{ hash = ((hash << 5) - hash) + ch.charCodeAt(0); hash |= 0; });
+  return Math.abs(hash);
+}
+
+function colorForApiary(apiaryName, fallback=""){
+  const palettes = [
+    ["#b7e4c7", "#fef9c3"],
+    ["#a7f3d0", "#67e8f9"],
+    ["#fed7aa", "#fde68a"],
+    ["#ddd6fe", "#fbcfe8"],
+    ["#bfdbfe", "#c7d2fe"],
+    ["#fecaca", "#fef3c7"],
+    ["#bbf7d0", "#dcfce7"],
+    ["#e9d5ff", "#c4b5fd"]
+  ];
+  const key = apiaryName && apiaryName !== "Sans rucher" ? apiaryName : fallback;
+  return palettes[hashString(key) % palettes.length];
+}
+
+function apiaryNameForHive(h){
+  return String(h?.apiary || "").trim();
+}
+
+function knownApiaries(){
+  const names = new Set();
+  (state.apiaries || []).forEach(a=>{
+    const name = String(a?.name || a || "").trim();
+    if(name) names.add(name);
+  });
+  state.hives.forEach(h=>{
+    const name = apiaryNameForHive(h);
+    if(name) names.add(name);
+  });
+  return Array.from(names).sort((a,b)=>a.localeCompare(b,"fr"));
+}
+
+function apiarySelectOptions(selected=""){
+  const names = knownApiaries();
+  return `<option value="">— Sans rucher —</option>` + names.map(n=>`<option value="${escapeHtml(n)}" ${n===selected?'selected':''}>${escapeHtml(n)}</option>`).join("");
+}
+
+function createApiary(){
+  const name = prompt("Nom du nouveau rucher :", "");
+  const clean = String(name || "").trim();
+  if(!clean){ showToast("Création du rucher annulée"); return; }
+  if(!state.apiaries) state.apiaries = [];
+  if(!knownApiaries().includes(clean)) state.apiaries.push({name:clean, createdAt:todayISO ? todayISO() : new Date().toISOString().slice(0,10)});
+  saveState();
+  showToast("✓ Rucher créé : " + clean);
+  showPage("ruchers");
+}
+
+function changeHiveApiary(code){
+  openApiaryPicker(code);
+}
+
+function openApiaryPicker(code){
+  const h = state.hives.find(x=>x.code===code);
+  if(!h) return;
+  const current = apiaryNameForHive(h);
+  const names = knownApiaries().filter(n=>n !== "Sans rucher");
+  const colorsNone = colorForApiary("Sans rucher", h.code);
+  const choices = [
+    `<label class="apiary-choice ${!current?'selected':''}"><input type="radio" name="apiaryPick" value="" ${!current?'checked':''}><span><span class="apiary-color-dot" style="--apiary-c1:${colorsNone[0]};--apiary-c2:${colorsNone[1]}"></span>Sans rucher</span></label>`,
+    ...names.map(n=>{
+      const c = colorForApiary(n);
+      return `<label class="apiary-choice ${current===n?'selected':''}"><input type="radio" name="apiaryPick" value="${escapeHtml(n)}" ${current===n?'checked':''}><span><span class="apiary-color-dot" style="--apiary-c1:${c[0]};--apiary-c2:${c[1]}"></span>${escapeHtml(n)}</span></label>`;
+    })
+  ].join("");
+  const modal = document.createElement("div");
+  modal.className = "apiary-picker-backdrop";
+  modal.id = "apiaryPickerModal";
+  modal.innerHTML = `
+    <div class="apiary-picker-panel" role="dialog" aria-modal="true">
+      <div class="apiary-picker-title">Choisir le rucher</div>
+      <div class="apiary-picker-sub">Ruche : <strong>${escapeHtml(h.name || h.code)}</strong><br>Choisis un rucher existant ou laisse la ruche sans rucher.</div>
+      <div class="apiary-choice-list">${choices}</div>
+      <div class="apiary-new-inline">
+        <input id="apiaryNewName" placeholder="Nouveau rucher…">
+        <button class="assist-btn secondary" onclick="addApiaryChoice()">Créer</button>
+      </div>
+      <div class="apiary-picker-actions">
+        <button class="assist-btn secondary" onclick="closeApiaryPicker()">Annuler</button>
+        <button class="assist-btn" onclick="saveApiaryChoice('${escapeHtml(code)}')">Valider</button>
+      </div>
+    </div>`;
+  modal.addEventListener("click", e=>{ if(e.target === modal) closeApiaryPicker(); });
+  document.body.appendChild(modal);
+  modal.querySelectorAll('input[name="apiaryPick"]').forEach(input=>input.addEventListener("change", refreshApiaryChoiceSelection));
+}
+
+function refreshApiaryChoiceSelection(){
+  document.querySelectorAll(".apiary-choice").forEach(label=>{
+    const input = label.querySelector('input[name="apiaryPick"]');
+    label.classList.toggle("selected", !!input?.checked);
+  });
+}
+
+function closeApiaryPicker(){
+  document.getElementById("apiaryPickerModal")?.remove();
+}
+
+function addApiaryChoice(){
+  const input = document.getElementById("apiaryNewName");
+  const clean = String(input?.value || "").trim();
+  if(!clean){ showToast("Indique un nom de rucher"); return; }
+  if(!state.apiaries) state.apiaries = [];
+  if(!knownApiaries().includes(clean)) state.apiaries.push({name:clean, createdAt:todayISO ? todayISO() : new Date().toISOString().slice(0,10)});
+  saveState();
+  const modal = document.getElementById("apiaryPickerModal");
+  if(!modal) return;
+  const list = modal.querySelector(".apiary-choice-list");
+  const c = colorForApiary(clean);
+  const label = document.createElement("label");
+  label.className = "apiary-choice selected";
+  label.innerHTML = `<input type="radio" name="apiaryPick" value="${escapeHtml(clean)}" checked><span><span class="apiary-color-dot" style="--apiary-c1:${c[0]};--apiary-c2:${c[1]}"></span>${escapeHtml(clean)}</span>`;
+  list?.querySelectorAll('input[name="apiaryPick"]').forEach(i=>i.checked=false);
+  list?.appendChild(label);
+  label.querySelector('input[name="apiaryPick"]')?.addEventListener("change", refreshApiaryChoiceSelection);
+  refreshApiaryChoiceSelection();
+  input.value = "";
+}
+
+function saveApiaryChoice(code){
+  const h = state.hives.find(x=>x.code===code);
+  if(!h) return;
+  const selected = document.querySelector('input[name="apiaryPick"]:checked');
+  const clean = String(selected?.value || "").trim();
+  h.apiary = clean;
+  saveState();
+  closeApiaryPicker();
+  showToast(clean ? "✓ Ruche déplacée dans " + clean : "✓ Ruche sans rucher");
+  openHive(code);
+}
+
+function deleteApiary(name, event){
+  if(event) event.stopPropagation();
+  const clean = String(name || "").trim();
+  if(!clean || clean === "Sans rucher") return;
+  const count = state.hives.filter(h=>apiaryNameForHive(h) === clean).length;
+  const message = count
+    ? `Supprimer le rucher "${clean}" ?\n\nLes ${count} ruche${count>1?'s':''} de ce rucher passeront en "Sans rucher".`
+    : `Supprimer le rucher "${clean}" ?`;
+  if(!confirm(message)) return;
+  state.hives.forEach(h=>{ if(apiaryNameForHive(h) === clean) h.apiary = ""; });
+  state.apiaries = (state.apiaries || []).filter(a=>String(a?.name || a || "").trim() !== clean);
+  if(getSelectedApiaryFilter() === clean) setSelectedApiaryFilter("");
+  saveState();
+  showToast("✓ Rucher supprimé");
+  showPage("ruchers");
+}
+
+function apiaryStats(){
+  const groups = {};
+  knownApiaries().forEach(name=>{ groups[name] = {name, count:0, alerts:0, honey:0, withGps:0}; });
+  state.hives.forEach(h=>{
+    const name = apiaryNameForHive(h) || "Sans rucher";
+    if(!groups[name]) groups[name] = {name, count:0, alerts:0, honey:0, withGps:0};
+    groups[name].count += 1;
+    groups[name].alerts += Number(h.alerts || 0);
+    groups[name].honey += Number(h.honey || 0);
+    if(getHiveGps(h)) groups[name].withGps += 1;
+  });
+  return Object.values(groups).sort((a,b)=>{
+    if(a.name === "Sans rucher") return 1;
+    if(b.name === "Sans rucher") return -1;
+    return a.name.localeCompare(b.name, "fr");
+  });
+}
+
+function getSelectedApiaryFilter(){
+  return window.__selectedApiaryFilter || "";
+}
+
+function setSelectedApiaryFilter(name){
+  window.__selectedApiaryFilter = String(name || "");
+}
+
+function apiaryDashboardHTML(){
+  const stats = apiaryStats();
+  const selected = getSelectedApiaryFilter();
+  const total = state.hives.length;
+  const selectedStats = selected ? stats.find(r=>r.name===selected) : null;
+  const title = selectedStats
+    ? `${escapeHtml(selectedStats.name)} · ${selectedStats.count} ruche${selectedStats.count>1?'s':''}`
+    : `Toutes les ruches · ${total} ruche${total>1?'s':''}`;
+  if(!stats.length){
+    return `<div class="notice">Aucun rucher pour le moment. Crée un rucher, puis associe-y les ruches que tu veux.</div>`;
+  }
+  return `
+    <div class="apiary-toolbar">
+      <div class="apiary-filter-title">Affichage : <strong id="apiaryFilterLabel">${title}</strong></div>
+      <button id="apiaryClearBtn" class="apiary-clear-btn ${selected ? '' : 'active'}" onclick="clearRuchersApiaryFilter()">Tout voir</button>
+    </div>
+    <div class="apiary-dashboard">
+      ${stats.map(r=>`
+        <button class="apiary-card ${selected===r.name?'active':''}" style="--apiary-c1:${colorForApiary(r.name)[0]};--apiary-c2:${colorForApiary(r.name)[1]}" onclick="filterRuchersByApiary(${JSON.stringify(r.name).replace(/"/g,'&quot;')})">
+          <div class="apiary-card-title"><span class="apiary-color-dot" style="--apiary-c1:${colorForApiary(r.name)[0]};--apiary-c2:${colorForApiary(r.name)[1]}"></span>${escapeHtml(r.name)} <span class="apiary-card-count">${r.count}</span></div>
+          <div class="apiary-card-meta">${r.alerts} alerte${r.alerts>1?'s':''} · GPS ${r.withGps}/${r.count}</div>
+          <div class="apiary-card-meta">Récolte : ${r.honey} kg</div>
+          ${r.name !== "Sans rucher" ? `<div class="apiary-card-actions"><span class="apiary-delete-btn" onclick="deleteApiary(${JSON.stringify(r.name).replace(/"/g,'&quot;')}, event)">Supprimer</span></div>` : ""}
+        </button>`).join("")}
+    </div>`;
+}
+
+function filterRuchersByApiary(name){
+  setSelectedApiaryFilter(name);
+  renderRuchers();
+}
+
+function clearRuchersApiaryFilter(){
+  setSelectedApiaryFilter("");
+  const input = document.getElementById("ruchersSearch");
+  if(input) input.value = "";
+  renderRuchers();
+}
+
 function ruchers(){
   return `
     <section>
       <div class="section-head">
         <div class="section-title">Toutes les ruches</div>
-        <button class="see-all" onclick="showPage('newHive')">+ Ajouter</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="see-all" onclick="createApiary()">+ Créer un rucher</button><button class="see-all" onclick="showPage('newHive')">+ Ajouter une ruche</button></div>
       </div>
+      ${apiaryDashboardHTML()}
       <div class="home-search" style="margin-bottom:18px">
         <span>🔍</span>
         <input id="ruchersSearch" placeholder="Rechercher par nom, code, rucher…" oninput="renderRuchers()">
@@ -2289,11 +2709,27 @@ function ruchers(){
 
 function renderRuchers(){
   const q = (document.getElementById("ruchersSearch")?.value || "").toLowerCase().trim();
-  const list = state.hives.filter(h => [h.name, h.code, h.apiary, h.status].join(" ").toLowerCase().includes(q));
+  const selected = getSelectedApiaryFilter();
+  const list = state.hives.filter(h => {
+    const apiary = apiaryNameForHive(h) || "Sans rucher";
+    const matchApiary = !selected || apiary === selected;
+    const matchSearch = !q || [h.name, h.code, apiary, h.status].join(" ").toLowerCase().includes(q);
+    return matchApiary && matchSearch;
+  });
   const grid = document.getElementById("ruchersGrid");
   const empty = document.getElementById("ruchersEmpty");
+  const label = document.getElementById("apiaryFilterLabel");
+  const clearBtn = document.getElementById("apiaryClearBtn");
   if(grid) grid.innerHTML = list.map(hiveCard).join("");
   if(empty) empty.style.display = list.length ? "none" : "block";
+  if(label){
+    label.textContent = selected ? `${selected} · ${list.length} ruche${list.length>1?'s':''}` : `Toutes les ruches · ${state.hives.length} ruche${state.hives.length>1?'s':''}`;
+  }
+  if(clearBtn) clearBtn.classList.toggle("active", !selected);
+  document.querySelectorAll(".apiary-card").forEach(btn=>{
+    const title = btn.querySelector(".apiary-card-title")?.textContent || "";
+    btn.classList.toggle("active", !!selected && title.includes(selected));
+  });
 }
 
 function newHive(){
@@ -2328,8 +2764,8 @@ function newHive(){
       </div>
 
       <div class="field"><label>Nom</label><input id="newHiveName" placeholder="Ex : Lavande, Essaim-01…"></div>
-      <div class="field"><label>Rucher</label><input id="newHiveApiary" placeholder="Ex : Rucher du Verger"></div>
-      <div class="field"><label>Emplacement</label><input placeholder="Ex : Ligne A · Place 4"></div>
+      <div class="field"><label>Rucher</label><select id="newHiveApiary">${apiarySelectOptions()}</select><div class="mini-help">Facultatif : une ruche peut rester sans rucher. Crée d’abord un rucher depuis l’écran Ruchers si besoin.</div></div>
+      <div class="field"><label>Emplacement</label><input id="newHiveLocation" placeholder="Ex : Ligne A · Place 4"></div>
 
       <div class="assist-card">
         <div class="assist-row">
@@ -4044,7 +4480,8 @@ function hiveSectionContent(h){
       <h2 class="detail-title" style="margin:0">${isRuchette ? 'Ruchette' : 'Ruche'} ${h.name}</h2>
       ${isRuchette ? '<span class="ruchette-badge">🪣 Ruchette</span>' : ''}
     </div>
-    <div class="detail-sub">${h.apiary} · ${h.code}</div>
+    <div class="detail-sub">${apiaryNameForHive(h) || "Sans rucher"} · ${h.code}</div>
+    <button class="assist-btn secondary" style="margin:0 0 14px" onclick="changeHiveApiary('${h.code}')">📍 Choisir / changer le rucher</button>
     <div class="info-grid">
       ${statusScoreHTML(h)}
       ${infoBox("Dernière visite", h.date)}
@@ -4463,6 +4900,11 @@ function normalizeHives(){
   state.alertSettings = getAlertSettings();
   if(!state.complianceDocs) state.complianceDocs = {};
   if(!Array.isArray(state.hives)) state.hives = [];
+  if(!Array.isArray(state.apiaries)) state.apiaries = [];
+  state.apiaries = state.apiaries
+    .map(a => typeof a === "string" ? {name:a} : a)
+    .filter(a => a && String(a.name || "").trim())
+    .map(a => ({...a, name:String(a.name || "").trim()}));
   state.hives.forEach(h=>{
     if(!h.visites) h.visites = [];
     if(!h.reines) h.reines = [];
@@ -4478,13 +4920,14 @@ function normalizeHives(){
     if(!h.documents) h.documents = [];
     if(typeof h.alerts !== "number") h.alerts = Number(h.alerts || 0);
     if(!h.status) h.status = "Bonne activité";
+    if(h.apiary === "Nouveau rucher") h.apiary = "";
   });
 }
 
 function storageState(mode="full"){
   const copy = JSON.parse(JSON.stringify(state));
   copy.savedAt = new Date().toISOString();
-  copy.appVersion = "v35";
+  copy.appVersion = APP_VERSION;
 
   const stripPhotos = mode === true || mode === "light" || mode === "tiny";
   const stripDocuments = mode === "tiny";
@@ -4588,6 +5031,7 @@ function saveState(){
 function mergeLoadedState(saved){
   if(!saved || typeof saved !== "object") return false;
   if(Array.isArray(saved.hives)) state.hives = saved.hives;
+  if(Array.isArray(saved.apiaries)) state.apiaries = saved.apiaries;
   if(saved.profil) state.profil = saved.profil;
   if(saved.alertSettings) state.alertSettings = {...getAlertSettings(), ...saved.alertSettings};
   if(typeof saved.onboardingDone === "boolean") state.onboardingDone = saved.onboardingDone;
@@ -4659,7 +5103,7 @@ function fakeSave(label){
 function normalizeStateForExport(inputState, includeHeavyFiles=false){
   const copy = JSON.parse(JSON.stringify(inputState || state));
   copy.exportedAt = new Date().toISOString();
-  copy.appVersion = "v35";
+  copy.appVersion = APP_VERSION;
 
   if(!includeHeavyFiles){
     if(Array.isArray(copy.hives)){
@@ -4742,13 +5186,29 @@ function importData(input){
   reader.onload = e => {
     try{
       const data = JSON.parse(e.target.result);
-      if(data.hives) state.hives = data.hives;
-      if(data.profil) state.profil = data.profil;
+      if(!data || typeof data !== "object" || !Array.isArray(data.hives)){
+        throw new Error("Format Mes Abeilles invalide");
+      }
+
+      // Import complet : on restaure les ruches, le profil, la conformité et les réglages
+      // sans écraser les valeurs par défaut utiles absentes des anciens exports.
+      state.hives = data.hives;
+      state.profil = data.profil || {};
+      state.complianceDocs = data.complianceDocs || {};
+      state.alertSettings = {...getAlertSettings(), ...(data.alertSettings || {})};
+      state.onboardingDone = typeof data.onboardingDone === "boolean" ? data.onboardingDone : state.onboardingDone;
+      state.calendarPromptDone = typeof data.calendarPromptDone === "boolean" ? data.calendarPromptDone : state.calendarPromptDone;
+      state.hiveTourDone = typeof data.hiveTourDone === "boolean" ? data.hiveTourDone : state.hiveTourDone;
+
+      normalizeHives();
       saveState();
       showPage("home");
       showToast("✓ Données importées");
     } catch(err){
+      console.warn("[Mes Abeilles] import invalide", err);
       alert("Fichier invalide. Vérifie qu'il s'agit bien d'un export Mes Abeilles.");
+    } finally {
+      if(input) input.value = "";
     }
   };
   reader.readAsText(file);
@@ -5434,13 +5894,14 @@ function updateMapLink(targetPrefix){
 function createHiveDemo(){
   const name   = document.getElementById("newHiveName")?.value || "Nouvelle";
   const code   = document.getElementById("newHiveQr")?.value || nextHiveCode();
-  const apiary = document.getElementById("newHiveApiary")?.value || "Nouveau rucher";
+  const apiary = (document.getElementById("newHiveApiary")?.value || "").trim();
   const type   = document.getElementById("newHiveType")?.value || "ruche";
   const gps    = document.getElementById("newHiveGps")?.value.trim() || "";
+  const location = document.getElementById("newHiveLocation")?.value.trim() || "";
   const materialType = type === "ruchette" ? "Ruchette" : (document.getElementById("newHiveMaterialType")?.value || "Dadant");
   const materialFrames = type === "ruchette" ? "5 cadres" : (document.getElementById("newHiveFrames")?.value || "10");
   state.hives.push({
-    code, name, apiary, type, gps,
+    code, name, apiary, type, gps, location,
     status: type === "ruchette" ? "En cours d'établissement" : "Bonne activité",
     date: new Date().toLocaleDateString("fr-FR"),
     theme: type === "ruchette" ? "lavender" : "acacia",
@@ -5568,10 +6029,13 @@ function recomputeAutomaticAlerts(notify=false){
 }
 
 function getHiveGps(h){
-  const raw = h.gps || h.coords || h.locationGps || "";
+  const raw = h?.gps || h?.coords || h?.locationGps || h?.apiaryGps || h?.apiaryLocation || "";
   const m = String(raw).match(/(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)/);
   if(!m) return null;
-  return {lat:Number(m[1]), lng:Number(m[2])};
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  if(!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return {lat, lng, lon:lng};
 }
 
 async function refreshWeatherAlerts(force=false){
@@ -5959,15 +6423,28 @@ function conformiteCardsByProfil(type){
 /* ── Splash screen ───────────────────────────────── */
 function splashFinish(){
   const sp = document.getElementById("splash");
-  sp.classList.add("out");
-  setTimeout(()=>{ sp.style.display="none"; }, 500);
-  state.onboardingDone = true;
-  saveState();
-  showPage("home");
-  // Lancer le tour guidé après que la page soit rendue
-  setTimeout(coachStart, 400);
-  setTimeout(()=>showCalendarOnboarding(false), 900);
+  if(sp){
+    sp.classList.add("out");
+    // Sécurité Live Server / mobile : on masque immédiatement le splash même si une erreur survient ensuite.
+    sp.style.pointerEvents = "none";
+    setTimeout(()=>{ sp.style.display = "none"; }, 250);
+  }
+  try{
+    state.onboardingDone = true;
+    saveState();
+  }catch(e){
+    console.warn("[Mes Abeilles] Impossible de sauvegarder l'onboarding", e);
+  }
+  try{
+    showPage("home");
+  }catch(e){
+    console.error("[Mes Abeilles] Erreur affichage accueil", e);
+  }
+  // Lancer les aides sans bloquer l'entrée dans l'application.
+  setTimeout(()=>{ try{ coachStart(); }catch(e){ console.warn("[Mes Abeilles] Tour guidé ignoré", e); } }, 400);
+  setTimeout(()=>{ try{ showCalendarOnboarding(false); }catch(e){ console.warn("[Mes Abeilles] Aide calendrier ignorée", e); } }, 900);
 }
+window.splashFinish = splashFinish;
 
 /* ── Coach marks — tour guidé ────────────────────── */
 const COACH_STEPS = [
@@ -6418,6 +6895,155 @@ function guideBanner(){
   return "";
 }
 
+// ── CARTE GLOBALE ──────────────────────────────────────────────────
+// Palette de couleurs pour distinguer les ruchers
+const MAP_APIARY_COLORS = [
+  "#ff7a18","#0ea5e9","#16a34a","#a855f7","#ef4444",
+  "#f59e0b","#10b981","#3b82f6","#ec4899","#84cc16"
+];
+let _mapApiaryColorCache = {};
+
+function mapColorForApiary(name){
+  const key = String(name || "Sans rucher").trim();
+  if(!_mapApiaryColorCache[key]){
+    const all = knownApiaries();
+    const idx = all.indexOf(key);
+    _mapApiaryColorCache[key] = MAP_APIARY_COLORS[(idx < 0 ? 0 : idx) % MAP_APIARY_COLORS.length];
+  }
+  return _mapApiaryColorCache[key];
+}
+
+function mapGlobalPage(){
+  const apiaries = knownApiaries();
+  const legendHTML = apiaries.length
+    ? apiaries.map(a => {
+        const c = mapColorForApiary(a);
+        return `<div class="map-legend-item"><div class="map-legend-dot" style="background:${c}"></div>${escapeHtml(a)}</div>`;
+      }).join("") + `<div class="map-legend-item"><div class="map-legend-dot" style="background:#94a3b8"></div>Sans rucher</div>`
+    : "";
+
+  const hivesWithGps = state.hives.filter(h => getHiveGps(h));
+  const noGpsCount = state.hives.length - hivesWithGps.length;
+
+  return `
+    <section class="panel" style="padding-top:0">
+      <div class="map-global-wrap">
+        <div id="globalMap"></div>
+      </div>
+      ${legendHTML ? `<div class="map-legend">${legendHTML}</div>` : ""}
+      ${noGpsCount > 0 ? `
+        <div class="map-no-gps">
+          <strong>${noGpsCount} ruche${noGpsCount > 1 ? "s" : ""} sans coordonnées GPS</strong> —
+          ouvre la fiche ruche et enregistre la position GPS pour l'afficher sur la carte.
+        </div>` : ""}
+    </section>
+  `;
+}
+
+let _globalMapInstance = null;
+
+function initGlobalMap(){
+  // Nettoyer ancienne instance si on revient sur la page
+  if(_globalMapInstance){ _globalMapInstance.remove(); _globalMapInstance = null; }
+
+  const el = document.getElementById("globalMap");
+  if(!el || typeof L === "undefined") return;
+
+  const hivesWithGps = state.hives.map(h => ({h, gps:getHiveGps(h)})).filter(x => x.gps);
+
+  // Centre par défaut : France
+  let center = [46.6, 2.5];
+  let zoom = 6;
+
+  if(hivesWithGps.length === 1){
+    center = [hivesWithGps[0].gps.lat, hivesWithGps[0].gps.lon];
+    zoom = 14;
+  } else if(hivesWithGps.length > 1){
+    const lats = hivesWithGps.map(x => x.gps.lat);
+    const lons = hivesWithGps.map(x => x.gps.lon);
+    center = [(Math.min(...lats)+Math.max(...lats))/2, (Math.min(...lons)+Math.max(...lons))/2];
+    zoom = 10;
+  }
+
+  const map = L.map("globalMap",{
+    center, zoom,
+    zoomControl:true,
+    attributionControl:true
+  });
+  _globalMapInstance = map;
+
+  // ── Clé Maptiler ──
+  const MAPTILER_KEY = "56fIuJGnK2IeyLMR2DFY";
+
+  L.tileLayer(`https://api.maptiler.com/maps/outdoor-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,{
+    attribution:'© <a href="https://www.maptiler.com">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom:19,
+    tileSize:256
+  }).addTo(map);
+
+  // Forcer Leaflet à recalculer la taille du conteneur (évite la carte blanche)
+  setTimeout(()=>{ map.invalidateSize(true); }, 100);
+  setTimeout(()=>{ map.invalidateSize(true); }, 400);
+
+  if(hivesWithGps.length === 0){
+    // Pas de GPS : on affiche juste la carte centrée sur la France
+    return;
+  }
+
+  // Créer les marqueurs
+  hivesWithGps.forEach(({h, gps}) => {
+    const apiaryName = apiaryNameForHive(h) || "Sans rucher";
+    const color = mapColorForApiary(apiaryName);
+
+    // Marqueur SVG coloré
+    const svgIcon = L.divIcon({
+      className:"",
+      html:`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42">
+        <path d="M16 0C7.16 0 0 7.16 0 16c0 11.5 16 26 16 26S32 27.5 32 16C32 7.16 24.84 0 16 0z" fill="${color}" stroke="#fff" stroke-width="2"/>
+        <text x="16" y="21" text-anchor="middle" font-size="14" font-family="Inter,system-ui" fill="#fff" font-weight="800">🐝</text>
+      </svg>`,
+      iconSize:[32,42],
+      iconAnchor:[16,42],
+      popupAnchor:[0,-40]
+    });
+
+    // Données popup
+    const lastVisit = h.date || "—";
+    const ns = nextVisitStatus(h);
+    let nextLabel = "—";
+    let statusClass = "";
+    if(ns.next){
+      nextLabel = ns.due ? "À visiter maintenant !" : `Dans ${ns.daysLeft}j`;
+      statusClass = ns.due ? "warn" : "ok";
+    }
+    const warnCount = Number(h.alerts) || 0;
+    const statusText = h.status || latestVisitScore(h).status.label;
+
+    const popupHTML = `
+      <div class="bee-popup">
+        <div class="bee-popup-name">${escapeHtml(h.name || h.code)}</div>
+        <div class="bee-popup-apiary">${escapeHtml(apiaryName)} · ${h.code}</div>
+        <div class="bee-popup-status ${statusClass}">${statusText}</div>
+        <div class="bee-popup-row">📅 Dernière visite : <strong>${lastVisit}</strong></div>
+        <div class="bee-popup-row">🔜 Prochaine : <strong>${nextLabel}</strong></div>
+        ${warnCount > 0 ? `<div class="bee-popup-row">⚠️ <strong>${warnCount} alerte${warnCount>1?"s":""}</strong></div>` : ""}
+        <button class="bee-popup-btn" onclick="openHive('${h.code}')">Voir la fiche →</button>
+      </div>
+    `;
+
+    L.marker([gps.lat, gps.lon], {icon:svgIcon})
+      .addTo(map)
+      .bindPopup(popupHTML, {maxWidth:240, minWidth:200});
+  });
+
+  // Auto-fit si plusieurs marqueurs
+  if(hivesWithGps.length > 1){
+    const bounds = L.latLngBounds(hivesWithGps.map(x => [x.gps.lat, x.gps.lon]));
+    map.fitBounds(bounds, {padding:[40,40]});
+  }
+}
+// ───────────────────────────────────────────────────────────────────
+
 function showPage(page){
   const previousPage = state.page;
   if(previousPage === "scan" && page !== "scan") stopQrScanner();
@@ -6426,6 +7052,12 @@ function showPage(page){
   if(qrRow) qrRow.style.display = "none";
   // Masquer le bouton aide ruche quand on quitte une fiche
   document.getElementById("hiveHelpBtn")?.classList.remove("visible");
+  // Leaflet a besoin que .phone ne soit pas overflow:hidden
+  const phoneEl = document.querySelector(".phone");
+  if(phoneEl){
+    if(page === "mapGlobal") phoneEl.style.overflow = "visible";
+    else phoneEl.style.overflow = "";
+  }
   setNav(page);
   let html = "";
   if(page === "home"){ setHero("", "", false); html = home(); }
@@ -6435,13 +7067,18 @@ function showPage(page){
   if(page === "alerts"){ setHero("Alertes", "Actions à traiter", true); html = alerts(); }
   if(page === "admin"){ setHero("Administration", "Profil apiculteur", true); html = admin(); }
   if(page === "menu"){ setHero("Menu", "Navigation", true); html = menu(); }
+  if(page === "mapGlobal"){ setHero("Carte", "Tous tes ruchers sur la carte", true); html = mapGlobalPage(); }
   document.getElementById("content").innerHTML = html;
   if(page === "newHive") setTimeout(refreshNewHiveQr, 30);
+  if(page === "mapGlobal") setTimeout(initGlobalMap, 150);
   updateStats();
 }
 
 function openHive(code){
   stopQrScanner();
+  // Remettre overflow normal si on venait de la carte
+  const phoneEl = document.querySelector(".phone");
+  if(phoneEl) phoneEl.style.overflow = "";
   const h = state.hives.find(x=>x.code===code);
   if(!h){
     alert("Ruche introuvable : " + code);
@@ -6457,7 +7094,7 @@ function openHive(code){
   document.getElementById("pageHero").classList.add("hidden");
   document.getElementById("heroHiveQrRow").style.display = "flex";
   document.getElementById("heroHiveTitle").textContent = "Ruche " + h.name;
-  document.getElementById("heroHiveSubtitle").textContent = h.apiary;
+  document.getElementById("heroHiveSubtitle").textContent = apiaryNameForHive(h) || "Sans rucher";
   document.getElementById("heroQrCode").textContent = h.code;
   document.getElementById("content").innerHTML = hiveDetail(code);
   drawAllQr(code);
@@ -6613,6 +7250,15 @@ function scanDemo(){
   openHive(code);
 }
 
+// Sécurité : le bouton de bienvenue doit fonctionner même si l'attribut onclick est bloqué ou ignoré.
+document.addEventListener("click", (event)=>{
+  const btn = event.target.closest && event.target.closest("#splashDiscoverBtn");
+  if(btn){
+    event.preventDefault();
+    splashFinish();
+  }
+});
+
 initApp();
 window.addEventListener("load", () => {
   const h = state.currentHive || state.hives[0];
@@ -6622,6 +7268,12 @@ window.addEventListener("load", () => {
 /* ── Service Worker PWA ─────────────────────────── */
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
+    const isLocal = ['localhost','127.0.0.1',''].includes(location.hostname);
+    if(isLocal){
+      navigator.serviceWorker.getRegistrations?.().then(regs => regs.forEach(r => r.unregister()));
+      console.log('[PWA] Service Worker désactivé en test local Live Server');
+      return;
+    }
     navigator.serviceWorker.register('./sw.js')
       .then(reg => console.log('[PWA] Service Worker enregistré', reg.scope))
       .catch(err => console.warn('[PWA] SW erreur:', err));
