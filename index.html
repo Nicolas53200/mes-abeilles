@@ -2216,9 +2216,13 @@
 
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet et jsQR ne servent qu'à la carte et au scanner, jamais au
+       chargement : différés pour libérer le premier rendu. Leurs appels sont
+       déjà protégés (typeof L === "undefined", window.jsQR).
+       QRCode reste synchrone : drawAllQr() peut s'exécuter dès l'ouverture. -->
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 </head>
 <body>
   <div class="print-only">
@@ -6347,12 +6351,14 @@ async function refreshWeatherAlerts(force=false){
   const today = new Date().toISOString().slice(0,10);
   if(!force && s.lastWeatherCheck === today) return;
 
+  // Une requête par ruche, lancées ensemble : la vérification prend le temps
+  // de la plus lente, plus la somme de toutes.
   let checked = 0;
-  for(const h of state.hives){
+  await Promise.all(state.hives.map(async h => {
     const gps = getHiveGps(h);
     h.weatherAlerts = [];
     h.weatherSummary = "";
-    if(!gps) continue;
+    if(!gps) return;
     checked++;
     try{
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${gps.lat}&longitude=${gps.lng}&hourly=temperature_2m,precipitation,wind_gusts_10m&forecast_days=2&timezone=auto`;
@@ -6379,7 +6385,7 @@ async function refreshWeatherAlerts(force=false){
     }catch(e){
       console.warn("[Mes Abeilles] météo", h.code, e);
     }
-  }
+  }));
 
   state.alertSettings = {...getAlertSettings(), lastWeatherCheck: today};
   recomputeAutomaticAlerts(true);
@@ -7473,10 +7479,23 @@ function stopQrScanner(){
   if(video) video.srcObject = null;
 }
 
+/* Le décodage tourne à ~15 images/s : inutile de le faire à la fréquence
+   d'affichage (~60), c'est quatre fois moins de travail caméra et CPU
+   pour la même réactivité perçue. */
+const QR_SCAN_INTERVAL_MS = 66;
+let qrScanLastDecode = 0;
+
 async function qrScanLoop(){
   const video = document.getElementById("qrVideo");
   const canvas = document.getElementById("qrScanCanvas");
   if(!video || !canvas || !qrScanStream) return;
+
+  const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
+  if(now - qrScanLastDecode < QR_SCAN_INTERVAL_MS){
+    qrScanRaf = requestAnimationFrame(qrScanLoop);
+    return;
+  }
+  qrScanLastDecode = now;
 
   try{
     if(video.readyState >= 2){
@@ -7573,7 +7592,13 @@ if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
     const isLocal = ['localhost','127.0.0.1',''].includes(location.hostname);
     if(isLocal){
-      navigator.serviceWorker.getRegistrations?.().then(regs => regs.forEach(r => r.unregister()));
+      // Sur file:// l'origine est "null" et l'API lève une SecurityError :
+      // on protège l'appel pour que l'ouverture directe du fichier reste propre.
+      try{
+        navigator.serviceWorker.getRegistrations?.()
+          .then(regs => regs.forEach(r => r.unregister()))
+          .catch(() => {});
+      }catch(e){}
       console.log('[PWA] Service Worker désactivé en test local Live Server');
       return;
     }
