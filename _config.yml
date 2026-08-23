@@ -1,8 +1,14 @@
 # Configuration GitHub Pages
-# Désactive le traitement Jekyll pour servir les fichiers tels quels
-exclude:
-  - sw.js
-  - manifest.json
+#
+# C'est le fichier .nojekyll à la racine qui désactive le traitement Jekyll :
+# les fichiers sont alors servis tels quels et ce _config.yml est ignoré.
+#
+# Ne pas remettre de directive « exclude » ici. Elle ne désactive pas Jekyll,
+# elle RETIRE les fichiers listés du site publié. Une version précédente y
+# plaçait sw.js et manifest.json — soit exactement les deux fichiers dont
+# l'application a besoin pour s'installer et fonctionner hors connexion.
+# Sans effet tant que .nojekyll est présent, mais l'application aurait cessé
+# silencieusement d'être installable le jour où il aurait disparu.
 
 # Encodage UTF-8 pour les emojis
 encoding: utf-8

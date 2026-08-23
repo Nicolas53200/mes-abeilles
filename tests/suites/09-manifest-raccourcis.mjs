@@ -8,6 +8,27 @@ import path from 'node:path';
 
 export default () => executerSuite('Manifest et raccourcis', async ({ page, origine, rapport, erreurs }) => {
 
+  rapport.section('Intégrité du déploiement GitHub Pages');
+  // Les fichiers dont dépend l'installation de la PWA doivent réellement
+  // être publiés. Une directive « exclude » dans _config.yml les retirerait
+  // du site — sans erreur, sans bruit.
+  rapport.verifier('.nojekyll présent (Jekyll désactivé)',
+    fs.existsSync(path.join(RACINE, '.nojekyll')));
+
+  const config = fs.existsSync(path.join(RACINE, '_config.yml'))
+    ? fs.readFileSync(path.join(RACINE, '_config.yml'), 'utf-8')
+    : '';
+  const lignesActives = config.split('\n').filter(l => !l.trim().startsWith('#'));
+  rapport.verifier('aucune directive exclude dans _config.yml',
+    !lignesActives.some(l => /^\s*exclude\s*:/.test(l)),
+    'exclude retirerait des fichiers du site publié');
+
+  for(const fichier of ['sw.js', 'manifest.json', 'index.html', 'icon192.png', 'icon512.png']){
+    rapport.verifier(`${fichier} présent et publiable`.padEnd(34),
+      fs.existsSync(path.join(RACINE, fichier))
+      && !lignesActives.some(l => l.includes(fichier)));
+  }
+
   rapport.section('Manifest');
   const manifest = JSON.parse(fs.readFileSync(path.join(RACINE, 'manifest.json'), 'utf-8'));
   for(const champ of ['name','short_name','start_url','scope','display','theme_color','background_color','lang','id']){
