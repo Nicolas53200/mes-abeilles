@@ -4064,10 +4064,16 @@ function saveModule(section){
   saveState();
   document.getElementById("content").innerHTML = hiveDetail(h.code);
   drawAllQr(h.code);
-  showToast("✓ " + sectionLabel(section) + " enregistré");
+  showToast("✓ " + moduleItemLabel(section) + " enregistré");
 }
 
-function sectionLabel(section){
+/* Libellé au singulier désignant UN enregistrement d'un module,
+   pour les messages du type "✓ Division enregistrée".
+   À ne pas confondre avec sectionLabel() (l. ~3344) qui donne le
+   libellé de navigation au pluriel. Les deux portaient le même nom :
+   cette définition masquait l'autre et le bouton retour affichait
+   "Élément" au lieu du nom de la section. */
+function moduleItemLabel(section){
   return {
     divisions:"Division",
     hausses:"Hausse",
