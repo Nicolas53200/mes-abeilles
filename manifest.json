@@ -3,14 +3,42 @@
   "short_name": "Mes Abeilles",
   "description": "Carnet de rucher numérique pour gérer ruches, visites, alertes, QR codes et conformité.",
   "start_url": "./index.html",
+  "id": "./index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#071225",
   "theme_color": "#071225",
   "orientation": "portrait-primary",
   "lang": "fr",
+  "dir": "ltr",
+  "categories": ["productivity", "utilities", "lifestyle"],
   "icons": [
-    {"src": "./icon192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-    {"src": "./icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+    {"src": "./icon192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "./icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "./icon192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+    {"src": "./icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {
+      "name": "Scanner une ruche",
+      "short_name": "Scanner",
+      "description": "Ouvre directement la caméra pour lire un QR code de ruche",
+      "url": "./index.html?page=scan",
+      "icons": [{"src": "./icon192.png", "sizes": "192x192", "type": "image/png"}]
+    },
+    {
+      "name": "Voir les alertes",
+      "short_name": "Alertes",
+      "description": "Visites en retard, météo et conformité à traiter",
+      "url": "./index.html?page=alerts",
+      "icons": [{"src": "./icon192.png", "sizes": "192x192", "type": "image/png"}]
+    },
+    {
+      "name": "Nouvelle ruche",
+      "short_name": "Ajouter",
+      "description": "Crée une ruche ou une ruchette",
+      "url": "./index.html?page=newHive",
+      "icons": [{"src": "./icon192.png", "sizes": "192x192", "type": "image/png"}]
+    }
   ]
 }

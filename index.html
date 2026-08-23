@@ -7264,15 +7264,35 @@ function hiveCoachEnd(){
   showToast("✓ Tu connais maintenant toutes les fonctions !");
 }
 
+/* Page demandée par l'URL, pour les raccourcis du manifest : un appui long
+   sur l'icône de l'app propose « Scanner », « Alertes », « Nouvelle ruche ».
+   Liste blanche stricte : toute autre valeur est ignorée. */
+const PAGES_RACCOURCIS = ["scan", "alerts", "newHive", "ruchers", "home", "admin"];
+
+function pageDemandeeParUrl(){
+  try{
+    const demandee = new URL(location.href).searchParams.get("page");
+    return PAGES_RACCOURCIS.includes(demandee) ? demandee : "";
+  }catch(e){
+    return "";
+  }
+}
+
 function initApp(){
   setupAlertEngine();
+  const raccourci = pageDemandeeParUrl();
+
   if(!state.onboardingDone){
-    // Splash visible, app masquée en arrière-plan
+    // Splash visible, app masquée en arrière-plan.
+    // L'accueil de départ prime sur le raccourci : mieux vaut ne pas
+    // déposer un nouvel utilisateur directement dans le scanner.
     showPage("home");
   } else {
     document.getElementById("splash").style.display = "none";
-    showPage("home");
-    setTimeout(()=>showCalendarOnboarding(false), 900);
+    showPage(raccourci || "home");
+    // L'invite calendrier n'a pas sa place quand l'utilisateur vient
+    // d'appuyer sur un raccourci pour une action précise.
+    if(!raccourci) setTimeout(()=>showCalendarOnboarding(false), 900);
   }
 }
 

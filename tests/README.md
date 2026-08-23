@@ -35,6 +35,7 @@ navigateur, il pilote celui que tu as déjà.
 | `06-mise-a-jour` | Les données de l'utilisateur survivent à une nouvelle version |
 | `07-validation-saisie` | SIRET (clé de Luhn), téléphone, e-mail — sans jamais bloquer |
 | `08-gps-ruche` | Formats de coordonnées, et les 3 clés lat/lng/lon attendues |
+| `09-manifest-raccourcis` | Les raccourcis PWA ouvrent réellement leur page |
 
 ## Pourquoi ces tests existent
 
