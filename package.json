@@ -1,0 +1,13 @@
+{
+  "name": "mes-abeilles",
+  "version": "36.2.0",
+  "description": "Carnet de rucher numérique — application web installable, données stockées sur l'appareil.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}
