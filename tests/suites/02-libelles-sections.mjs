@@ -35,4 +35,20 @@ export default () => executerSuite('Libellés de section', async ({ page, origin
 
   const repli = await page.evaluate(() => moduleItemLabel('section-inconnue'));
   rapport.verifier('repli conservé sur section inconnue', repli === 'Élément', `« ${repli} »`);
+
+  rapport.section('Accord en genre du message de confirmation');
+  for(const [module, attendu] of [
+    ['divisions',     '✓ Division enregistrée'],
+    ['hausses',       '✓ Hausse enregistrée'],
+    ['miel',          '✓ Récolte enregistrée'],
+    ['pesees',        '✓ Pesée enregistrée'],
+    ['transhumance',  '✓ Transhumance enregistrée'],
+    ['traitements',   '✓ Traitement enregistré'],
+    ['nourrissement', '✓ Nourrissement enregistré'],
+    ['materiel',      '✓ Matériel enregistré'],
+    ['inconnu',       '✓ Élément enregistré']
+  ]){
+    const obtenu = await page.evaluate(x => messageEnregistrement(x), module);
+    rapport.verifier(module.padEnd(14), obtenu === attendu, `« ${obtenu} »`);
+  }
 });

@@ -3306,14 +3306,14 @@ function admin(){
       </div>
 
 
-      <div class="field"><label>Prénom</label><input id="adminPrenom" value="${escapeHtml(p.prenom || "")}" placeholder="Ton prénom"></div>
-      <div class="field"><label>Nom</label><input id="adminNom" value="${escapeHtml(p.nom || "")}" placeholder="Ton nom"></div>
-      <div class="field"><label>Entreprise</label><input id="adminEntreprise" value="${escapeHtml(p.entreprise || "")}" placeholder="Ex : Rucher des Collines"></div>
-      <div class="field"><label>NAPI</label><input id="adminNapi" value="${escapeHtml(p.napi || "")}" placeholder="Numéro d'apiculteur"></div>
-      <div class="field"><label>SIRET</label><input id="adminSiret" value="${escapeHtml(p.siret || "")}" placeholder="Numéro SIRET"></div>
-      <div class="field"><label>Adresse</label><input id="adminAdresse" value="${escapeHtml(p.adresse || "")}" placeholder="Adresse de l'entreprise"></div>
-      <div class="field"><label>Téléphone</label><input id="adminTelephone" value="${escapeHtml(p.telephone || "")}" placeholder="Téléphone"></div>
-      <div class="field"><label>Email</label><input id="adminEmail" value="${escapeHtml(p.email || "")}" placeholder="Email"></div>
+      <div class="field"><label>Prénom</label><input id="adminPrenom" value="${escapeHtml(p.prenom || "")}" placeholder="Ton prénom" maxlength="60" autocomplete="given-name"></div>
+      <div class="field"><label>Nom</label><input id="adminNom" value="${escapeHtml(p.nom || "")}" placeholder="Ton nom" maxlength="60" autocomplete="family-name"></div>
+      <div class="field"><label>Entreprise</label><input id="adminEntreprise" value="${escapeHtml(p.entreprise || "")}" placeholder="Ex : Rucher des Collines" maxlength="120" autocomplete="organization"></div>
+      <div class="field"><label>NAPI</label><input id="adminNapi" value="${escapeHtml(p.napi || "")}" placeholder="Numéro d'apiculteur" inputmode="numeric" maxlength="20" autocomplete="off"></div>
+      <div class="field"><label>SIRET</label><input id="adminSiret" value="${escapeHtml(p.siret || "")}" placeholder="14 chiffres" inputmode="numeric" maxlength="17" autocomplete="off"></div>
+      <div class="field"><label>Adresse</label><input id="adminAdresse" value="${escapeHtml(p.adresse || "")}" placeholder="Adresse de l'entreprise" maxlength="200" autocomplete="street-address"></div>
+      <div class="field"><label>Téléphone</label><input id="adminTelephone" type="tel" value="${escapeHtml(p.telephone || "")}" placeholder="06 12 34 56 78" inputmode="tel" maxlength="20" autocomplete="tel"></div>
+      <div class="field"><label>Email</label><input id="adminEmail" type="email" value="${escapeHtml(p.email || "")}" placeholder="nom@exemple.fr" inputmode="email" maxlength="120" autocomplete="email"></div>
 
       <div class="field"><label>Logo</label>
         <input type="file" accept="image/*" id="adminLogo" class="file-hidden" onchange="onFileSelected('adminLogo','adminLogoLabel')">
@@ -3338,6 +3338,41 @@ function admin(){
     </section>
   `;
 }
+/* Contrôles de cohérence du profil.
+   Délibérément NON bloquants : sur le terrain, avec des gants, personne ne
+   doit se retrouver coincé par un champ mal formé. On enregistre toujours,
+   on signale simplement ce qui semble incorrect. */
+
+/* Clé de Luhn : détecte la grande majorité des fautes de frappe d'un SIRET. */
+function siretValide(valeur){
+  const chiffres = String(valeur || "").replace(/\s/g, "");
+  if(!/^\d{14}$/.test(chiffres)) return false;
+  let somme = 0;
+  for(let i = 0; i < 14; i++){
+    let n = Number(chiffres[i]);
+    // Un chiffre sur deux est doublé, en partant de la gauche pour 14 positions.
+    if(i % 2 === 0){ n *= 2; if(n > 9) n -= 9; }
+    somme += n;
+  }
+  return somme % 10 === 0;
+}
+
+function anomaliesProfil(profil){
+  const soucis = [];
+  const siret = String(profil.siret || "").replace(/\s/g, "");
+  const tel   = String(profil.telephone || "").replace(/[\s.\-]/g, "");
+  const mail  = String(profil.email || "").trim();
+  const napi  = String(profil.napi || "").trim();
+
+  if(siret && !/^\d{14}$/.test(siret))       soucis.push("le SIRET doit compter 14 chiffres");
+  else if(siret && !siretValide(siret))       soucis.push("le SIRET semble comporter une faute de frappe");
+  if(tel && !/^(\+\d{6,17}|\d{10})$/.test(tel)) soucis.push("le téléphone attend 10 chiffres, ou un indicatif +33…");
+  if(mail && !/^[^@\s]+@[^@\s.]+\.[^@\s]{2,}$/.test(mail)) soucis.push("l'adresse e-mail semble incomplète");
+  if(napi && !/^[\d\-/ ]{3,20}$/.test(napi)) soucis.push("le NAPI n'attend que des chiffres");
+
+  return soucis;
+}
+
 function saveAdmin(){
   if(!state.profil) state.profil = {};
   state.profil.prenom = document.getElementById("adminPrenom")?.value || "";
@@ -3352,8 +3387,21 @@ function saveAdmin(){
   if(logoInput && logoInput.files && logoInput.files[0]){
     state.profil.logoName = logoInput.files[0].name;
   }
+
+  // Espaces superflus retirés, valeur de l'utilisateur sinon conservée telle quelle.
+  ["prenom","nom","entreprise","napi","siret","adresse","telephone","email"].forEach(champ => {
+    if(typeof state.profil[champ] === "string") state.profil[champ] = state.profil[champ].trim();
+  });
+
   saveState();
-  showToast("✓ Administration enregistrée");
+
+  const soucis = anomaliesProfil(state.profil);
+  if(soucis.length){
+    // Enregistré quand même : on informe, on ne bloque pas.
+    showToast("✓ Enregistré · à vérifier : " + soucis[0]);
+  }else{
+    showToast("✓ Administration enregistrée");
+  }
   const hasHives = state.hives.length > 0;
   if(!hasHives){
     setTimeout(()=>{
@@ -4211,7 +4259,7 @@ function saveModule(section){
   saveState();
   document.getElementById("content").innerHTML = hiveDetail(h.code);
   drawAllQr(h.code);
-  showToast("✓ " + moduleItemLabel(section) + " enregistré");
+  showToast(messageEnregistrement(section));
 }
 
 /* Libellé au singulier désignant UN enregistrement d'un module,
@@ -4221,17 +4269,29 @@ function saveModule(section){
    cette définition masquait l'autre et le bouton retour affichait
    "Élément" au lieu du nom de la section. */
 function moduleItemLabel(section){
-  return {
-    divisions:"Division",
-    hausses:"Hausse",
-    miel:"Récolte",
-    traitements:"Traitement",
-    frelons:"Frelons",
-    nourrissement:"Nourrissement",
-    pesees:"Pesée",
-    transhumance:"Transhumance",
-    materiel:"Matériel"
-  }[section] || "Élément";
+  const entree = MODULE_ITEM_LABELS[section];
+  return entree ? entree.nom : "Élément";
+}
+
+/* Le genre accompagne le libellé : le message de confirmation accorde
+   "enregistré" / "enregistrée" au lieu de tout mettre au masculin. */
+const MODULE_ITEM_LABELS = {
+  divisions:     { nom:"Division",      genre:"f" },
+  hausses:       { nom:"Hausse",        genre:"f" },
+  miel:          { nom:"Récolte",       genre:"f" },
+  traitements:   { nom:"Traitement",    genre:"m" },
+  frelons:       { nom:"Frelons",       genre:"m" },
+  nourrissement: { nom:"Nourrissement", genre:"m" },
+  pesees:        { nom:"Pesée",         genre:"f" },
+  transhumance:  { nom:"Transhumance",  genre:"f" },
+  materiel:      { nom:"Matériel",      genre:"m" }
+};
+
+/* "✓ Division enregistrée", "✓ Traitement enregistré". */
+function messageEnregistrement(section){
+  const entree = MODULE_ITEM_LABELS[section];
+  if(!entree) return "✓ Élément enregistré";
+  return `✓ ${entree.nom} enregistré${entree.genre === "f" ? "e" : ""}`;
 }
 
 function moduleFormHeader(title){
@@ -5938,44 +5998,6 @@ async function printCustomQr(code, label){
 
 
 
-function getHiveGps(h){
-  if(!h) return null;
-  const candidates = [
-    h.gps,
-    h.location,
-    h.coords,
-    h.position,
-    h.geo,
-    h.geolocation,
-    h.apiaryGps,
-    h.apiaryLocation
-  ];
-
-  for(const c of candidates){
-    if(!c) continue;
-
-    if(typeof c === "string"){
-      const nums = c.match(/-?\d+(?:\.\d+)?/g);
-      if(nums && nums.length >= 2){
-        const lat = parseFloat(nums[0]);
-        const lon = parseFloat(nums[1]);
-        if(Number.isFinite(lat) && Number.isFinite(lon)) return {lat, lon};
-      }
-    }
-
-    if(typeof c === "object"){
-      const lat = c.lat ?? c.latitude ?? c.coords?.latitude;
-      const lon = c.lon ?? c.lng ?? c.longitude ?? c.coords?.longitude;
-      if(Number.isFinite(Number(lat)) && Number.isFinite(Number(lon))){
-        return {lat:Number(lat), lon:Number(lon)};
-      }
-    }
-  }
-
-  if(Number.isFinite(Number(h.lat)) && Number.isFinite(Number(h.lon))) return {lat:Number(h.lat), lon:Number(h.lon)};
-  if(Number.isFinite(Number(h.latitude)) && Number.isFinite(Number(h.longitude))) return {lat:Number(h.latitude), lon:Number(h.longitude)};
-  return null;
-}
 
 
 function parseVisitDate(value){
@@ -6379,13 +6401,46 @@ function recomputeAutomaticAlerts(notify=false){
 }
 
 function getHiveGps(h){
-  const raw = h?.gps || h?.coords || h?.locationGps || h?.apiaryGps || h?.apiaryLocation || "";
-  const m = String(raw).match(/(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)/);
-  if(!m) return null;
-  const lat = Number(m[1]);
-  const lng = Number(m[2]);
-  if(!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return {lat, lng, lon:lng};
+  /* Une seule implémentation : deux fonctions homonymes coexistaient, la
+     seconde masquant la première. La forme de retour est celle qui était
+     effectivement active : {lat, lng, lon}. Les trois clés sont nécessaires,
+     la météo lit .lng tandis que la carte et le QR lisent .lon — ne pas en
+     retirer. La couverture des champs et le support des objets viennent de
+     la version qui était masquée. */
+  if(!h) return null;
+
+  const candidats = [
+    h.gps, h.coords, h.locationGps, h.location, h.position,
+    h.geo, h.geolocation, h.apiaryGps, h.apiaryLocation
+  ];
+
+  const construire = (lat, lng) => {
+    const la = Number(lat), lo = Number(lng);
+    if(!Number.isFinite(la) || !Number.isFinite(lo)) return null;
+    if(la < -90 || la > 90 || lo < -180 || lo > 180) return null;
+    return { lat: la, lng: lo, lon: lo };
+  };
+
+  for(const c of candidats){
+    if(!c) continue;
+
+    if(typeof c === "object"){
+      const resultat = construire(
+        c.lat ?? c.latitude ?? c.coords?.latitude,
+        c.lng ?? c.lon ?? c.longitude ?? c.coords?.longitude
+      );
+      if(resultat) return resultat;
+      continue;
+    }
+
+    const m = String(c).match(/(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)/);
+    if(m){
+      const resultat = construire(m[1], m[2]);
+      if(resultat) return resultat;
+    }
+  }
+
+  return null;
 }
 
 async function refreshWeatherAlerts(force=false){

@@ -33,6 +33,8 @@ navigateur, il pilote celui que tu as déjà.
 | `04-accessibilite` | Tab, Entrée, Espace, Échap, intitulés ARIA, focus visible |
 | `05-migrations-donnees` | Le crochet de migration convertit, n'écrase rien, ne rejoue pas |
 | `06-mise-a-jour` | Les données de l'utilisateur survivent à une nouvelle version |
+| `07-validation-saisie` | SIRET (clé de Luhn), téléphone, e-mail — sans jamais bloquer |
+| `08-gps-ruche` | Formats de coordonnées, et les 3 clés lat/lng/lon attendues |
 
 ## Pourquoi ces tests existent
 
@@ -46,7 +48,10 @@ Ils ont intercepté de vrais bugs avant publication :
   faille restait ouverte ;
 - une migration écrivant une propriété nommée sur un tableau :
   `JSON.stringify` ignore ces propriétés, la valeur disparaissait à la
-  sauvegarde **sans lever d'erreur**.
+  sauvegarde **sans lever d'erreur** ;
+- deux `getHiveGps()` homonymes dont les retours différaient : la version
+  masquée omettait la clé `.lng`, dont dépend l'appel météo. La rétablir
+  naïvement aurait cassé les alertes météo silencieusement.
 
 ## Écrire une suite
 
