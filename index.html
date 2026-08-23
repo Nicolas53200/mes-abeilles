@@ -2423,7 +2423,7 @@ function hiveCard(h){
   const imageClass = isRuchette ? "" : "apiary-gradient";
   const imageStyle = isRuchette ? "" : `style="--hive-c1:${colors[0]};--hive-c2:${colors[1]}"`;
   return `
-    <article class="hive-card ${isRuchette ? 'is-ruchette' : ''}" onclick="openHive('${h.code}')">
+    <article class="hive-card ${isRuchette ? 'is-ruchette' : ''}" onclick="openHive('${escapeJsAttr(h.code)}')">
       <div class="hive-image ${imageClass}" ${imageStyle}>
         <div class="flower-texture"></div>
         <div class="code-tag ${h.tag === 'orange' ? 'orange' : ''}">${h.code}</div>
@@ -2519,6 +2519,21 @@ function escapeHtml(value){
   return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
 
+/* Échappement pour une valeur placée dans une chaîne JS entre apostrophes,
+   elle-même dans un attribut HTML entre guillemets : onclick="f('ICI')".
+   escapeHtml() ne suffit pas ici : le parseur HTML décode &#39; en ' AVANT
+   que le JS soit évalué, ce qui permet de sortir de la chaîne. */
+function escapeJsAttr(value){
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\r?\n/g, "\\n")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 
 
 function hashString(value){
@@ -2606,7 +2621,7 @@ function openApiaryPicker(code){
       </div>
       <div class="apiary-picker-actions">
         <button class="assist-btn secondary" onclick="closeApiaryPicker()">Annuler</button>
-        <button class="assist-btn" onclick="saveApiaryChoice('${escapeHtml(code)}')">Valider</button>
+        <button class="assist-btn" onclick="saveApiaryChoice('${escapeJsAttr(code)}')">Valider</button>
       </div>
     </div>`;
   modal.addEventListener("click", e=>{ if(e.target === modal) closeApiaryPicker(); });
@@ -2996,18 +3011,18 @@ function groupedAlertHTML(h, list, calendarEnabled){
         ${g.details.slice(0,8).map(x=>`
           <div class="alert-detail-line">
             <div>• ${x}</div>
-            <button class="alert-delete-btn" onclick="event.stopPropagation(); dismissAlert('${h.code}', '${encodeURIComponent(x)}')">Supprimer</button>
+            <button class="alert-delete-btn" onclick="event.stopPropagation(); dismissAlert('${escapeJsAttr(h.code)}', '${encodeURIComponent(x)}')">Supprimer</button>
           </div>
         `).join("")}
         ${g.details.length > 8 ? `<div>+ ${g.details.length - 8} autre(s) point(s)</div>` : ""}
       </div>
       ${calendarEnabled ? `
-        <button class="alert-calendar-main" onclick="event.stopPropagation(); downloadGroupedAlertReminder('${h.code}')">📅 Ajouter un rappel global au calendrier</button>
+        <button class="alert-calendar-main" onclick="event.stopPropagation(); downloadGroupedAlertReminder('${escapeJsAttr(h.code)}')">📅 Ajouter un rappel global au calendrier</button>
         <div class="alert-calendar-note">Un seul événement calendrier sera créé pour cette ruche, même s’il y a plusieurs alertes.</div>
       ` : ""}
       <div class="alert-actions-small">
-        <button class="alert-clear-btn" onclick="event.stopPropagation(); clearHiveAlerts('${h.code}')">Tout supprimer</button>
-        <button class="alert-clear-btn" onclick="event.stopPropagation(); restoreHiveAlerts('${h.code}')">Réactiver</button>
+        <button class="alert-clear-btn" onclick="event.stopPropagation(); clearHiveAlerts('${escapeJsAttr(h.code)}')">Tout supprimer</button>
+        <button class="alert-clear-btn" onclick="event.stopPropagation(); restoreHiveAlerts('${escapeJsAttr(h.code)}')">Réactiver</button>
       </div>
     </div>
   `;
@@ -3109,7 +3124,7 @@ function alerts(){
     <section class="panel">
       <h2>Alertes</h2>
       ${items.map(({h,list})=>`
-        <div class="alert-hive-card" onclick="openHive('${h.code}')" style="cursor:pointer">
+        <div class="alert-hive-card" onclick="openHive('${escapeJsAttr(h.code)}')" style="cursor:pointer">
           <div class="record-head"><span>${h.type === "ruchette" ? "Ruchette" : "Ruche"} ${escapeHtml(h.name)}</span><span>${list.length} alerte(s)</span></div>
           <div class="record-body">${escapeHtml(h.apiary)} · ${escapeHtml(h.code)}</div>
           ${h.weatherSummary ? `<div class="weather-badge">🌦️ ${escapeHtml(h.weatherSummary)}</div>` : ""}
@@ -4126,7 +4141,7 @@ function latestVisitScore(h){
 function statusScoreHTML(h){
   const s = latestVisitScore(h);
   return `
-    <div class="status-score-card" onclick="openScoreModal('${h.code}')">
+    <div class="status-score-card" onclick="openScoreModal('${escapeJsAttr(h.code)}')">
       <div class="status-score-top">
         <div>
           <div class="status-score-label">Statut colonie</div>
@@ -4275,7 +4290,7 @@ function openHiveDocument(docId){
   d.open();
   d.write('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header></header><div class="wrap"></div></body></html>');
   d.close();
-  d.title = escapeHtml(doc.name || 'Document');
+  d.title = doc.name || 'Document';
   d.querySelector('header').textContent = (doc.category || 'Document') + ' · ' + (doc.name || '');
   const wrap = d.querySelector('.wrap');
   if(isImg){
@@ -4559,7 +4574,7 @@ function renderResumeNextVisit(h){
         ${due ? "Visite à prévoir maintenant." : "Prévue dans " + diff + " jour" + (diff > 1 ? "s" : "") + "."}
         Intervalle : ${effectiveVisitIntervalLabel(h)}.
       </div>
-      <button onclick="mbAddNextVisitCalendar('${h.code}')">📅 Ajouter au calendrier</button>
+      <button onclick="mbAddNextVisitCalendar('${escapeJsAttr(h.code)}')">📅 Ajouter au calendrier</button>
     </div>
   `;
 }
@@ -4614,7 +4629,7 @@ function hiveSectionContent(h){
       ${isRuchette ? '<span class="ruchette-badge">🪣 Ruchette</span>' : ''}
     </div>
     <div class="detail-sub">${escapeHtml(apiaryNameForHive(h) || "Sans rucher")} · ${escapeHtml(h.code)}</div>
-    <button class="assist-btn secondary" style="margin:0 0 14px" onclick="changeHiveApiary('${h.code}')">📍 Choisir / changer le rucher</button>
+    <button class="assist-btn secondary" style="margin:0 0 14px" onclick="changeHiveApiary('${escapeJsAttr(h.code)}')">📍 Choisir / changer le rucher</button>
     <div class="info-grid">
       ${statusScoreHTML(h)}
       ${infoBox("Code QR", h.code)}
@@ -4628,7 +4643,7 @@ function hiveSectionContent(h){
 
     <div style="height:16px"></div>
     ${isRuchette ? `
-      <button class="convert-btn" onclick="convertirEnRuche('${h.code}')">
+      <button class="convert-btn" onclick="convertirEnRuche('${escapeJsAttr(h.code)}')">
         🏠 Transférer en ruche
       </button>
       <div style="font-size:12px;color:#64748b;text-align:center;margin-top:8px">La colonie est prête ? Convertis cette ruchette en ruche.</div>
@@ -4639,7 +4654,7 @@ function hiveSectionContent(h){
         <div class="danger-zone">
       <div class="danger-title">Zone sensible</div>
       <div class="danger-text">Supprime cette ${isRuchette ? "ruchette" : "ruche"} uniquement si elle a été créée par erreur ou si tu veux vraiment la retirer de l'application. L'export PC reste conseillé avant suppression.</div>
-      <button class="danger-btn" onclick="deleteHive('${h.code}')">🗑️ Supprimer cette ${isRuchette ? "ruchette" : "ruche"}</button>
+      <button class="danger-btn" onclick="deleteHive('${escapeJsAttr(h.code)}')">🗑️ Supprimer cette ${isRuchette ? "ruchette" : "ruche"}</button>
     </div>
   `;
 
@@ -4668,7 +4683,7 @@ function hiveSectionContent(h){
     </div>
 
     <div style="margin-top:16px">
-      <button class="convert-btn" onclick="convertirEnRuche('${h.code}')">
+      <button class="convert-btn" onclick="convertirEnRuche('${escapeJsAttr(h.code)}')">
         🏠 Transférer en ruche
       </button>
       <div style="font-size:12px;color:#64748b;text-align:center;margin-top:8px">
@@ -4735,7 +4750,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('divisions')">Enregistrer la division</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"divisions","Aucune division enregistrée.", d => record(formatDateFr(d.date), "Division → " + escapeHtml(d.newName), `${escapeHtml(d.couvain)} cadres couvain · ${escapeHtml(d.miel)} cadres miel · QR : ${escapeHtml(d.newCode)} · Cellule royale : ${escapeHtml(d.cellule)} · Reine fécondée : ${escapeHtml(d.reine)}` + (d.followupDate ? ` · Contrôle ponte : ${formatDateFr(d.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${d.followupDate}',title:'Contrôle ponte ruchette ${escapeHtml(d.newName)}',desc:'Contrôle de ponte prévu après division. Ruchette : ${escapeHtml(d.newName)}.',filename:'controle-ponte-${d.newCode}.ics'})">📅 Ajouter au calendrier</button>` : "")))}
+    ${moduleHistoryHTML(h,"divisions","Aucune division enregistrée.", d => record(formatDateFr(d.date), "Division → " + escapeHtml(d.newName), `${escapeHtml(d.couvain)} cadres couvain · ${escapeHtml(d.miel)} cadres miel · QR : ${escapeHtml(d.newCode)} · Cellule royale : ${escapeHtml(d.cellule)} · Reine fécondée : ${escapeHtml(d.reine)}` + (d.followupDate ? ` · Contrôle ponte : ${formatDateFr(d.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${d.followupDate}',title:'Contrôle ponte ruchette ${escapeJsAttr(d.newName)}',desc:'Contrôle de ponte prévu après division. Ruchette : ${escapeJsAttr(d.newName)}.',filename:'controle-ponte-${escapeJsAttr(d.newCode)}.ics'})">📅 Ajouter au calendrier</button>` : "")))}
   `;
   
   if(s === "actions") return `
@@ -4796,7 +4811,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('traitements')">Enregistrer le traitement</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"traitements","Aucun traitement enregistré.", t => record(formatDateFr(t.date), escapeHtml(t.type), `${escapeHtml(t.quantite || "—")}` + (t.retrait ? ` · Retrait prévu : ${formatDateFr(t.retrait)}` : "") + (t.followupDate ? ` · Contrôle : ${formatDateFr(t.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${t.followupDate}',title:'Contrôle traitement ${escapeHtml(t.type)}',desc:'Contrôle après traitement. Ruche : ${escapeHtml(h.name)} (${escapeHtml(h.code)}).',filename:'controle-traitement-${h.code}.ics'})">📅 Ajouter au calendrier</button>` : "") + (t.notes ? ` · ${escapeHtml(t.notes)}` : "")))}
+    ${moduleHistoryHTML(h,"traitements","Aucun traitement enregistré.", t => record(formatDateFr(t.date), escapeHtml(t.type), `${escapeHtml(t.quantite || "—")}` + (t.retrait ? ` · Retrait prévu : ${formatDateFr(t.retrait)}` : "") + (t.followupDate ? ` · Contrôle : ${formatDateFr(t.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${t.followupDate}',title:'Contrôle traitement ${escapeJsAttr(t.type)}',desc:'Contrôle après traitement. Ruche : ${escapeJsAttr(h.name)} (${escapeJsAttr(h.code)}).',filename:'controle-traitement-${escapeJsAttr(h.code)}.ics'})">📅 Ajouter au calendrier</button>` : "") + (t.notes ? ` · ${escapeHtml(t.notes)}` : "")))}
   `;
   
   if(s === "frelons") return `
@@ -4832,7 +4847,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('nourrissement')">Enregistrer</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"nourrissements","Aucun nourrissement enregistré.", n => record(formatDateFr(n.date), escapeHtml(n.type), `${escapeHtml(n.quantite || "—")}` + (n.followupDate ? ` · Contrôle : ${formatDateFr(n.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${n.followupDate}',title:'Contrôle nourrissement ${escapeHtml(h.name)}',desc:'Contrôle nourrissement. Ruche : ${escapeHtml(h.name)} (${escapeHtml(h.code)}).',filename:'controle-nourrissement-${escapeHtml(h.code)}.ics'})">📅 Ajouter au calendrier</button>` : "") + (n.notes ? ` · ${escapeHtml(n.notes)}` : "")))}
+    ${moduleHistoryHTML(h,"nourrissements","Aucun nourrissement enregistré.", n => record(formatDateFr(n.date), escapeHtml(n.type), `${escapeHtml(n.quantite || "—")}` + (n.followupDate ? ` · Contrôle : ${formatDateFr(n.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${n.followupDate}',title:'Contrôle nourrissement ${escapeJsAttr(h.name)}',desc:'Contrôle nourrissement. Ruche : ${escapeJsAttr(h.name)} (${escapeJsAttr(h.code)}).',filename:'controle-nourrissement-${escapeJsAttr(h.code)}.ics'})">📅 Ajouter au calendrier</button>` : "") + (n.notes ? ` · ${escapeHtml(n.notes)}` : "")))}
   `;
   
   if(s === "transhumance") return `
@@ -4967,7 +4982,7 @@ function hiveSectionContent(h){
         <div class="record-head"><span>${escapeHtml(d.category || "Document")}</span><span>${formatDateFr(d.date)}</span></div>
         <div class="record-body">${escapeHtml(d.desc || "")}</div>
         <div class="doc-chip"><span>📄 ${escapeHtml(d.name || "Fichier")}</span><span>${escapeHtml(d.size || "")}</span></div>
-        ${d.dataUrl ? `<button class="doc-open-btn" style="width:100%;margin-top:8px" onclick="openHiveDocument('${d.id}')">👁️ Ouvrir le document</button>` : `<div class="mini-help">Ancien document référencé, fichier non consultable.</div>`}
+        ${d.dataUrl ? `<button class="doc-open-btn" style="width:100%;margin-top:8px" onclick="openHiveDocument('${escapeJsAttr(d.id)}')">👁️ Ouvrir le document</button>` : `<div class="mini-help">Ancien document référencé, fichier non consultable.</div>`}
       </div>
     `)}
   `;
@@ -5391,7 +5406,9 @@ function complianceDoc(bucketId){
 }
 
 function safeDocTitle(t){
-  return String(t || "Document").replace(/'/g,"\'").replace(/"/g,"&quot;");
+  // L'ancienne version faisait .replace(/'/g,"\'") : en source JS "\'" vaut "'",
+  // le remplacement était donc sans effet. On délègue à l'échappeur dédié.
+  return escapeJsAttr(t || "Document");
 }
 
 const complianceTempUrls = {};
@@ -5525,7 +5542,7 @@ function openComplianceDocument(bucketId){
     d.open();
     d.write('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header></header><div class="wrap"></div></body></html>');
     d.close();
-    d.title = escapeHtml(doc.name || 'Document');
+    d.title = doc.name || 'Document';
     d.querySelector('header').textContent = (doc.title || 'Document') + ' · ' + (doc.name || '');
     const wrap = d.querySelector('.wrap');
     if(isImg){
@@ -5896,7 +5913,7 @@ function renderNextVisitCard(h){
     <div class="next-visit-card ${st.due ? "" : "ok"}">
       <div class="next-visit-title">📅 Prochaine visite : ${label}</div>
       <div class="next-visit-text">${text}</div>
-      <button class="next-visit-btn" onclick="addNextVisitToCalendar('${h.code}')">📅 Ajouter au calendrier</button>
+      <button class="next-visit-btn" onclick="addNextVisitToCalendar('${escapeJsAttr(h.code)}')">📅 Ajouter au calendrier</button>
     </div>
   `;
 }
@@ -7195,7 +7212,7 @@ function initGlobalMap(){
         <div class="bee-popup-row">📅 Dernière visite : <strong>${lastVisit}</strong></div>
         <div class="bee-popup-row">🔜 Prochaine : <strong>${nextLabel}</strong></div>
         ${warnCount > 0 ? `<div class="bee-popup-row">⚠️ <strong>${warnCount} alerte${warnCount>1?"s":""}</strong></div>` : ""}
-        <button class="bee-popup-btn" onclick="openHive('${h.code}')">Voir la fiche →</button>
+        <button class="bee-popup-btn" onclick="openHive('${escapeJsAttr(h.code)}')">Voir la fiche →</button>
       </div>
     `;
 
