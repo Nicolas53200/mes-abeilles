@@ -3110,9 +3110,9 @@ function alerts(){
       <h2>Alertes</h2>
       ${items.map(({h,list})=>`
         <div class="alert-hive-card" onclick="openHive('${h.code}')" style="cursor:pointer">
-          <div class="record-head"><span>${h.type === "ruchette" ? "Ruchette" : "Ruche"} ${h.name}</span><span>${list.length} alerte(s)</span></div>
-          <div class="record-body">${h.apiary} · ${h.code}</div>
-          ${h.weatherSummary ? `<div class="weather-badge">🌦️ ${h.weatherSummary}</div>` : ""}
+          <div class="record-head"><span>${h.type === "ruchette" ? "Ruchette" : "Ruche"} ${escapeHtml(h.name)}</span><span>${list.length} alerte(s)</span></div>
+          <div class="record-body">${escapeHtml(h.apiary)} · ${escapeHtml(h.code)}</div>
+          ${h.weatherSummary ? `<div class="weather-badge">🌦️ ${escapeHtml(h.weatherSummary)}</div>` : ""}
           ${groupedAlertHTML(h, list, s.calendar)}
         </div>
       `).join("")}
@@ -3144,18 +3144,18 @@ function admin(){
       </div>
 
 
-      <div class="field"><label>Prénom</label><input id="adminPrenom" value="${p.prenom || ""}" placeholder="Ton prénom"></div>
-      <div class="field"><label>Nom</label><input id="adminNom" value="${p.nom || ""}" placeholder="Ton nom"></div>
-      <div class="field"><label>Entreprise</label><input id="adminEntreprise" value="${p.entreprise || ""}" placeholder="Ex : Rucher des Collines"></div>
-      <div class="field"><label>NAPI</label><input id="adminNapi" value="${p.napi || ""}" placeholder="Numéro d'apiculteur"></div>
-      <div class="field"><label>SIRET</label><input id="adminSiret" value="${p.siret || ""}" placeholder="Numéro SIRET"></div>
-      <div class="field"><label>Adresse</label><input id="adminAdresse" value="${p.adresse || ""}" placeholder="Adresse de l'entreprise"></div>
-      <div class="field"><label>Téléphone</label><input id="adminTelephone" value="${p.telephone || ""}" placeholder="Téléphone"></div>
-      <div class="field"><label>Email</label><input id="adminEmail" value="${p.email || ""}" placeholder="Email"></div>
+      <div class="field"><label>Prénom</label><input id="adminPrenom" value="${escapeHtml(p.prenom || "")}" placeholder="Ton prénom"></div>
+      <div class="field"><label>Nom</label><input id="adminNom" value="${escapeHtml(p.nom || "")}" placeholder="Ton nom"></div>
+      <div class="field"><label>Entreprise</label><input id="adminEntreprise" value="${escapeHtml(p.entreprise || "")}" placeholder="Ex : Rucher des Collines"></div>
+      <div class="field"><label>NAPI</label><input id="adminNapi" value="${escapeHtml(p.napi || "")}" placeholder="Numéro d'apiculteur"></div>
+      <div class="field"><label>SIRET</label><input id="adminSiret" value="${escapeHtml(p.siret || "")}" placeholder="Numéro SIRET"></div>
+      <div class="field"><label>Adresse</label><input id="adminAdresse" value="${escapeHtml(p.adresse || "")}" placeholder="Adresse de l'entreprise"></div>
+      <div class="field"><label>Téléphone</label><input id="adminTelephone" value="${escapeHtml(p.telephone || "")}" placeholder="Téléphone"></div>
+      <div class="field"><label>Email</label><input id="adminEmail" value="${escapeHtml(p.email || "")}" placeholder="Email"></div>
 
       <div class="field"><label>Logo</label>
         <input type="file" accept="image/*" id="adminLogo" class="file-hidden" onchange="onFileSelected('adminLogo','adminLogoLabel')">
-        <div id="adminLogoLabel" class="mini-help" style="margin-bottom:6px">${p.logoName || "Aucun fichier"}</div>
+        <div id="adminLogoLabel" class="mini-help" style="margin-bottom:6px">${escapeHtml(p.logoName || "Aucun fichier")}</div>
         <div class="file-actions">
           <button class="file-btn" onclick="fileUpload('adminLogo')">📁 Choisir</button>
           <button class="file-btn primary" onclick="scanDocument('adminLogo')">📷 Scanner</button>
@@ -4161,8 +4161,8 @@ function openScoreModal(code){
     ${s.parts.map(p=>`
       <div class="score-line">
         <div>
-          <div class="score-line-title">${p.name}</div>
-          <div class="score-line-detail">${p.value} · ${p.detail}</div>
+          <div class="score-line-title">${escapeHtml(p.name)}</div>
+          <div class="score-line-detail">${escapeHtml(p.value)} · ${escapeHtml(p.detail)}</div>
         </div>
         <div class="score-points">+${p.points}/${p.max}</div>
       </div>
@@ -4271,8 +4271,22 @@ function openHiveDocument(docId){
   const win = window.open("", "_blank");
   if(!win){ alert("Autorise les pop-ups pour ouvrir le document."); return; }
   const isImg = (doc.type || "").startsWith("image/");
-  win.document.write(`<!DOCTYPE html><html><head><title>${doc.name || 'Document'}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header>${doc.category || 'Document'} · ${doc.name || ''}</header><div class="wrap">${isImg ? `<img src="${doc.dataUrl}">` : `<iframe src="${doc.dataUrl}"></iframe>`}</div></body></html>`);
-  win.document.close();
+  const d = win.document;
+  d.open();
+  d.write('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header></header><div class="wrap"></div></body></html>');
+  d.close();
+  d.title = escapeHtml(doc.name || 'Document');
+  d.querySelector('header').textContent = (doc.category || 'Document') + ' · ' + (doc.name || '');
+  const wrap = d.querySelector('.wrap');
+  if(isImg){
+    const img = d.createElement('img');
+    img.src = doc.dataUrl;
+    wrap.appendChild(img);
+  } else {
+    const iframe = d.createElement('iframe');
+    iframe.src = doc.dataUrl;
+    wrap.appendChild(iframe);
+  }
 }
 
 
@@ -4368,8 +4382,8 @@ function materialSectionHTML(h){
         ${infoBox("🍯 Hausse en place", formatHaussesCount(hausses))}
         ${infoBox("Dernier changement", m.changedAt ? formatDateFr(m.changedAt) : "—")}
       </div>
-      <span class="material-status ${conditionClass}">État : ${m.condition || "Bon"}</span>
-      ${m.notes ? `<div class="material-history-note">${m.notes}</div>` : ""}
+      <span class="material-status ${conditionClass}">État : ${escapeHtml(m.condition || "Bon")}</span>
+      ${m.notes ? `<div class="material-history-note">${escapeHtml(m.notes)}</div>` : ""}
     </div>
 
     <div class="module-form-card">
@@ -4410,7 +4424,7 @@ function materialSectionHTML(h){
 
       <div class="field">
         <label>Notes</label>
-        <textarea id="materialNotes" placeholder="Ex : transfert dans une ruche neuve, passage 10 cadres vers 12 cadres…">${m.notes || ""}</textarea>
+        <textarea id="materialNotes" placeholder="Ex : transfert dans une ruche neuve, passage 10 cadres vers 12 cadres…">${escapeHtml(m.notes || "")}</textarea>
       </div>
 
       <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveMaterial()">Enregistrer le matériel</button>
@@ -4596,10 +4610,10 @@ function hiveSectionContent(h){
 
   if(s === "resume") return `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <h2 class="detail-title" style="margin:0">${isRuchette ? 'Ruchette' : 'Ruche'} ${h.name}</h2>
+      <h2 class="detail-title" style="margin:0">${isRuchette ? 'Ruchette' : 'Ruche'} ${escapeHtml(h.name)}</h2>
       ${isRuchette ? '<span class="ruchette-badge">🪣 Ruchette</span>' : ''}
     </div>
-    <div class="detail-sub">${apiaryNameForHive(h) || "Sans rucher"} · ${h.code}</div>
+    <div class="detail-sub">${escapeHtml(apiaryNameForHive(h) || "Sans rucher")} · ${escapeHtml(h.code)}</div>
     <button class="assist-btn secondary" style="margin:0 0 14px" onclick="changeHiveApiary('${h.code}')">📍 Choisir / changer le rucher</button>
     <div class="info-grid">
       ${statusScoreHTML(h)}
@@ -4703,7 +4717,7 @@ function hiveSectionContent(h){
       <div class="module-form-card" id="moduleForm">
         ${moduleFormHeader("Créer une division")}
         <div class="field"><label>Date division</label><input id="divisionDate" type="date" value="${todayISO()}"></div>
-        <div class="field"><label>Nom nouvelle ruche / ruchette</label><input id="divisionName" placeholder="Ex : ${h.name}-2"></div>
+        <div class="field"><label>Nom nouvelle ruche / ruchette</label><input id="divisionName" placeholder="Ex : ${escapeHtml(h.name)}-2"></div>
         <div class="field">
           <label>Code QR proposé</label>
           <div class="qr-proposal">
@@ -4721,7 +4735,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('divisions')">Enregistrer la division</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"divisions","Aucune division enregistrée.", d => record(formatDateFr(d.date), "Division → " + d.newName, `${d.couvain} cadres couvain · ${d.miel} cadres miel · QR : ${d.newCode} · Cellule royale : ${d.cellule} · Reine fécondée : ${d.reine}` + (d.followupDate ? ` · Contrôle ponte : ${formatDateFr(d.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${d.followupDate}',title:'Contrôle ponte ruchette ${d.newName}',desc:'Contrôle de ponte prévu après division. Ruchette : ${d.newName}.',filename:'controle-ponte-${d.newCode}.ics'})">📅 Ajouter au calendrier</button>` : "")))}
+    ${moduleHistoryHTML(h,"divisions","Aucune division enregistrée.", d => record(formatDateFr(d.date), "Division → " + escapeHtml(d.newName), `${escapeHtml(d.couvain)} cadres couvain · ${escapeHtml(d.miel)} cadres miel · QR : ${escapeHtml(d.newCode)} · Cellule royale : ${escapeHtml(d.cellule)} · Reine fécondée : ${escapeHtml(d.reine)}` + (d.followupDate ? ` · Contrôle ponte : ${formatDateFr(d.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${d.followupDate}',title:'Contrôle ponte ruchette ${escapeHtml(d.newName)}',desc:'Contrôle de ponte prévu après division. Ruchette : ${escapeHtml(d.newName)}.',filename:'controle-ponte-${d.newCode}.ics'})">📅 Ajouter au calendrier</button>` : "")))}
   `;
   
   if(s === "actions") return `
@@ -4744,7 +4758,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('hausses')">Enregistrer</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"hausses","Aucune hausse enregistrée.", x => record(formatDateFr(x.date), x.action, `${x.nombre} hausse(s)` + (x.retrait ? ` · Retrait : ${formatDateFr(x.retrait)}` : "") + (x.notes ? ` · ${x.notes}` : "")))}
+    ${moduleHistoryHTML(h,"hausses","Aucune hausse enregistrée.", x => record(formatDateFr(x.date), escapeHtml(x.action), `${escapeHtml(x.nombre)} hausse(s)` + (x.retrait ? ` · Retrait : ${formatDateFr(x.retrait)}` : "") + (x.notes ? ` · ${escapeHtml(x.notes)}` : "")))}
   `;
   
   if(s === "miel") return `
@@ -4763,7 +4777,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('miel')">Enregistrer la récolte</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"recoltes","Aucune récolte enregistrée.", r => record(formatDateFr(r.date), r.type + " · " + r.kilos + " kg", `Butinage : ${r.butinage}` + (r.notes ? ` · ${r.notes}` : "")))}
+    ${moduleHistoryHTML(h,"recoltes","Aucune récolte enregistrée.", r => record(formatDateFr(r.date), escapeHtml(r.type) + " · " + escapeHtml(r.kilos) + " kg", `Butinage : ${escapeHtml(r.butinage)}` + (r.notes ? ` · ${escapeHtml(r.notes)}` : "")))}
   `;
   
   if(s === "traitements") return `
@@ -4782,7 +4796,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('traitements')">Enregistrer le traitement</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"traitements","Aucun traitement enregistré.", t => record(formatDateFr(t.date), t.type, `${t.quantite || "—"}` + (t.retrait ? ` · Retrait prévu : ${formatDateFr(t.retrait)}` : "") + (t.followupDate ? ` · Contrôle : ${formatDateFr(t.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${t.followupDate}',title:'Contrôle traitement ${t.type}',desc:'Contrôle après traitement. Ruche : ${h.name} (${h.code}).',filename:'controle-traitement-${h.code}.ics'})">📅 Ajouter au calendrier</button>` : "") + (t.notes ? ` · ${t.notes}` : "")))}
+    ${moduleHistoryHTML(h,"traitements","Aucun traitement enregistré.", t => record(formatDateFr(t.date), escapeHtml(t.type), `${escapeHtml(t.quantite || "—")}` + (t.retrait ? ` · Retrait prévu : ${formatDateFr(t.retrait)}` : "") + (t.followupDate ? ` · Contrôle : ${formatDateFr(t.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${t.followupDate}',title:'Contrôle traitement ${escapeHtml(t.type)}',desc:'Contrôle après traitement. Ruche : ${escapeHtml(h.name)} (${escapeHtml(h.code)}).',filename:'controle-traitement-${h.code}.ics'})">📅 Ajouter au calendrier</button>` : "") + (t.notes ? ` · ${escapeHtml(t.notes)}` : "")))}
   `;
   
   if(s === "frelons") return `
@@ -4800,7 +4814,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('frelons')">Enregistrer</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"frelons","Aucune observation frelons.", f => record(formatDateFr(f.date), f.observation, `${f.piege} · Captures : ${f.captures}` + (f.notes ? ` · ${f.notes}` : "")))}
+    ${moduleHistoryHTML(h,"frelons","Aucune observation frelons.", f => record(formatDateFr(f.date), escapeHtml(f.observation), `${escapeHtml(f.piege)} · Captures : ${escapeHtml(f.captures)}` + (f.notes ? ` · ${escapeHtml(f.notes)}` : "")))}
   `;
   
   if(s === "nourrissement") return `
@@ -4818,7 +4832,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('nourrissement')">Enregistrer</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"nourrissements","Aucun nourrissement enregistré.", n => record(formatDateFr(n.date), n.type, `${n.quantite || "—"}` + (n.followupDate ? ` · Contrôle : ${formatDateFr(n.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${n.followupDate}',title:'Contrôle nourrissement ${h.name}',desc:'Contrôle nourrissement. Ruche : ${h.name} (${h.code}).',filename:'controle-nourrissement-${h.code}.ics'})">📅 Ajouter au calendrier</button>` : "") + (n.notes ? ` · ${n.notes}` : "")))}
+    ${moduleHistoryHTML(h,"nourrissements","Aucun nourrissement enregistré.", n => record(formatDateFr(n.date), escapeHtml(n.type), `${escapeHtml(n.quantite || "—")}` + (n.followupDate ? ` · Contrôle : ${formatDateFr(n.followupDate)} <br><button class="calendar-inline-btn" onclick="downloadCalendarEvent({h:state.currentHive,start:'${n.followupDate}',title:'Contrôle nourrissement ${escapeHtml(h.name)}',desc:'Contrôle nourrissement. Ruche : ${escapeHtml(h.name)} (${escapeHtml(h.code)}).',filename:'controle-nourrissement-${escapeHtml(h.code)}.ics'})">📅 Ajouter au calendrier</button>` : "") + (n.notes ? ` · ${escapeHtml(n.notes)}` : "")))}
   `;
   
   if(s === "transhumance") return `
@@ -4829,7 +4843,7 @@ function hiveSectionContent(h){
       <div class="module-form-card" id="moduleForm">
         ${moduleFormHeader("Nouveau déplacement")}
         <div class="field"><label>Date déplacement</label><input id="transDate" type="date" value="${todayISO()}"></div>
-        <div class="field"><label>Départ</label><input id="transDepart" value="${h.apiary || ""}"></div>
+        <div class="field"><label>Départ</label><input id="transDepart" value="${escapeHtml(h.apiary || "")}"></div>
         <div class="field"><label>Arrivée</label><input id="transArrivee" placeholder="Ex : Plateau de Lavande"></div>
         <div class="assist-card">
           <div class="assist-row">
@@ -4847,7 +4861,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('transhumance')">Enregistrer</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"transhumances","Aucune transhumance enregistrée.", t => record(formatDateFr(t.date), `${t.depart} → ${t.arrivee}`, `${t.nb} ruche(s) · ${t.floraison}` + (t.gps ? ` · GPS : ${t.gps}` : "") + (t.notes ? ` · ${t.notes}` : "")))}
+    ${moduleHistoryHTML(h,"transhumances","Aucune transhumance enregistrée.", t => record(formatDateFr(t.date), `${escapeHtml(t.depart)} → ${escapeHtml(t.arrivee)}`, `${escapeHtml(t.nb)} ruche(s) · ${escapeHtml(t.floraison)}` + (t.gps ? ` · GPS : ${escapeHtml(t.gps)}` : "") + (t.notes ? ` · ${escapeHtml(t.notes)}` : "")))}
   `;
   
   if(s === "pesees") return `
@@ -4865,7 +4879,7 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('pesees')">Enregistrer</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"pesees","Aucune pesée enregistrée.", p => record(formatDateFr(p.date), "Pesée", `Total : ${p.total || "—"} kg · G : ${p.gauche || "—"} kg · D : ${p.droite || "—"} kg` + (p.notes ? ` · ${p.notes}` : "")))}
+    ${moduleHistoryHTML(h,"pesees","Aucune pesée enregistrée.", p => record(formatDateFr(p.date), "Pesée", `Total : ${escapeHtml(p.total || "—")} kg · G : ${escapeHtml(p.gauche || "—")} kg · D : ${escapeHtml(p.droite || "—")} kg` + (p.notes ? ` · ${escapeHtml(p.notes)}` : "")))}
   `;
   
   if(s === "photos") return `
@@ -4878,9 +4892,9 @@ function hiveSectionContent(h){
     </div>
     ${moduleHistoryHTML(h,"photos","Aucune photo enregistrée.", p => `
       <div class="record">
-        <div class="record-head"><span>${p.desc || "Photo"}</span><span>${formatDateFr(p.date)}</span></div>
-        <div class="record-body">${p.name || "Fichier image"}</div>
-        ${p.dataUrl ? `<img class="media-thumb" src="${p.dataUrl}" alt="${p.desc || "Photo ruche"}">` : ""}
+        <div class="record-head"><span>${escapeHtml(p.desc || "Photo")}</span><span>${formatDateFr(p.date)}</span></div>
+        <div class="record-body">${escapeHtml(p.name || "Fichier image")}</div>
+        ${p.dataUrl ? `<img class="media-thumb" src="${p.dataUrl}" alt="${escapeHtml(p.desc || "Photo ruche")}">` : ""}
       </div>
     `)}
   `;
@@ -4950,9 +4964,9 @@ function hiveSectionContent(h){
     </div>
     ${moduleHistoryHTML(h,"documents","Aucun document enregistré.", d => `
       <div class="record">
-        <div class="record-head"><span>${d.category || "Document"}</span><span>${formatDateFr(d.date)}</span></div>
-        <div class="record-body">${d.desc || ""}</div>
-        <div class="doc-chip"><span>📄 ${d.name || "Fichier"}</span><span>${d.size || ""}</span></div>
+        <div class="record-head"><span>${escapeHtml(d.category || "Document")}</span><span>${formatDateFr(d.date)}</span></div>
+        <div class="record-body">${escapeHtml(d.desc || "")}</div>
+        <div class="doc-chip"><span>📄 ${escapeHtml(d.name || "Fichier")}</span><span>${escapeHtml(d.size || "")}</span></div>
         ${d.dataUrl ? `<button class="doc-open-btn" style="width:100%;margin-top:8px" onclick="openHiveDocument('${d.id}')">👁️ Ouvrir le document</button>` : `<div class="mini-help">Ancien document référencé, fichier non consultable.</div>`}
       </div>
     `)}
@@ -4963,7 +4977,7 @@ function hiveSectionContent(h){
     <div style="text-align:center">
       <canvas id="bigQr" width="150" height="150" style="width:230px;height:230px;image-rendering:pixelated;background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:14px"></canvas>
       <h3>${h.code}</h3>
-      <p>Ruche ${h.name} · ${h.apiary}</p>
+      <p>Ruche ${escapeHtml(h.name)} · ${escapeHtml(h.apiary)}</p>
       <button class="big-action primary" style="width:100%;min-height:76px" onclick="printQr()">🖨️ Imprimer le QR Code</button>
     </div>
   `;
@@ -5307,15 +5321,37 @@ function importData(input){
         throw new Error("Format Mes Abeilles invalide");
       }
 
+      // Validation de schéma : vérifier que chaque ruche a les champs requis
+      const ALLOWED_STATE_KEYS = ["hives","profil","complianceDocs","alertSettings","apiaries","onboardingDone","calendarPromptDone","hiveTourDone"];
+      const sanitizedData = {};
+      for(const key of ALLOWED_STATE_KEYS){
+        if(key in data) sanitizedData[key] = data[key];
+      }
+      if(!sanitizedData.hives) throw new Error("Format Mes Abeilles invalide");
+
+      for(const hive of sanitizedData.hives){
+        if(!hive || typeof hive !== "object" || typeof hive.code !== "string" || !hive.code.trim()){
+          throw new Error("Ruche invalide détectée dans l'import");
+        }
+        // Nettoyer les propriétés de chaque ruche pour éviter l'injection de propriétés inattendues
+        if(hive.name) hive.name = String(hive.name).slice(0, 100);
+        if(hive.apiary) hive.apiary = String(hive.apiary).slice(0, 100);
+        hive.code = String(hive.code).slice(0, 50);
+      }
+
+      if(sanitizedData.profil && typeof sanitizedData.profil !== "object"){
+        sanitizedData.profil = {};
+      }
+
       // Import complet : on restaure les ruches, le profil, la conformité et les réglages
       // sans écraser les valeurs par défaut utiles absentes des anciens exports.
-      state.hives = data.hives;
-      state.profil = data.profil || {};
-      state.complianceDocs = data.complianceDocs || {};
-      state.alertSettings = {...getAlertSettings(), ...(data.alertSettings || {})};
-      state.onboardingDone = typeof data.onboardingDone === "boolean" ? data.onboardingDone : state.onboardingDone;
-      state.calendarPromptDone = typeof data.calendarPromptDone === "boolean" ? data.calendarPromptDone : state.calendarPromptDone;
-      state.hiveTourDone = typeof data.hiveTourDone === "boolean" ? data.hiveTourDone : state.hiveTourDone;
+      state.hives = sanitizedData.hives;
+      state.profil = sanitizedData.profil || {};
+      state.complianceDocs = sanitizedData.complianceDocs || {};
+      state.alertSettings = {...getAlertSettings(), ...(sanitizedData.alertSettings || {})};
+      state.onboardingDone = typeof sanitizedData.onboardingDone === "boolean" ? sanitizedData.onboardingDone : state.onboardingDone;
+      state.calendarPromptDone = typeof sanitizedData.calendarPromptDone === "boolean" ? sanitizedData.calendarPromptDone : state.calendarPromptDone;
+      state.hiveTourDone = typeof sanitizedData.hiveTourDone === "boolean" ? sanitizedData.hiveTourDone : state.hiveTourDone;
 
       normalizeHives();
       saveState();
@@ -5384,7 +5420,7 @@ function docField(bucketId, title="Document"){
       </div>
 
       ${doc ? `
-        <div class="compliance-doc-meta">📄 ${doc.name || 'Justificatif'} · ${doc.size || ''} · ${formatDateFr(doc.date)}${isLight ? ' · stockage léger' : ''}</div>
+        <div class="compliance-doc-meta">📄 ${escapeHtml(doc.name || 'Justificatif')} · ${escapeHtml(doc.size || '')} · ${formatDateFr(doc.date)}${isLight ? ' · stockage léger' : ''}</div>
         <div class="compliance-doc-actions">
           <button class="doc-open-btn ${canOpenNow ? '' : 'warning'}" onclick="openComplianceDocument('${bucketId}')">${canOpenNow ? '👁️ Ouvrir' : '🔁 Réassocier'}</button>
           <button class="doc-remove-btn" onclick="removeComplianceDocument('${bucketId}')">Supprimer</button>
@@ -5470,6 +5506,7 @@ function openComplianceDocument(bucketId){
   if(!doc){ showToast("⚠️ Aucun document à ouvrir"); return; }
 
   if(doc.externalUrl){
+    if(!/^https?:\/\//i.test(doc.externalUrl)){ showToast("⚠️ Lien invalide"); return; }
     window.open(doc.externalUrl, "_blank", "noopener");
     return;
   }
@@ -5484,8 +5521,22 @@ function openComplianceDocument(bucketId){
     const win = window.open("", "_blank");
     if(!win){ alert("Autorise les pop-ups pour ouvrir le document."); return; }
     const isImg = (doc.type || "").startsWith("image/");
-    win.document.write(`<!DOCTYPE html><html><head><title>${doc.name || 'Document'}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header>${doc.title || 'Document'} · ${doc.name || ''}</header><div class="wrap">${isImg ? `<img src="${doc.dataUrl}">` : `<iframe src="${doc.dataUrl}"></iframe>`}</div></body></html>`);
-    win.document.close();
+    const d = win.document;
+    d.open();
+    d.write('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui;margin:0;background:#0f172a;color:white}header{padding:14px 16px;background:#111827;font-weight:800}.wrap{padding:12px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;background:white}iframe{width:100%;height:calc(100vh - 54px);border:0;background:white}</style></head><body><header></header><div class="wrap"></div></body></html>');
+    d.close();
+    d.title = escapeHtml(doc.name || 'Document');
+    d.querySelector('header').textContent = (doc.title || 'Document') + ' · ' + (doc.name || '');
+    const wrap = d.querySelector('.wrap');
+    if(isImg){
+      const img = d.createElement('img');
+      img.src = doc.dataUrl;
+      wrap.appendChild(img);
+    } else {
+      const iframe = d.createElement('iframe');
+      iframe.src = doc.dataUrl;
+      wrap.appendChild(iframe);
+    }
     return;
   }
 
