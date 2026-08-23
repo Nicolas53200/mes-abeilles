@@ -200,16 +200,76 @@ export default () => executerSuite('Suggestions saisonnières', async ({ page, o
   rapport.verifier('choix enregistré', zone.enregistree === 'montagne', String(zone.enregistree));
   rapport.verifier('pris en compte immédiatement', zone.active === 'Montagne', zone.active);
 
-  rapport.section('Rendu de la section Actions');
-  const rendu = await page.evaluate(() => {
+  rapport.section('Les suggestions n\'apparaissent QUE sur clic');
+  const ferme = await page.evaluate(() => {
+    state.profil.zone = 'centre';
+    state.hives[0].visites = [{ date:'2026-09-01', reine:'Oui', ponte:'Normale',
+      couvain:'Faible', force:'Faible', reserves:'Faibles', cellules:'Non',
+      varroa:'Comptage OK', frelons:'Forte pression', pollen:'Normal' }];
     openHive('R-1'); setHiveSection('actions');
     const t = document.getElementById('content')?.innerText || '';
-    return { longueur: t.trim().length, zone: t.includes('Montagne'),
+    return { texte:t, bouton: !!document.querySelector('[onclick*="toggleSuggestionsSaison"]'),
              ancien: t.includes('Contrôler chute naturelle') };
   });
-  rapport.verifier('section rendue', rendu.longueur > 80, `${rendu.longueur} car.`);
-  rapport.verifier('la zone est affichée', rendu.zone);
-  rapport.verifier('les deux lignes figées ont disparu', !rendu.ancien);
+  rapport.verifier('bouton présent', ferme.bouton);
+  rapport.verifier('aucune suggestion affichée d\'emblée', !ferme.texte.includes('Réserves'), 'aucun corps visible');
+  rapport.verifier('le bouton annonce combien il y en a', /rep[èe]re/i.test(ferme.texte), 
+    (ferme.texte.match(/\d+ repères?[^\n]*/) || [''])[0]);
+  rapport.verifier('les deux lignes figées ont disparu', !ferme.ancien);
+
+  const ouvert = await page.evaluate(() => {
+    document.querySelector('[onclick*="toggleSuggestionsSaison"]').click();
+    const t = document.getElementById('content')?.innerText || '';
+    return { texte:t, expanded: document.querySelector('[onclick*="toggleSuggestionsSaison"]')
+                                  ?.getAttribute('aria-expanded') };
+  });
+  // Indépendant de la date du jour : on vérifie l'ouverture du panneau,
+  // pas le contenu d'un mois précis, déjà couvert plus haut.
+  rapport.verifier('un clic les affiche',
+    ouvert.texte.includes('Ils ne comptent pas dans les alertes')
+    && ouvert.texte.length > ferme.texte.length,
+    `${ferme.texte.length} → ${ouvert.texte.length} car.`);
+  rapport.verifier('aria-expanded suit', ouvert.expanded === 'true');
+  rapport.verifier('le bouton propose de masquer', ouvert.texte.includes('Masquer'));
+
+  const referme = await page.evaluate(() => {
+    document.querySelector('[onclick*="toggleSuggestionsSaison"]').click();
+    return document.getElementById('content')?.innerText || '';
+  });
+  rapport.verifier('un second clic les masque',
+    !referme.includes('Ils ne comptent pas dans les alertes')
+    && referme.length < ouvert.texte.length,
+    `${ouvert.texte.length} → ${referme.length} car.`);
+
+  rapport.section('La bascule ne part PAS dans la sauvegarde');
+  const propre = await page.evaluate(() => {
+    document.querySelector('[onclick*="toggleSuggestionsSaison"]').click();
+    saveState();
+    const brut = localStorage.getItem('mesAbeilles_data_v1') || '';
+    return { dansSauvegarde: /suggestionsDepliees/.test(brut),
+             dansEtat: Object.keys(state).some(k => /suggestions/i.test(k)) };
+  });
+  rapport.verifier('absente du localStorage', !propre.dansSauvegarde);
+  rapport.verifier('absente de l\'objet state', !propre.dansEtat);
+
+  rapport.section('Titres resserrés pour tenir sur la carte');
+  const titres = await page.evaluate(() => {
+    const vus = new Set();
+    for(let m = 1; m <= 12; m++){
+      for(const cas of [{force:'Forte'}, {force:'Faible'}, {reine:'Non'}, {reserves:'Faibles'}]){
+        state.hives[0].visites = [{ date:'2026-01-01', reine:'Oui', ponte:'Normale',
+          couvain:'Normal', force:'Forte', reserves:'Bonnes', cellules:'Non',
+          varroa:'Comptage OK', frelons:'Non', pollen:'Normal', ...cas }];
+        suggestionsSaison(state.hives[0], new Date(2026, m - 1, 15))
+          .forEach(x => vus.add(x.titre));
+      }
+    }
+    const liste = [...vus];
+    return { total: liste.length, max: Math.max(...liste.map(t => t.length)),
+             pires: liste.filter(t => t.length > 34) };
+  });
+  rapport.verifier('tous les titres tiennent en 34 caractères',
+    titres.pires.length === 0, titres.pires.join(' | ') || `max ${titres.max} sur ${titres.total} titres`);
 
   rapport.section('Plus aucune suggestion aveugle : chaque mois réagit à l\'état');
   await page.evaluate(() => { state.hives[0].hausses = []; state.hives[0].traitements = []; });
