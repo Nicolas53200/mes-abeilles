@@ -3852,7 +3852,11 @@ function etatColonie(h){
     essaimageSurveille: v.cellules === "À surveiller",
     varroaFort: v.varroa === "Présence forte" || v.varroa === "Traitement à prévoir",
     frelonsForts: v.frelons === "Forte pression" || v.frelons === "Piège à poser",
-    pollenFaible: v.pollen === "Faible"
+    frelonsPresents: v.frelons !== "Non" && !!v.frelons,
+    pollenFaible: v.pollen === "Faible",
+    // L'état du matériel ne vient pas de la visite mais de la fiche matériel.
+    materielARemplacer: String((h.material || {}).condition || "") === "À remplacer",
+    materielASurveiller: String((h.material || {}).condition || "") === "À surveiller"
   };
 }
 
@@ -3900,22 +3904,31 @@ function suggestionsSaison(h, reference){
   /* ── Hivernage : janvier, février ── */
   if(mois === 1 || mois === 2){
     ajouter("hiver-ouverture", "Ne pas ouvrir la ruche",
-      "La colonie est en grappe. Un contrôle se fait en soupesant l'arrière de la ruche et en observant l'entrée.");
+      etat.connu
+        ? "La colonie est en grappe. Le contrôle se fait en soupesant l'arrière et en observant l'entrée, sans ouvrir."
+        : "Aucune visite enregistrée avant l'hiver : le contrôle se limite au poids et à l'activité à l'entrée, sans ouvrir.");
     if(etat.reservesFaibles){
-      ajouter("hiver-reserves", "Réserves signalées faibles",
-        "Le dernier contrôle indiquait des réserves faibles. Un nourrissement de secours au candi peut être envisagé sans ouvrir le corps.",
+      ajouter("hiver-reserves", "Réserves faibles au dernier contrôle",
+        "Un nourrissement de secours au candi peut être envisagé sans ouvrir le corps. Le sirop n'est plus assimilé à cette saison.",
         "haute");
     }
     if(etat.faible){
       ajouter("hiver-colonie-faible", "Colonie faible en hivernage",
-        "Une population réduite passe l'hiver plus difficilement. Surveiller le poids de plus près, sans ouvrir.");
+        "Une population réduite peine à maintenir la grappe. Surveiller le poids de plus près, sans ouvrir.");
+    }
+    if(etat.orpheline){
+      ajouter("hiver-orpheline", "Colonie sans reine en hiver",
+        "Une colonie orpheline ne passera pas l'hiver et aucun remérage n'est possible à cette saison. Prévoir la récupération du matériel au printemps.",
+        "haute");
     }
   }
 
   /* ── Sortie d'hivernage : mars ── */
   if(mois === 3){
     ajouter("printemps-visite", "Visite de sortie d'hivernage",
-      "Période habituelle du premier contrôle : présence de la reine, ponte, réserves et état des cadres.");
+      etat.connu
+        ? `Premier contrôle de l'année : reine, ponte, réserves et état des cadres. Dernier état relevé : colonie ${etat.niveau}.`
+        : "Premier contrôle de l'année : reine, ponte, réserves et état des cadres.");
     if(joursSansVisite === null || joursSansVisite > 90){
       ajouter("printemps-premiere", "Aucune visite récente",
         joursSansVisite === null
@@ -3927,8 +3940,22 @@ function suggestionsSaison(h, reference){
         "Un redémarrage lent se joue maintenant. Selon les cas : resserrer sur moins de cadres, nourrir au sirop léger, ou envisager une réunion.",
         "haute");
     }
-    ajouter("printemps-materiel", "Entretien du matériel",
-      "Période courante pour nettoyer les planchers et remplacer les cadres les plus anciens.");
+    if(etat.pollenFaible){
+      ajouter("printemps-pollen", "Pollen faible au dernier contrôle",
+        "Le pollen conditionne l'élevage du couvain à la reprise. Vérifier les rentrées et l'environnement mellifère proche.");
+    }
+    // Le matériel se remplace quand la colonie est transvasable, pas au hasard.
+    if(etat.materielARemplacer){
+      ajouter("printemps-materiel", "Matériel signalé à remplacer",
+        "La sortie d'hivernage est la période habituelle du transvasement, la colonie étant encore peu populeuse.",
+        "haute");
+    }else if(etat.materielASurveiller){
+      ajouter("printemps-materiel", "Matériel à surveiller",
+        "Période courante pour nettoyer les planchers et juger de l'état du corps avant la montée en population.");
+    }else{
+      ajouter("printemps-materiel", "Entretien du matériel",
+        "Période courante pour nettoyer les planchers et remplacer les cadres les plus anciens.");
+    }
   }
 
   /* ── Développement et essaimage : avril, mai ── */
@@ -3937,20 +3964,26 @@ function suggestionsSaison(h, reference){
       ajouter("essaimage-cellules", "Cellules royales observées",
         "Des cellules royales étaient signalées au dernier contrôle, en pleine période d'essaimage.",
         "haute");
+    }else if(etat.essaimageSurveille && etat.developpable){
+      ajouter("essaimage-surveille", "Cellules royales à surveiller",
+        "Le dernier contrôle demandait une surveillance. En pleine période, l'écart entre amorce et cellule operculée se compte en jours.",
+        "haute");
     }else if(etat.developpable){
       ajouter("essaimage-surveillance", "Surveiller l'essaimage",
-        "Période de forte pression d'essaimage sur une colonie populeuse. Le contrôle des cellules royales se fait habituellement tous les 7 à 10 jours.");
+        "Période de forte pression sur une colonie populeuse. Le contrôle des cellules royales se fait habituellement tous les 7 à 10 jours.");
     }
 
     if(!ruchette){
       if(hausses > 0){
         ajouter("hausse-en-place", "Hausse déjà en place",
-          `${hausses} hausse(s) posée(s). Contrôler le remplissage plutôt que d'en ajouter.`);
+          etat.developpable
+            ? `${hausses} hausse(s) posée(s). Contrôler le remplissage plutôt que d'en ajouter.`
+            : `${hausses} hausse(s) posée(s) sur une colonie affaiblie. Un retrait partiel peut l'aider à se recentrer.`,
+          etat.developpable ? "normale" : "haute");
       }else if(etat.developpable){
         ajouter("hausse-pose", "Période de pose des hausses",
           "Le corps est occupé et la colonie assez populeuse : c'est la période habituelle pour donner de la place.");
       }else if(etat.connu){
-        // Le point clé : pas de hausse sur une colonie qui ne la remplirait pas.
         ajouter("hausse-differee", "Hausse à différer",
           etat.orpheline
             ? "Colonie sans reine : une hausse serait un volume de plus à défendre et à chauffer, sans bénéfice."
@@ -3963,10 +3996,25 @@ function suggestionsSaison(h, reference){
       ajouter("printemps-renforcer", "Aider la colonie à repartir",
         "Sur une colonie faible en pleine saison : resserrer, nourrir au sirop léger, ou envisager un renfort en couvain operculé depuis une ruche forte.");
     }
+    if(etat.pollenFaible){
+      ajouter("pollen-faible", "Pollen faible en pleine montée",
+        "Le manque de pollen freine l'élevage du couvain au moment où la colonie devrait croître le plus vite.");
+    }
 
     if(ruchette){
-      ajouter("ruchette-dev", "Période favorable au développement",
-        "Conditions habituellement propices au développement d'une ruchette vers une colonie transférable.");
+      if(etat.orpheline){
+        ajouter("ruchette-orpheline", "Ruchette sans reine",
+          "Sans reine ni ponte, la ruchette ne se développera pas. Introduction d'une reine ou réunion à envisager.",
+          "haute");
+      }else if(etat.faible){
+        ajouter("ruchette-faible", "Ruchette en développement lent",
+          "Population encore réduite en pleine saison. Nourrissement léger et surveillance rapprochée avant d'envisager le transfert.");
+      }else{
+        ajouter("ruchette-dev", "Période favorable au développement",
+          etat.connu
+            ? "La colonie se développe. Le transfert en ruche s'envisage lorsque les cadres sont bien occupés."
+            : "Conditions habituellement propices au développement d'une ruchette vers une colonie transférable.");
+      }
     }
   }
 
@@ -3974,7 +4022,9 @@ function suggestionsSaison(h, reference){
   if(mois === 6){
     if(hausses > 0){
       ajouter("miellee-hausses", "Contrôler le remplissage",
-        `${hausses} hausse(s) en place. Période de contrôle du remplissage et de l'operculation.`);
+        etat.developpable
+          ? `${hausses} hausse(s) en place. Période de contrôle du remplissage et de l'operculation.`
+          : `${hausses} hausse(s) en place sur une colonie affaiblie : le remplissage sera probablement limité.`);
     }else if(!ruchette && etat.developpable){
       ajouter("miellee-place", "Vérifier la place disponible",
         "En pleine miellée, un manque de place favorise l'essaimage.");
@@ -4003,8 +4053,16 @@ function suggestionsSaison(h, reference){
 
   /* ── Traitement varroa : août ── */
   if(mois === 8){
-    ajouter("varroa-periode", "Période clé du traitement varroa",
-      "Le traitement intervient habituellement juste après le retrait des hausses, pour protéger les abeilles d'hiver en cours d'élevage.");
+    if(hausses > 0){
+      // Contrainte réelle : la plupart des traitements interdisent la
+      // présence de hausses, pour ne pas contaminer le miel de consommation.
+      ajouter("varroa-hausses", "Hausses encore en place avant traitement",
+        `${hausses} hausse(s) posée(s). La plupart des traitements imposent le retrait préalable des hausses. Vérifier la notice du produit avant toute pose.`,
+        "haute");
+    }else{
+      ajouter("varroa-periode", "Période clé du traitement varroa",
+        "Le traitement intervient habituellement juste après le retrait des hausses, pour protéger les abeilles d'hiver en cours d'élevage.");
+    }
     if(etat.varroaFort){
       ajouter("varroa-signale", "Varroa signalé au dernier contrôle",
         "Une pression forte était relevée. Elle pèse directement sur la génération d'abeilles d'hiver.",
@@ -4018,55 +4076,94 @@ function suggestionsSaison(h, reference){
           ? `Le dernier traitement noté remonte à ${mbFormatDate(traitement)}.`
           : "Aucun traitement n'apparaît dans l'historique de cette ruche.");
     }
+    if(etat.faible){
+      ajouter("varroa-colonie-faible", "Colonie faible en période de traitement",
+        "Sur une population réduite, le choix du produit et le respect du dosage comptent davantage. Vérifier l'adéquation à la taille de la colonie.");
+    }
     ajouter("frelons-aout", "Surveiller la pression des frelons",
-      "La pression sur les entrées augmente généralement à partir de cette période.");
+      etat.frelonsPresents
+        ? "Des frelons étaient déjà signalés au dernier contrôle, à l'entrée de la période la plus tendue."
+        : "La pression sur les entrées augmente généralement à partir de cette période.",
+      etat.frelonsForts ? "haute" : "normale");
   }
 
-  /* ── Préparation à l'hivernage : septembre, octobre ── */
+  /* ── Préparation à l'hivernage : septembre ── */
   if(mois === 9){
-    ajouter("nourrissement", "Constitution des réserves d'hiver",
-      "Période habituelle du nourrissement, si les réserves sont jugées insuffisantes pour l'hiver.");
-    if(etat.reservesIncompletes){
-      ajouter("nourrissement-reserves", "Réserves incomplètes au dernier contrôle",
-        etat.reservesFaibles
-          ? "Réserves notées faibles à l'approche de l'hivernage : c'est le moment où le nourrissement est encore efficace."
-          : "Réserves notées moyennes : à recontrôler avant les premiers froids.",
-        etat.reservesFaibles ? "haute" : "normale");
+    if(etat.reservesFaibles){
+      ajouter("nourrissement", "Réserves insuffisantes pour l'hiver",
+        "Réserves notées faibles à l'approche de l'hivernage : c'est la dernière période où le nourrissement au sirop reste efficace.",
+        "haute");
+    }else if(etat.reservesIncompletes){
+      ajouter("nourrissement", "Réserves à compléter",
+        "Réserves notées moyennes. Un complément peut être envisagé avant les premiers froids.");
+    }else if(etat.connu){
+      // Nourrir une colonie déjà pourvue bloque le nid à couvain.
+      ajouter("nourrissement-suffisant", "Réserves correctes au dernier contrôle",
+        "Le nourrissement ne s'impose pas pour l'instant. Un apport inutile encombre le nid à couvain. À recontrôler avant les froids.");
+    }else{
+      ajouter("nourrissement", "Constitution des réserves d'hiver",
+        "Période habituelle du nourrissement, si les réserves sont jugées insuffisantes pour l'hiver.");
     }
     if(etat.faible){
       ajouter("hivernage-faible", "Colonie faible avant l'hiver",
         "Une colonie affaiblie en septembre passe rarement l'hiver seule. La réunion avec une colonie plus forte est l'option habituellement envisagée à cette période.",
         "haute");
     }
-    ajouter("frelons-septembre", "Pression frelons souvent maximale",
-      etat.frelonsForts
-        ? "Une forte pression était déjà relevée au dernier contrôle. Réduction des entrées et contrôle des pièges."
-        : "Contrôle des pièges et réduction des entrées si la pression est forte.",
-      etat.frelonsForts ? "haute" : "normale");
+    if(etat.faible && etat.frelonsPresents){
+      ajouter("frelons-colonie-faible", "Colonie faible sous pression de frelons",
+        "Une colonie affaiblie se défend mal : le blocage à l'entrée peut l'empêcher de sortir et accélérer son déclin. Réduction d'entrée et piégeage prioritaires.",
+        "haute");
+    }else{
+      ajouter("frelons-septembre", "Pression frelons souvent maximale",
+        etat.frelonsForts
+          ? "Une forte pression était déjà relevée au dernier contrôle. Réduction des entrées et contrôle des pièges."
+          : "Contrôle des pièges et réduction des entrées si la pression est forte.",
+        etat.frelonsForts ? "haute" : "normale");
+    }
   }
 
+  /* ── Préparation à l'hivernage : octobre ── */
   if(mois === 10){
     ajouter("hivernage-prep", "Préparation de l'hivernage",
-      "Réduction des entrées, contrôle du poids et de l'étanchéité du toit.");
+      etat.faible
+        ? "Réduction des entrées et contrôle du poids. Sur une colonie affaiblie, resserrer sur les cadres réellement occupés."
+        : "Réduction des entrées, contrôle du poids et de l'étanchéité du toit.");
     if(etat.reservesFaibles){
       ajouter("hivernage-reserves", "Réserves encore faibles",
         "Le nourrissement au sirop devient peu efficace par temps froid. Le candi prend le relais.",
         "haute");
     }
+    if(etat.materielARemplacer){
+      ajouter("hivernage-materiel", "Matériel signalé à remplacer",
+        "Une ruche peu étanche compromet l'hivernage. Un remplacement complet attendra le printemps, mais le toit et le plancher se contrôlent maintenant.");
+    }
     ajouter("hivernage-dernier", "Dernier contrôle avant l'hiver",
-      "Généralement la dernière ouverture avant la reprise de printemps.");
+      etat.connu
+        ? `Généralement la dernière ouverture avant la reprise. Dernier état relevé : colonie ${etat.niveau}.`
+        : "Généralement la dernière ouverture avant la reprise de printemps.");
   }
 
   /* ── Repos : novembre, décembre ── */
   if(mois === 11 || mois === 12){
     ajouter("repos", "Colonie au repos",
       "Contrôle du poids en soupesant, sans ouvrir. Surveillance des dégâts de pics ou de rongeurs.");
+    if(etat.reservesFaibles || etat.faible){
+      ajouter("repos-surveiller", "Ruche à surveiller de plus près",
+        etat.reservesFaibles
+          ? "Réserves faibles au dernier contrôle : soupeser plus souvent, un apport de candi peut devenir nécessaire."
+          : "Colonie faible au dernier contrôle : surveiller l'activité à l'entrée lors des journées douces.",
+        "haute");
+    }
   }
 
   /* ── Échéance réglementaire : mois RÉEL, jamais décalé par la zone ── */
   if(moisCivil >= 9 && moisCivil <= 12){
+    const napi = String(state.profil?.napi || "").trim();
     ajouter("declaration", "Déclaration annuelle de ruches",
-      "La déclaration court du 1er septembre au 31 décembre. Elle est obligatoire dès la première colonie et conditionne l'attribution du NAPI.");
+      napi
+        ? `La déclaration court du 1er septembre au 31 décembre. Elle est obligatoire chaque année, même sans changement. NAPI enregistré : ${napi}.`
+        : "La déclaration court du 1er septembre au 31 décembre. Elle est obligatoire dès la première colonie et conditionne l'attribution du NAPI, absent de ton profil.",
+      napi ? "normale" : "haute");
   }
 
   // Les points prioritaires remontent en tête, l'ordre reste stable sinon.

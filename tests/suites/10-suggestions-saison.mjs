@@ -48,7 +48,7 @@ export default () => executerSuite('Suggestions saisonnières', async ({ page, o
     [5,  'essaimage-surveillance','mai — essaimage'],
     [7,  'recolte',               'juillet — récolte'],
     [8,  'varroa-periode',        'août — traitement varroa'],
-    [9,  'nourrissement',         'septembre — réserves'],
+    [9,  'nourrissement-suffisant','septembre — réserves déjà bonnes'],
     [10, 'hivernage-prep',        'octobre — préparation'],
     [12, 'repos',                 'décembre — repos']
   ]){
@@ -145,7 +145,10 @@ export default () => executerSuite('Suggestions saisonnières', async ({ page, o
   rapport.verifier('remplace le message générique', !cellules.includes('essaimage-surveillance'));
 
   const reserves = await avecVisite(page, { reserves:'Faibles' }, 9, 10);
-  rapport.verifier('réserves faibles en septembre', reserves.includes('nourrissement-reserves'));
+  rapport.verifier('réserves faibles en septembre', reserves.includes('nourrissement'));
+  const prioNourr = await page.evaluate(() => suggestionsSaison(state.hives[0], new Date(2026,8,10))
+    .find(x => x.cle === 'nourrissement')?.priorite);
+  rapport.verifier('…et signalé en priorité', prioNourr === 'haute', String(prioNourr));
   const faibleSept = await avecVisite(page, { force:'Faible' }, 9, 10);
   rapport.verifier('colonie faible en septembre → réunion évoquée', faibleSept.includes('hivernage-faible'));
   const varroa = await avecVisite(page, { varroa:'Présence forte' }, 8, 10);
@@ -207,6 +210,78 @@ export default () => executerSuite('Suggestions saisonnières', async ({ page, o
   rapport.verifier('section rendue', rendu.longueur > 80, `${rendu.longueur} car.`);
   rapport.verifier('la zone est affichée', rendu.zone);
   rapport.verifier('les deux lignes figées ont disparu', !rendu.ancien);
+
+  rapport.section('Plus aucune suggestion aveugle : chaque mois réagit à l\'état');
+  await page.evaluate(() => { state.hives[0].hausses = []; state.hives[0].traitements = []; });
+
+  // Août : hausses encore posées → le traitement ne peut pas se faire tel quel
+  await page.evaluate(() => { state.hives[0].hausses = [{date:'2026-05-01',action:'Pose',nombre:'2'}]; });
+  const aoutHausses = await avecVisite(page, { force:'Forte' }, 8, 10);
+  rapport.verifier('août, hausses posées → retrait préalable signalé', aoutHausses.includes('varroa-hausses'));
+  rapport.verifier('…et pas le message générique', !aoutHausses.includes('varroa-periode'));
+  await page.evaluate(() => { state.hives[0].hausses = []; });
+  const aoutSansH = await avecVisite(page, { force:'Forte' }, 8, 10);
+  rapport.verifier('août, hausses retirées → message générique', aoutSansH.includes('varroa-periode'));
+  const aoutFaible = await avecVisite(page, { force:'Faible' }, 8, 10);
+  rapport.verifier('août, colonie faible → dosage à adapter', aoutFaible.includes('varroa-colonie-faible'));
+
+  // Septembre : ne pas nourrir une colonie déjà pourvue
+  const septBonnes = await avecVisite(page, { reserves:'Bonnes' }, 9, 10);
+  rapport.verifier('septembre, réserves bonnes → nourrissement non imposé', septBonnes.includes('nourrissement-suffisant'));
+  rapport.verifier('…pas de suggestion de nourrir', !septBonnes.includes('nourrissement'));
+  const septFaibles = await avecVisite(page, { reserves:'Faibles' }, 9, 10);
+  rapport.verifier('septembre, réserves faibles → nourrissement prioritaire', septFaibles.includes('nourrissement'));
+  const septFrelons = await avecVisite(page, { force:'Faible', frelons:'Forte pression' }, 9, 10);
+  rapport.verifier('septembre, faible + frelons → vulnérabilité signalée', septFrelons.includes('frelons-colonie-faible'));
+
+  // Matériel : le printemps s'adapte à la fiche matériel
+  await page.evaluate(() => { state.hives[0].material = { condition:'À remplacer' }; });
+  const marsMat = await avecVisite(page, { force:'Forte' }, 3, 10);
+  rapport.verifier('mars, matériel à remplacer → transvasement évoqué', marsMat.includes('printemps-materiel'));
+  const priorite = await page.evaluate(() => suggestionsSaison(state.hives[0], new Date(2026,2,10))
+    .find(x => x.cle === 'printemps-materiel')?.priorite);
+  rapport.verifier('…en priorité', priorite === 'haute', String(priorite));
+  await page.evaluate(() => { state.hives[0].material = { condition:'Bon' }; });
+
+  // Pollen : capturé et désormais exploité
+  const pollen = await avecVisite(page, { force:'Forte', pollen:'Faible' }, 5, 10);
+  rapport.verifier('mai, pollen faible → signalé', pollen.includes('pollen-faible'));
+
+  // Cellules « à surveiller » : distinct du générique et de « Oui »
+  const surveille = await avecVisite(page, { force:'Forte', cellules:'À surveiller' }, 5, 10);
+  rapport.verifier('cellules à surveiller → message dédié', surveille.includes('essaimage-surveille'));
+  rapport.verifier('…distinct du générique', !surveille.includes('essaimage-surveillance'));
+
+  // Hiver : l'orphelinage a ses propres conséquences
+  const hiverOrph = await avecVisite(page, { reine:'Non' }, 1, 15);
+  rapport.verifier('janvier, orpheline → conséquence hivernale', hiverOrph.includes('hiver-orpheline'));
+
+  // Novembre : la surveillance dépend du dernier état connu
+  const novFaible = await avecVisite(page, { reserves:'Faibles' }, 11, 15);
+  rapport.verifier('novembre, réserves faibles → surveillance rapprochée', novFaible.includes('repos-surveiller'));
+  const novBon = await avecVisite(page, { force:'Forte' }, 11, 15);
+  rapport.verifier('novembre, colonie saine → repos simple', !novBon.includes('repos-surveiller'));
+
+  // Ruchette : son propre état, pas seulement son type
+  const ruchOrph = await page.evaluate(() => {
+    state.profil.zone = 'centre';
+    state.hives[1].visites = [{ date:'2026-05-01', reine:'Non', ponte:'Absente', couvain:'Absent', force:'Faible' }];
+    return suggestionsSaison(state.hives[1], new Date(2026,4,10)).map(x => x.cle);
+  });
+  rapport.verifier('ruchette orpheline → message dédié', ruchOrph.includes('ruchette-orpheline'));
+  rapport.verifier('…pas le message de développement', !ruchOrph.includes('ruchette-dev'));
+
+  // Déclaration : dépend du NAPI renseigné
+  const sansNapi = await page.evaluate(() => {
+    state.profil.napi = '';
+    return suggestionsSaison(state.hives[0], new Date(2026,9,15)).find(x => x.cle === 'declaration')?.priorite;
+  });
+  rapport.verifier('NAPI absent → déclaration prioritaire', sansNapi === 'haute', String(sansNapi));
+  const avecNapi = await page.evaluate(() => {
+    state.profil.napi = '53-12345';
+    return suggestionsSaison(state.hives[0], new Date(2026,9,15)).find(x => x.cle === 'declaration')?.priorite;
+  });
+  rapport.verifier('NAPI renseigné → simple rappel', avecNapi === 'normale', String(avecNapi));
 
   rapport.verifier('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 });
