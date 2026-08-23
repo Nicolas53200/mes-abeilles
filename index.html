@@ -2399,6 +2399,113 @@ const LS_LEGACY_KEYS = [
   "mesAbeilles_v9"
 ];
 
+/* ── Migrations de données ───────────────────────────────
+   Les données de l'utilisateur vivent sur son appareil et lui
+   survivent aux mises à jour. Quand une nouvelle version change la
+   FORME de ces données (champ renommé, valeur déplacée, type
+   modifié), la sauvegarde existante doit être convertie au
+   chargement, sinon l'information est perdue silencieusement.
+
+   AJOUTER un champ ne demande aucune migration : mergeLoadedState()
+   laisse intactes les clés absentes de la sauvegarde, la valeur par
+   défaut déclarée dans `state` s'applique donc d'elle-même.
+
+   Une migration ne sert que pour : renommer un champ, déplacer une
+   valeur, changer un type, réparer des données erronées.
+
+   Pour en ajouter une, insérer un objet dans DATA_MIGRATIONS :
+
+     { version: "v37.0",
+       description: "honey déplacé vers recoltes.total",
+       migrate(data){
+         (data.hives || []).forEach(h => {
+           if(h.honey !== undefined){
+             h.recoltes = h.recoltes || {};
+             h.recoltes.total = h.honey;
+             delete h.honey;
+           }
+         });
+       } }
+
+   `version` est la version de l'app qui introduit le changement : la
+   migration s'applique à toute sauvegarde antérieure. L'ordre de la
+   liste est indifférent, elles sont triées avant exécution.
+
+   PIÈGE : ne jamais poser une propriété nommée sur un tableau
+   existant. normalizeHives() initialise déjà visites, reines,
+   divisions, hausses, recoltes, traitements, frelons, nourrissements,
+   pesees, transhumances, photos et documents comme des TABLEAUX.
+   Écrire h.recoltes.total = 23 sur l'un d'eux « marche » en mémoire
+   mais JSON.stringify ignore les propriétés non-indicielles d'un
+   tableau : la valeur disparaît à la sauvegarde, sans erreur.
+   Utiliser un champ scalaire distinct, ou pousser un élément dans le
+   tableau.
+
+   Garanties : les migrations tournent sur une copie ; si l'une
+   échoue, la sauvegarde d'origine est conservée telle quelle plutôt
+   que laissée à moitié convertie. Un instantané d'avant migration
+   est écrit dans LS_PREMIGRATION_KEY quand le quota le permet. */
+const LS_PREMIGRATION_KEY = "mesAbeilles_data_avant_migration";
+
+const DATA_MIGRATIONS = [
+  // Aucune migration nécessaire à ce jour.
+];
+
+/* Compare deux versions "v36.2" / "v37" / "37.0.1".
+   Renvoie -1 si a < b, 1 si a > b, 0 si égales. */
+function compareAppVersions(a, b){
+  const parse = v => String(v ?? "").trim().replace(/^v/i, "").split(".").map(n => parseInt(n, 10) || 0);
+  const A = parse(a), B = parse(b);
+  for(let i = 0; i < Math.max(A.length, B.length); i++){
+    const x = A[i] || 0, y = B[i] || 0;
+    if(x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+/* Applique les migrations dues à une sauvegarde chargée.
+   Renvoie la sauvegarde convertie, ou l'originale si rien à faire. */
+function runDataMigrations(saved, sourceLabel){
+  if(!saved || typeof saved !== "object") return saved;
+
+  const from = saved.appVersion || "v0";
+  const due = DATA_MIGRATIONS
+    .filter(m => m && typeof m.migrate === "function" && compareAppVersions(from, m.version) < 0)
+    .sort((a, b) => compareAppVersions(a.version, b.version));
+
+  if(!due.length) return saved;
+
+  let draft;
+  try{
+    draft = JSON.parse(JSON.stringify(saved));
+  }catch(e){
+    console.warn("[Mes Abeilles] Copie impossible, migrations ignorées", e);
+    return saved;
+  }
+
+  for(const m of due){
+    try{
+      m.migrate(draft);
+      console.log("[Mes Abeilles] Migration " + m.version + " appliquée : " + (m.description || ""));
+    }catch(e){
+      // Ne jamais laisser des données à moitié converties.
+      console.warn("[Mes Abeilles] Migration " + m.version + " en échec, sauvegarde d'origine conservée", e);
+      return saved;
+    }
+  }
+
+  // Filet de sécurité, best effort : le quota Android peut refuser.
+  try{
+    localStorage.setItem(LS_PREMIGRATION_KEY, JSON.stringify(saved));
+  }catch(e){
+    console.warn("[Mes Abeilles] Instantané d'avant migration ignoré (quota)", e);
+  }
+
+  draft.appVersion = APP_VERSION;
+  console.log("[Mes Abeilles] " + due.length + " migration(s) depuis " + from + (sourceLabel ? " (" + sourceLabel + ")" : ""));
+  return draft;
+}
+
 const state = {
   page: "home",
   hiveSection: "resume",
@@ -5217,7 +5324,7 @@ function loadState(){
   }
 
   if(best){
-    mergeLoadedState(best.data);
+    mergeLoadedState(runDataMigrations(best.data, bestKey));
     normalizeHives();
     // Migration vers la clé stable v18
     saveState();
@@ -5350,6 +5457,10 @@ function importData(input){
       }
       if(!sanitizedData.hives) throw new Error("Format Mes Abeilles invalide");
 
+      // La liste blanche ci-dessus retire appVersion : on le reprend de la
+      // source pour que les migrations sachent d'où vient le fichier.
+      sanitizedData.appVersion = typeof data.appVersion === "string" ? data.appVersion.slice(0, 20) : "";
+
       for(const hive of sanitizedData.hives){
         if(!hive || typeof hive !== "object" || typeof hive.code !== "string" || !hive.code.trim()){
           throw new Error("Ruche invalide détectée dans l'import");
@@ -5366,13 +5477,14 @@ function importData(input){
 
       // Import complet : on restaure les ruches, le profil, la conformité et les réglages
       // sans écraser les valeurs par défaut utiles absentes des anciens exports.
-      state.hives = sanitizedData.hives;
-      state.profil = sanitizedData.profil || {};
-      state.complianceDocs = sanitizedData.complianceDocs || {};
-      state.alertSettings = {...getAlertSettings(), ...(sanitizedData.alertSettings || {})};
-      state.onboardingDone = typeof sanitizedData.onboardingDone === "boolean" ? sanitizedData.onboardingDone : state.onboardingDone;
-      state.calendarPromptDone = typeof sanitizedData.calendarPromptDone === "boolean" ? sanitizedData.calendarPromptDone : state.calendarPromptDone;
-      state.hiveTourDone = typeof sanitizedData.hiveTourDone === "boolean" ? sanitizedData.hiveTourDone : state.hiveTourDone;
+      const imported = runDataMigrations(sanitizedData, "fichier importé");
+      state.hives = imported.hives;
+      state.profil = imported.profil || {};
+      state.complianceDocs = imported.complianceDocs || {};
+      state.alertSettings = {...getAlertSettings(), ...(imported.alertSettings || {})};
+      state.onboardingDone = typeof imported.onboardingDone === "boolean" ? imported.onboardingDone : state.onboardingDone;
+      state.calendarPromptDone = typeof imported.calendarPromptDone === "boolean" ? imported.calendarPromptDone : state.calendarPromptDone;
+      state.hiveTourDone = typeof imported.hiveTourDone === "boolean" ? imported.hiveTourDone : state.hiveTourDone;
 
       normalizeHives();
       saveState();
