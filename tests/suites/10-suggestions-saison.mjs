@@ -23,6 +23,15 @@ const cles = (page, mois, jour, zone, ruche) => page.evaluate(([m,j,z,r]) => {
   return suggestionsSaison(h, new Date(2026, m - 1, j)).map(x => x.cle);
 }, [mois, jour, zone, ruche]);
 
+// Pose une visite sur R-1, puis renvoie les clés au mois voulu.
+const avecVisite = (page, visite, mois, jour, zone) => page.evaluate(([v,m,j,z]) => {
+  state.profil.zone = z || 'centre';   // sinon on hérite de la zone du test précédent
+  state.hives[0].visites = [{ date:'2026-01-01', reine:'Oui', ponte:'Normale',
+    couvain:'Normal', force:'Forte', reserves:'Bonnes', cellules:'Non',
+    varroa:'Comptage OK', frelons:'Non', pollen:'Normal', ...v }];
+  return suggestionsSaison(state.hives[0], new Date(2026, m - 1, j)).map(x => x.cle);
+}, [visite, mois, jour, zone]);
+
 export default () => executerSuite('Suggestions saisonnières', async ({ page, origine, rapport, erreurs }) => {
   await amorcer(page, RUCHE);
   await page.goto(origine);
@@ -32,7 +41,7 @@ export default () => executerSuite('Suggestions saisonnières', async ({ page, o
   rapport.verifier('données chargées', await page.evaluate(() => state.hives.length === 2));
   rapport.verifier('ZONES_APICOLES accessible', await page.evaluate(() => Object.keys(ZONES_APICOLES).length === 4));
 
-  rapport.section('Repères cohérents avec le mois');
+  rapport.section('Repères cohérents avec le mois, sur une colonie saine');
   for(const [mois, attendue, note] of [
     [1,  'hiver-ouverture',       'janvier — ne pas ouvrir'],
     [3,  'printemps-visite',      'mars — sortie d\'hivernage'],
@@ -43,9 +52,10 @@ export default () => executerSuite('Suggestions saisonnières', async ({ page, o
     [10, 'hivernage-prep',        'octobre — préparation'],
     [12, 'repos',                 'décembre — repos']
   ]){
-    const k = await cles(page, mois, 15, 'centre', 'ruche');
+    const k = await avecVisite(page, { force:'Forte' }, mois, 15, 'centre');
     rapport.verifier(note.padEnd(30), k.includes(attendue), k.join(', ').slice(0, 60));
   }
+  await page.evaluate(() => { state.hives[0].visites = []; });
 
   rapport.section('La zone décale réellement les repères biologiques');
   // Le 25 février : le Sud est déjà en sortie d'hivernage, la Montagne non.
@@ -56,10 +66,11 @@ export default () => executerSuite('Suggestions saisonnières', async ({ page, o
   rapport.verifier('Centre le 25/02 → encore en hivernage', centre.includes('hiver-ouverture'));
   rapport.verifier('Montagne le 25/02 → encore en hivernage', montagne.includes('hiver-ouverture'));
   // Le 20 avril : la Montagne est en retard sur le Centre.
-  const mAvr = await cles(page, 4, 20, 'montagne', 'ruche');
-  const cAvr = await cles(page, 4, 20, 'centre', 'ruche');
+  const mAvr = await avecVisite(page, { force:'Forte' }, 4, 20, 'montagne');
+  const cAvr = await avecVisite(page, { force:'Forte' }, 4, 20, 'centre');
   rapport.verifier('Centre le 20/04 → essaimage', cAvr.some(k => k.startsWith('essaimage')));
   rapport.verifier('Montagne le 20/04 → encore sortie d\'hivernage', mAvr.includes('printemps-visite'));
+  await page.evaluate(() => { state.hives[0].visites = []; });
 
   rapport.section('L\'échéance réglementaire ne suit PAS la zone');
   for(const z of ['sud','centre','nord','montagne']){
@@ -73,25 +84,76 @@ export default () => executerSuite('Suggestions saisonnières', async ({ page, o
   rapport.verifier('Sud fin août : repères de septembre…', aout.includes('nourrissement'));
   rapport.verifier('…mais pas encore la déclaration', !aout.includes('declaration'));
 
-  rapport.section('Croisement avec l\'état réel de la ruche');
-  const sansHausse = await cles(page, 5, 10, 'centre', 'ruche');
-  rapport.verifier('mai sans hausse → suggère d\'en poser', sansHausse.includes('hausse-pose'));
+  rapport.section('LE POINT DEMANDÉ : pas de hausse sur une colonie faible');
+  await page.evaluate(() => { state.hives[0].hausses = []; });
+
+  const forte = await avecVisite(page, { force:'Forte' }, 5, 10);
+  rapport.verifier('colonie forte en mai → propose la hausse', forte.includes('hausse-pose'));
+
+  const faible = await avecVisite(page, { force:'Faible' }, 5, 10);
+  rapport.verifier('population faible → NE propose PAS la hausse', !faible.includes('hausse-pose'));
+  rapport.verifier('…et explique pourquoi la différer', faible.includes('hausse-differee'));
+  rapport.verifier('…et propose d\'aider la colonie', faible.includes('printemps-renforcer'));
+
+  const couvainFaible = await avecVisite(page, { force:'Forte', couvain:'Faible' }, 5, 10);
+  rapport.verifier('couvain faible → pas de hausse non plus', !couvainFaible.includes('hausse-pose'));
+
+  const ponteAbsente = await avecVisite(page, { ponte:'Absente' }, 5, 10);
+  rapport.verifier('ponte absente → pas de hausse', !ponteAbsente.includes('hausse-pose'));
+
+  const orpheline = await avecVisite(page, { reine:'Non' }, 5, 10);
+  rapport.verifier('colonie orpheline → signalée en priorité', orpheline.includes('colonie-orpheline'));
+  rapport.verifier('…pas de hausse', !orpheline.includes('hausse-pose'));
+  rapport.verifier('…et l\'orphelinage passe en tête', orpheline[0] === 'colonie-orpheline');
+
+  rapport.section('Une colonie faible n\'essaime pas et ne se récolte pas');
+  rapport.verifier('faible → pas de surveillance d\'essaimage', !faible.includes('essaimage-surveillance'));
+  rapport.verifier('forte → surveillance d\'essaimage', forte.includes('essaimage-surveillance'));
 
   await page.evaluate(() => { state.hives[0].hausses = [{ date:'2026-05-01', action:'Pose', nombre:'2' }]; });
-  const avecHausse = await cles(page, 5, 10, 'centre', 'ruche');
-  rapport.verifier('avec hausses → ne le suggère plus', !avecHausse.includes('hausse-pose'));
-  const juinHausse = await cles(page, 6, 10, 'centre', 'ruche');
+  const recolteForte = await avecVisite(page, { force:'Forte' }, 7, 10);
+  rapport.verifier('juillet, colonie forte → récolte', recolteForte.includes('recolte'));
+  const recolteFaible = await avecVisite(page, { force:'Faible' }, 7, 10);
+  rapport.verifier('juillet, colonie faible → récolte déconseillée', recolteFaible.includes('recolte-faible'));
+  rapport.verifier('…et pas de suggestion de récolte', !recolteFaible.includes('recolte'));
+
+  const juinFaible = await avecVisite(page, { force:'Faible' }, 6, 10);
+  rapport.verifier('juin, faible avec hausse → contrôler quand même', juinFaible.includes('miellee-hausses'));
+  await page.evaluate(() => { state.hives[0].hausses = []; });
+  const juinFaibleSansH = await avecVisite(page, { force:'Faible' }, 6, 10);
+  rapport.verifier('juin, faible sans hausse → non prête pour la miellée', juinFaibleSansH.includes('miellee-faible'));
+
+  rapport.section('État inconnu : prudence, pas de développement à l\'aveugle');
+  await page.evaluate(() => { state.hives[0].visites = []; state.hives[0].hausses = []; });
+  const inconnu = await cles(page, 5, 10, 'centre', 'ruche');
+  rapport.verifier('sans visite → état signalé inconnu', inconnu.includes('etat-inconnu'));
+  rapport.verifier('…pas de hausse proposée à l\'aveugle', !inconnu.includes('hausse-pose'));
+  rapport.verifier('…ni de hausse à différer (rien à affirmer)', !inconnu.includes('hausse-differee'));
+
+  rapport.section('Hausse déjà posée');
+  await page.evaluate(() => { state.hives[0].hausses = [{ date:'2026-05-01', action:'Pose', nombre:'2' }]; });
+  const dejaPosee = await avecVisite(page, { force:'Forte' }, 5, 10);
+  rapport.verifier('ne propose pas d\'en ajouter', !dejaPosee.includes('hausse-pose'));
+  rapport.verifier('invite à contrôler le remplissage', dejaPosee.includes('hausse-en-place'));
+  const juinHausse = await avecVisite(page, { force:'Forte' }, 6, 10);
   rapport.verifier('juin avec hausses → contrôler le remplissage', juinHausse.includes('miellee-hausses'));
 
-  await page.evaluate(() => { state.hives[0].visites = [{ date:'2026-05-05', cellules:'Oui', reserves:'Bonnes' }]; });
-  const cellules = await cles(page, 5, 10, 'centre', 'ruche');
-  rapport.verifier('cellules royales vues → alerte essaimage ciblée', cellules.includes('essaimage-cellules'));
+  rapport.section('Autres croisements');
+  await page.evaluate(() => { state.hives[0].hausses = []; });
+  const cellules = await avecVisite(page, { force:'Forte', cellules:'Oui' }, 5, 10);
+  rapport.verifier('cellules royales vues → message ciblé', cellules.includes('essaimage-cellules'));
   rapport.verifier('remplace le message générique', !cellules.includes('essaimage-surveillance'));
 
-  await page.evaluate(() => { state.hives[0].visites = [{ date:'2026-09-01', reserves:'Faibles' }]; });
-  const reserves = await cles(page, 9, 10, 'centre', 'ruche');
+  const reserves = await avecVisite(page, { reserves:'Faibles' }, 9, 10);
   rapport.verifier('réserves faibles en septembre', reserves.includes('nourrissement-reserves'));
+  const faibleSept = await avecVisite(page, { force:'Faible' }, 9, 10);
+  rapport.verifier('colonie faible en septembre → réunion évoquée', faibleSept.includes('hivernage-faible'));
+  const varroa = await avecVisite(page, { varroa:'Présence forte' }, 8, 10);
+  rapport.verifier('varroa fort signalé en août', varroa.includes('varroa-signale'));
+  const hiverFaible = await avecVisite(page, { reserves:'Faibles' }, 1, 15);
+  rapport.verifier('réserves faibles en janvier', hiverFaible.includes('hiver-reserves'));
 
+  await page.evaluate(() => { state.hives[0].visites = []; state.hives[0].traitements = []; });
   const aoutSansTraitement = await cles(page, 8, 10, 'centre', 'ruche');
   rapport.verifier('août sans traitement enregistré', aoutSansTraitement.includes('varroa-aucun'));
   await page.evaluate(() => { state.hives[0].traitements = [{ date:'2026-08-05', type:'Apivar' }]; });

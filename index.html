@@ -3807,20 +3807,70 @@ function dernierTraitement(h){
   return recent;
 }
 
+/* État de la colonie d'après la dernière visite saisie.
+   C'est ce qui filtre les suggestions : proposer une hausse sur une
+   colonie faible est contre-productif — elle ne peut ni chauffer ni
+   défendre le volume supplémentaire, et ses réserves se diluent.
+   De même, une colonie faible n'essaime pas et ne se récolte pas.
+
+   Sans visite enregistrée, l'état est « inconnu » : on ne suggère alors
+   aucune action de développement, on invite d'abord à aller voir. */
+function etatColonie(h){
+  const v = typeof latestVisit === "function" ? latestVisit(h) : null;
+  if(!v){
+    return { connu:false, niveau:"inconnu", orpheline:false, faible:false,
+             developpable:false, reservesFaibles:false, reservesIncompletes:false,
+             essaimageVu:false, varroaFort:false, frelonsForts:false };
+  }
+
+  // Reine absente, ou plus aucune trace de ponte ni de couvain.
+  const orpheline = v.reine === "Non"
+    || (v.ponte === "Absente" && v.couvain === "Absent");
+
+  const reineDouteuse = v.reine === "Incertain" || v.ponte === "À vérifier";
+
+  const faible = v.force === "Faible"
+    || v.couvain === "Faible" || v.couvain === "Absent"
+    || v.ponte === "Faible" || v.ponte === "Absente";
+
+  const forte = v.force === "Forte"
+    && (v.couvain === "Normal" || v.couvain === "Abondant")
+    && v.ponte === "Normale";
+
+  return {
+    connu: true,
+    niveau: orpheline ? "orpheline" : (faible ? "faible" : (forte ? "forte" : "moyenne")),
+    orpheline,
+    reineDouteuse,
+    faible,
+    // Seule une colonie ni orpheline ni faible supporte hausse, récolte
+    // ou pression d'essaimage.
+    developpable: !orpheline && !faible,
+    reservesFaibles: v.reserves === "Faibles",
+    reservesIncompletes: v.reserves === "Faibles" || v.reserves === "Moyennes",
+    essaimageVu: v.cellules === "Oui",
+    essaimageSurveille: v.cellules === "À surveiller",
+    varroaFort: v.varroa === "Présence forte" || v.varroa === "Traitement à prévoir",
+    frelonsForts: v.frelons === "Forte pression" || v.frelons === "Piège à poser",
+    pollenFaible: v.pollen === "Faible"
+  };
+}
+
 /* Suggestions pour une ruche, à une date donnée.
    `reference` n'est là que pour rendre la fonction testable.
-   Chaque entrée : { titre, texte, cle }. Aucune n'est une prescription :
-   la formulation reste au rappel, l'apiculteur décide. */
+   Chaque entrée : { cle, titre, texte, priorite }.
+   Aucune n'est une prescription : la formulation reste au rappel. */
 function suggestionsSaison(h, reference){
   const maintenant = reference instanceof Date ? reference : new Date();
   const mois = moisSaisonnier(maintenant);
   const moisCivil = moisReel(maintenant);
   const suggestions = [];
-  const ajouter = (cle, titre, texte) => suggestions.push({ cle, titre, texte });
+  const ajouter = (cle, titre, texte, priorite) =>
+    suggestions.push({ cle, titre, texte, priorite: priorite || "normale" });
 
   if(!h) return suggestions;
 
-  const visite = typeof latestVisit === "function" ? latestVisit(h) : null;
+  const etat = etatColonie(h);
   const hausses = typeof activeHaussesCount === "function" ? activeHaussesCount(h) : 0;
   const ruchette = h.type === "ruchette";
   const derniereVisite = typeof mbLastVisit === "function" ? mbLastVisit(h) : null;
@@ -3828,13 +3878,37 @@ function suggestionsSaison(h, reference){
     ? Math.floor((maintenant - derniereVisite) / 86400000)
     : null;
 
+  /* ── Ce qui prime sur la saison ───────────────────────
+     Une colonie orpheline ou dont l'état est inconnu ne relève pas du
+     calendrier : c'est cela qu'il faut traiter d'abord. */
+  if(etat.orpheline){
+    ajouter("colonie-orpheline", "Colonie possiblement orpheline",
+      "Le dernier contrôle ne montrait ni reine ni ponte. Sans reine, aucune action de saison n'a de sens : c'est le point à traiter en premier.",
+      "haute");
+  }else if(etat.reineDouteuse){
+    ajouter("reine-douteuse", "Présence de la reine à confirmer",
+      "Le dernier contrôle laissait un doute sur la reine ou la ponte. Les repères ci-dessous supposent une colonie avec une reine active.",
+      "haute");
+  }
+
+  if(!etat.connu && !ruchette){
+    ajouter("etat-inconnu", "État de la colonie inconnu",
+      "Aucune visite enregistrée sur cette ruche. Les suggestions de développement restent en retrait tant que l'état n'est pas connu.",
+      "haute");
+  }
+
   /* ── Hivernage : janvier, février ── */
   if(mois === 1 || mois === 2){
     ajouter("hiver-ouverture", "Ne pas ouvrir la ruche",
       "La colonie est en grappe. Un contrôle se fait en soupesant l'arrière de la ruche et en observant l'entrée.");
-    if(visite && visite.reserves === "Faibles"){
+    if(etat.reservesFaibles){
       ajouter("hiver-reserves", "Réserves signalées faibles",
-        "Le dernier contrôle indiquait des réserves faibles. Un nourrissement de secours au candi peut être envisagé sans ouvrir le corps.");
+        "Le dernier contrôle indiquait des réserves faibles. Un nourrissement de secours au candi peut être envisagé sans ouvrir le corps.",
+        "haute");
+    }
+    if(etat.faible){
+      ajouter("hiver-colonie-faible", "Colonie faible en hivernage",
+        "Une population réduite passe l'hiver plus difficilement. Surveiller le poids de plus près, sans ouvrir.");
     }
   }
 
@@ -3848,23 +3922,48 @@ function suggestionsSaison(h, reference){
           ? "Aucune visite enregistrée sur cette ruche."
           : `Dernière visite il y a ${joursSansVisite} jours. La sortie d'hivernage est le moment habituel du premier bilan.`);
     }
+    if(etat.faible){
+      ajouter("printemps-faible", "Colonie faible en sortie d'hiver",
+        "Un redémarrage lent se joue maintenant. Selon les cas : resserrer sur moins de cadres, nourrir au sirop léger, ou envisager une réunion.",
+        "haute");
+    }
     ajouter("printemps-materiel", "Entretien du matériel",
       "Période courante pour nettoyer les planchers et remplacer les cadres les plus anciens.");
   }
 
   /* ── Développement et essaimage : avril, mai ── */
   if(mois === 4 || mois === 5){
-    if(visite && visite.cellules === "Oui"){
+    if(etat.essaimageVu && etat.developpable){
       ajouter("essaimage-cellules", "Cellules royales observées",
-        "Des cellules royales étaient signalées au dernier contrôle, en pleine période d'essaimage.");
-    }else{
+        "Des cellules royales étaient signalées au dernier contrôle, en pleine période d'essaimage.",
+        "haute");
+    }else if(etat.developpable){
       ajouter("essaimage-surveillance", "Surveiller l'essaimage",
-        "Période de forte pression d'essaimage. Le contrôle des cellules royales se fait habituellement tous les 7 à 10 jours.");
+        "Période de forte pression d'essaimage sur une colonie populeuse. Le contrôle des cellules royales se fait habituellement tous les 7 à 10 jours.");
     }
-    if(!ruchette && hausses === 0){
-      ajouter("hausse-pose", "Aucune hausse en place",
-        "Période habituelle de pose des hausses, lorsque le corps est bien occupé et la miellée proche.");
+
+    if(!ruchette){
+      if(hausses > 0){
+        ajouter("hausse-en-place", "Hausse déjà en place",
+          `${hausses} hausse(s) posée(s). Contrôler le remplissage plutôt que d'en ajouter.`);
+      }else if(etat.developpable){
+        ajouter("hausse-pose", "Période de pose des hausses",
+          "Le corps est occupé et la colonie assez populeuse : c'est la période habituelle pour donner de la place.");
+      }else if(etat.connu){
+        // Le point clé : pas de hausse sur une colonie qui ne la remplirait pas.
+        ajouter("hausse-differee", "Hausse à différer",
+          etat.orpheline
+            ? "Colonie sans reine : une hausse serait un volume de plus à défendre et à chauffer, sans bénéfice."
+            : "Colonie encore faible : une hausse lui demanderait de chauffer et défendre un volume qu'elle ne peut pas occuper. À revoir une fois la population remontée.",
+          "haute");
+      }
     }
+
+    if(etat.faible && !ruchette){
+      ajouter("printemps-renforcer", "Aider la colonie à repartir",
+        "Sur une colonie faible en pleine saison : resserrer, nourrir au sirop léger, ou envisager un renfort en couvain operculé depuis une ruche forte.");
+    }
+
     if(ruchette){
       ajouter("ruchette-dev", "Période favorable au développement",
         "Conditions habituellement propices au développement d'une ruchette vers une colonie transférable.");
@@ -3876,19 +3975,29 @@ function suggestionsSaison(h, reference){
     if(hausses > 0){
       ajouter("miellee-hausses", "Contrôler le remplissage",
         `${hausses} hausse(s) en place. Période de contrôle du remplissage et de l'operculation.`);
-    }else if(!ruchette){
+    }else if(!ruchette && etat.developpable){
       ajouter("miellee-place", "Vérifier la place disponible",
         "En pleine miellée, un manque de place favorise l'essaimage.");
+    }else if(!ruchette && etat.connu && !etat.developpable){
+      ajouter("miellee-faible", "Colonie non prête pour la miellée",
+        "L'état relevé au dernier contrôle ne permet pas d'exploiter la miellée. Priorité au redémarrage de la colonie.");
     }
   }
 
   /* ── Récolte : juillet ── */
   if(mois === 7){
-    ajouter("recolte", "Période de récolte",
-      "L'extraction se fait habituellement sur des cadres operculés aux deux tiers au moins.");
-    if(hausses > 0){
-      ajouter("recolte-retrait", "Hausses encore en place",
+    if(hausses > 0 && etat.developpable){
+      ajouter("recolte", "Période de récolte",
+        "L'extraction se fait habituellement sur des cadres operculés aux deux tiers au moins.");
+      ajouter("recolte-retrait", "Retrait des hausses",
         `${hausses} hausse(s) posée(s). Leur retrait conditionne le traitement varroa qui suit.`);
+    }else if(hausses > 0 && etat.connu){
+      ajouter("recolte-faible", "Récolte déconseillée",
+        "La colonie est affaiblie : lui laisser ses réserves est généralement préférable à une récolte.",
+        "haute");
+    }else if(etat.developpable){
+      ajouter("recolte", "Période de récolte",
+        "Aucune hausse en place sur cette ruche. La récolte concerne les colonies qui en portent.");
     }
   }
 
@@ -3896,6 +4005,11 @@ function suggestionsSaison(h, reference){
   if(mois === 8){
     ajouter("varroa-periode", "Période clé du traitement varroa",
       "Le traitement intervient habituellement juste après le retrait des hausses, pour protéger les abeilles d'hiver en cours d'élevage.");
+    if(etat.varroaFort){
+      ajouter("varroa-signale", "Varroa signalé au dernier contrôle",
+        "Une pression forte était relevée. Elle pèse directement sur la génération d'abeilles d'hiver.",
+        "haute");
+    }
     const traitement = dernierTraitement(h);
     const memeAnnee = traitement && traitement.getFullYear() === maintenant.getFullYear();
     if(!memeAnnee){
@@ -3912,17 +4026,33 @@ function suggestionsSaison(h, reference){
   if(mois === 9){
     ajouter("nourrissement", "Constitution des réserves d'hiver",
       "Période habituelle du nourrissement, si les réserves sont jugées insuffisantes pour l'hiver.");
-    if(visite && (visite.reserves === "Faibles" || visite.reserves === "Moyennes")){
-      ajouter("nourrissement-reserves", `Réserves notées « ${visite.reserves.toLowerCase()} »`,
-        "Le dernier contrôle signalait des réserves incomplètes, à l'approche de l'hivernage.");
+    if(etat.reservesIncompletes){
+      ajouter("nourrissement-reserves", "Réserves incomplètes au dernier contrôle",
+        etat.reservesFaibles
+          ? "Réserves notées faibles à l'approche de l'hivernage : c'est le moment où le nourrissement est encore efficace."
+          : "Réserves notées moyennes : à recontrôler avant les premiers froids.",
+        etat.reservesFaibles ? "haute" : "normale");
+    }
+    if(etat.faible){
+      ajouter("hivernage-faible", "Colonie faible avant l'hiver",
+        "Une colonie affaiblie en septembre passe rarement l'hiver seule. La réunion avec une colonie plus forte est l'option habituellement envisagée à cette période.",
+        "haute");
     }
     ajouter("frelons-septembre", "Pression frelons souvent maximale",
-      "Contrôle des pièges et réduction des entrées si la pression est forte.");
+      etat.frelonsForts
+        ? "Une forte pression était déjà relevée au dernier contrôle. Réduction des entrées et contrôle des pièges."
+        : "Contrôle des pièges et réduction des entrées si la pression est forte.",
+      etat.frelonsForts ? "haute" : "normale");
   }
 
   if(mois === 10){
     ajouter("hivernage-prep", "Préparation de l'hivernage",
       "Réduction des entrées, contrôle du poids et de l'étanchéité du toit.");
+    if(etat.reservesFaibles){
+      ajouter("hivernage-reserves", "Réserves encore faibles",
+        "Le nourrissement au sirop devient peu efficace par temps froid. Le candi prend le relais.",
+        "haute");
+    }
     ajouter("hivernage-dernier", "Dernier contrôle avant l'hiver",
       "Généralement la dernière ouverture avant la reprise de printemps.");
   }
@@ -3939,7 +4069,15 @@ function suggestionsSaison(h, reference){
       "La déclaration court du 1er septembre au 31 décembre. Elle est obligatoire dès la première colonie et conditionne l'attribution du NAPI.");
   }
 
-  return suggestions;
+  // Les points prioritaires remontent en tête, l'ordre reste stable sinon.
+  return suggestions
+    .map((x, i) => ({ x, i }))
+    .sort((a, b) => {
+      const pa = a.x.priorite === "haute" ? 0 : 1;
+      const pb = b.x.priorite === "haute" ? 0 : 1;
+      return pa !== pb ? pa - pb : a.i - b.i;
+    })
+    .map(o => o.x);
 }
 
 function suggestionsSaisonHTML(h){
@@ -3948,7 +4086,8 @@ function suggestionsSaisonHTML(h){
     return `<div class="empty-history">Aucune suggestion particulière pour cette période.</div>`;
   }
   return suggestions
-    .map(x => record("Suggestion", escapeHtml(x.titre), escapeHtml(x.texte)))
+    .map(x => record(x.priorite === "haute" ? "⚠️ Priorité" : "Suggestion",
+                     escapeHtml(x.titre), escapeHtml(x.texte)))
     .join("");
 }
 
