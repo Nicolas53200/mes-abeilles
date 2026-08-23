@@ -3312,6 +3312,16 @@ function admin(){
       <div class="field"><label>NAPI</label><input id="adminNapi" value="${escapeHtml(p.napi || "")}" placeholder="Numéro d'apiculteur" inputmode="numeric" maxlength="20" autocomplete="off"></div>
       <div class="field"><label>SIRET</label><input id="adminSiret" value="${escapeHtml(p.siret || "")}" placeholder="14 chiffres" inputmode="numeric" maxlength="17" autocomplete="off"></div>
       <div class="field"><label>Adresse</label><input id="adminAdresse" value="${escapeHtml(p.adresse || "")}" placeholder="Adresse de l'entreprise" maxlength="200" autocomplete="street-address"></div>
+
+      <div class="field">
+        <label for="adminZone">Zone apicole</label>
+        <select id="adminZone">
+          ${Object.entries(ZONES_APICOLES).map(([cle, z]) =>
+            `<option value="${escapeHtml(cle)}" ${(p.zone || "centre") === cle ? "selected" : ""}>${escapeHtml(z.label)}</option>`
+          ).join("")}
+        </select>
+        <div class="mini-help">Décale les repères de saison de la section Actions. Le printemps n'arrive pas au même moment partout.</div>
+      </div>
       <div class="field"><label>Téléphone</label><input id="adminTelephone" type="tel" value="${escapeHtml(p.telephone || "")}" placeholder="06 12 34 56 78" inputmode="tel" maxlength="20" autocomplete="tel"></div>
       <div class="field"><label>Email</label><input id="adminEmail" type="email" value="${escapeHtml(p.email || "")}" placeholder="nom@exemple.fr" inputmode="email" maxlength="120" autocomplete="email"></div>
 
@@ -3383,6 +3393,8 @@ function saveAdmin(){
   state.profil.adresse = document.getElementById("adminAdresse")?.value || "";
   state.profil.telephone = document.getElementById("adminTelephone")?.value || "";
   state.profil.email = document.getElementById("adminEmail")?.value || "";
+  const zoneChoisie = document.getElementById("adminZone")?.value;
+  if(zoneChoisie && ZONES_APICOLES[zoneChoisie]) state.profil.zone = zoneChoisie;
   const logoInput = document.getElementById("adminLogo");
   if(logoInput && logoInput.files && logoInput.files[0]){
     state.profil.logoName = logoInput.files[0].name;
@@ -3731,6 +3743,213 @@ function complianceMissingLabels(){
   if(!docs.registre) missing.push("registre sanitaire");
   if((p.type === "vente" || p.type === "pro") && !docs.assurance) missing.push("assurance");
   return missing;
+}
+
+/* ── Suggestions saisonnières ─────────────────────────────
+   Affichées dans la section « Actions », qui n'affichait jusqu'ici que
+   deux lignes figées, identiques en janvier comme en juillet.
+
+   Elles n'alimentent PAS alertList ni le compteur d'alertes : une alerte
+   signale un problème sur une ruche précise, une suggestion rappelle ce
+   que fait habituellement un apiculteur à cette période. Mélanger les
+   deux ferait grimper le badge à chaque printemps et noierait les vraies
+   alertes.
+
+   Deux notions de mois cohabitent, volontairement :
+     - le mois SAISONNIER, décalé selon la zone, pour tout ce qui suit la
+       biologie de la colonie. Le printemps n'arrive pas en même temps en
+       Provence et dans les Vosges.
+     - le mois RÉEL, pour les échéances réglementaires, qui ne se
+       décalent évidemment pas selon la région. */
+
+const ZONES_APICOLES = {
+  sud:      { label:"Sud / Méditerranée",   decalageJours:-21 },
+  centre:   { label:"Centre / Ouest",       decalageJours:  0 },
+  nord:     { label:"Nord / Nord-Est",      decalageJours: 14 },
+  montagne: { label:"Montagne",             decalageJours: 28 }
+};
+
+function zoneApicole(){
+  return ZONES_APICOLES[state.profil?.zone] || ZONES_APICOLES.centre;
+}
+
+/* Mois 1-12 décalé selon la zone : un apiculteur du Sud reçoit fin février
+   les repères que celui du Centre reçoit à la mi-mars. */
+function moisSaisonnier(reference){
+  const base = reference instanceof Date ? new Date(reference.getTime()) : new Date();
+  base.setDate(base.getDate() - zoneApicole().decalageJours);
+  return base.getMonth() + 1;
+}
+
+function moisReel(reference){
+  const base = reference instanceof Date ? reference : new Date();
+  return base.getMonth() + 1;
+}
+
+const SAISONS = {
+  1:"Hivernage", 2:"Hivernage", 3:"Sortie d'hivernage", 4:"Développement",
+  5:"Essaimage et miellée", 6:"Miellée", 7:"Récolte", 8:"Traitement varroa",
+  9:"Préparation hivernage", 10:"Préparation hivernage", 11:"Repos", 12:"Repos"
+};
+
+function libelleSaison(reference){
+  return SAISONS[moisSaisonnier(reference)] || "";
+}
+
+/* Dernier traitement varroa enregistré, tous types confondus. */
+function dernierTraitement(h){
+  const liste = (h && Array.isArray(h.traitements)) ? h.traitements : [];
+  let recent = null;
+  liste.forEach(t => {
+    const d = mbParseDate(t.date);
+    if(d && (!recent || d > recent)) recent = d;
+  });
+  return recent;
+}
+
+/* Suggestions pour une ruche, à une date donnée.
+   `reference` n'est là que pour rendre la fonction testable.
+   Chaque entrée : { titre, texte, cle }. Aucune n'est une prescription :
+   la formulation reste au rappel, l'apiculteur décide. */
+function suggestionsSaison(h, reference){
+  const maintenant = reference instanceof Date ? reference : new Date();
+  const mois = moisSaisonnier(maintenant);
+  const moisCivil = moisReel(maintenant);
+  const suggestions = [];
+  const ajouter = (cle, titre, texte) => suggestions.push({ cle, titre, texte });
+
+  if(!h) return suggestions;
+
+  const visite = typeof latestVisit === "function" ? latestVisit(h) : null;
+  const hausses = typeof activeHaussesCount === "function" ? activeHaussesCount(h) : 0;
+  const ruchette = h.type === "ruchette";
+  const derniereVisite = typeof mbLastVisit === "function" ? mbLastVisit(h) : null;
+  const joursSansVisite = derniereVisite
+    ? Math.floor((maintenant - derniereVisite) / 86400000)
+    : null;
+
+  /* ── Hivernage : janvier, février ── */
+  if(mois === 1 || mois === 2){
+    ajouter("hiver-ouverture", "Ne pas ouvrir la ruche",
+      "La colonie est en grappe. Un contrôle se fait en soupesant l'arrière de la ruche et en observant l'entrée.");
+    if(visite && visite.reserves === "Faibles"){
+      ajouter("hiver-reserves", "Réserves signalées faibles",
+        "Le dernier contrôle indiquait des réserves faibles. Un nourrissement de secours au candi peut être envisagé sans ouvrir le corps.");
+    }
+  }
+
+  /* ── Sortie d'hivernage : mars ── */
+  if(mois === 3){
+    ajouter("printemps-visite", "Visite de sortie d'hivernage",
+      "Période habituelle du premier contrôle : présence de la reine, ponte, réserves et état des cadres.");
+    if(joursSansVisite === null || joursSansVisite > 90){
+      ajouter("printemps-premiere", "Aucune visite récente",
+        joursSansVisite === null
+          ? "Aucune visite enregistrée sur cette ruche."
+          : `Dernière visite il y a ${joursSansVisite} jours. La sortie d'hivernage est le moment habituel du premier bilan.`);
+    }
+    ajouter("printemps-materiel", "Entretien du matériel",
+      "Période courante pour nettoyer les planchers et remplacer les cadres les plus anciens.");
+  }
+
+  /* ── Développement et essaimage : avril, mai ── */
+  if(mois === 4 || mois === 5){
+    if(visite && visite.cellules === "Oui"){
+      ajouter("essaimage-cellules", "Cellules royales observées",
+        "Des cellules royales étaient signalées au dernier contrôle, en pleine période d'essaimage.");
+    }else{
+      ajouter("essaimage-surveillance", "Surveiller l'essaimage",
+        "Période de forte pression d'essaimage. Le contrôle des cellules royales se fait habituellement tous les 7 à 10 jours.");
+    }
+    if(!ruchette && hausses === 0){
+      ajouter("hausse-pose", "Aucune hausse en place",
+        "Période habituelle de pose des hausses, lorsque le corps est bien occupé et la miellée proche.");
+    }
+    if(ruchette){
+      ajouter("ruchette-dev", "Période favorable au développement",
+        "Conditions habituellement propices au développement d'une ruchette vers une colonie transférable.");
+    }
+  }
+
+  /* ── Miellée : juin ── */
+  if(mois === 6){
+    if(hausses > 0){
+      ajouter("miellee-hausses", "Contrôler le remplissage",
+        `${hausses} hausse(s) en place. Période de contrôle du remplissage et de l'operculation.`);
+    }else if(!ruchette){
+      ajouter("miellee-place", "Vérifier la place disponible",
+        "En pleine miellée, un manque de place favorise l'essaimage.");
+    }
+  }
+
+  /* ── Récolte : juillet ── */
+  if(mois === 7){
+    ajouter("recolte", "Période de récolte",
+      "L'extraction se fait habituellement sur des cadres operculés aux deux tiers au moins.");
+    if(hausses > 0){
+      ajouter("recolte-retrait", "Hausses encore en place",
+        `${hausses} hausse(s) posée(s). Leur retrait conditionne le traitement varroa qui suit.`);
+    }
+  }
+
+  /* ── Traitement varroa : août ── */
+  if(mois === 8){
+    ajouter("varroa-periode", "Période clé du traitement varroa",
+      "Le traitement intervient habituellement juste après le retrait des hausses, pour protéger les abeilles d'hiver en cours d'élevage.");
+    const traitement = dernierTraitement(h);
+    const memeAnnee = traitement && traitement.getFullYear() === maintenant.getFullYear();
+    if(!memeAnnee){
+      ajouter("varroa-aucun", "Aucun traitement enregistré cette année",
+        traitement
+          ? `Le dernier traitement noté remonte à ${mbFormatDate(traitement)}.`
+          : "Aucun traitement n'apparaît dans l'historique de cette ruche.");
+    }
+    ajouter("frelons-aout", "Surveiller la pression des frelons",
+      "La pression sur les entrées augmente généralement à partir de cette période.");
+  }
+
+  /* ── Préparation à l'hivernage : septembre, octobre ── */
+  if(mois === 9){
+    ajouter("nourrissement", "Constitution des réserves d'hiver",
+      "Période habituelle du nourrissement, si les réserves sont jugées insuffisantes pour l'hiver.");
+    if(visite && (visite.reserves === "Faibles" || visite.reserves === "Moyennes")){
+      ajouter("nourrissement-reserves", `Réserves notées « ${visite.reserves.toLowerCase()} »`,
+        "Le dernier contrôle signalait des réserves incomplètes, à l'approche de l'hivernage.");
+    }
+    ajouter("frelons-septembre", "Pression frelons souvent maximale",
+      "Contrôle des pièges et réduction des entrées si la pression est forte.");
+  }
+
+  if(mois === 10){
+    ajouter("hivernage-prep", "Préparation de l'hivernage",
+      "Réduction des entrées, contrôle du poids et de l'étanchéité du toit.");
+    ajouter("hivernage-dernier", "Dernier contrôle avant l'hiver",
+      "Généralement la dernière ouverture avant la reprise de printemps.");
+  }
+
+  /* ── Repos : novembre, décembre ── */
+  if(mois === 11 || mois === 12){
+    ajouter("repos", "Colonie au repos",
+      "Contrôle du poids en soupesant, sans ouvrir. Surveillance des dégâts de pics ou de rongeurs.");
+  }
+
+  /* ── Échéance réglementaire : mois RÉEL, jamais décalé par la zone ── */
+  if(moisCivil >= 9 && moisCivil <= 12){
+    ajouter("declaration", "Déclaration annuelle de ruches",
+      "La déclaration court du 1er septembre au 31 décembre. Elle est obligatoire dès la première colonie et conditionne l'attribution du NAPI.");
+  }
+
+  return suggestions;
+}
+
+function suggestionsSaisonHTML(h){
+  const suggestions = suggestionsSaison(h);
+  if(!suggestions.length){
+    return `<div class="empty-history">Aucune suggestion particulière pour cette période.</div>`;
+  }
+  return suggestions
+    .map(x => record("Suggestion", escapeHtml(x.titre), escapeHtml(x.texte)))
+    .join("");
 }
 
 function buildSmartAlertsForHive(h){
@@ -4968,8 +5187,11 @@ function hiveSectionContent(h){
   
   if(s === "actions") return `
     <h2 class="detail-title">Actions</h2>
-    ${record("À faire","Contrôle varroa","Contrôler chute naturelle ou prévoir traitement.")}
-    ${record("À faire","Vérifier hausses","Contrôler remplissage et operculation.")}
+    <div class="detail-sub">${escapeHtml(libelleSaison())} · zone ${escapeHtml(zoneApicole().label)}</div>
+    <div class="mini-help" style="margin-bottom:12px">
+      Repères de saison, adaptés à ta zone et à l'état de cette ruche. Ils ne comptent pas dans les alertes.
+    </div>
+    ${suggestionsSaisonHTML(h)}
   `;
   if(s === "hausses") return `
     <h2 class="detail-title">Hausses</h2>
