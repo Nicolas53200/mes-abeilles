@@ -3390,6 +3390,11 @@ function admin(){
     <section class="panel">
       <h2>Administration</h2>
 
+      <div class="export-help" id="etatStockage">
+        <strong>Sauvegarde de tes données</strong><br>
+        <span id="etatStockageTexte">Vérification en cours…</span>
+      </div>
+
       <div class="export-bar">
         <button class="export-btn dl" onclick="exportData()">⬇️ Exporter vers PC</button>
         <label class="export-btn imp" style="cursor:pointer">
@@ -3483,6 +3488,27 @@ function anomaliesProfil(profil){
   if(napi && !/^[\d\-/ ]{3,20}$/.test(napi)) soucis.push("le NAPI n'attend que des chiffres");
 
   return soucis;
+}
+
+/* Renseigne l'encart de l'écran Administration. Asynchrone : les deux
+   API interrogées peuvent être absentes ou lentes. */
+async function afficherEtatStockage(){
+  const cible = document.getElementById("etatStockageTexte");
+  if(!cible) return;
+
+  if(stockageDurable === null) await demanderStockageDurable();
+  const place = await estimationStockage();
+  const detail = place ? ` Tes données occupent environ ${place.utiliseKo} Ko.` : "";
+
+  if(stockageDurable === true){
+    cible.textContent = "✅ Tes données sont enregistrées sur cet appareil et protégées : le navigateur ne les effacera pas pour libérer de la place." + detail
+      + " Exporte régulièrement quand même : en cas de perte du téléphone, l'export est la seule copie.";
+  }else if(peutProposerInstallation()){
+    cible.textContent = "⚠️ Tes données sont sur cet appareil, mais pas encore protégées contre un effacement automatique. Installer l'application depuis l'accueil améliore nettement leur conservation." + detail;
+  }else{
+    cible.textContent = "Tes données sont enregistrées sur cet appareil uniquement." + detail
+      + " Pense à exporter régulièrement : c'est la seule copie de secours en cas de perte du téléphone.";
+  }
 }
 
 function saveAdmin(){
@@ -7972,8 +7998,109 @@ function appliquerMiseAJour(){
   }
 }
 
+/* ── Installation et durabilité du stockage ──────────────
+   Tout le carnet vit dans le stockage local. Or les navigateurs
+   effacent le stockage des sites peu visités quand la place manque :
+   sans précaution, les données d'un apiculteur sont « ordinaires » et
+   effaçables sans préavis. Deux réponses complémentaires ici.
+
+   1. Demander un stockage DURABLE, que le navigateur ne purge pas
+      automatiquement. Les navigateurs l'accordent d'autant plus
+      volontiers que l'application est installée.
+   2. Proposer l'INSTALLATION, qui améliore le traitement réservé aux
+      données en plus du confort d'usage. */
+
+let promptInstallation = null;   // hors de `state` : ne doit rien sauvegarder
+let stockageDurable = null;      // true / false / null si indéterminé
+
+window.addEventListener("beforeinstallprompt", event => {
+  // Sans preventDefault, certains navigateurs affichent leur propre
+  // invite au moment qui les arrange. On garde la main.
+  event.preventDefault();
+  promptInstallation = event;
+  rafraichirSiAccueil();
+});
+
+window.addEventListener("appinstalled", () => {
+  promptInstallation = null;
+  // Une fois installée, la demande de stockage durable a de bien
+  // meilleures chances d'aboutir : on la retente.
+  demanderStockageDurable().then(rafraichirSiAccueil);
+  showToast("✓ Application installée");
+});
+
+function appDejaInstallee(){
+  try{
+    return window.matchMedia("(display-mode: standalone)").matches
+        || window.navigator.standalone === true;
+  }catch(e){ return false; }
+}
+
+function estIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent || "")
+      || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+/* iOS ne propose pas beforeinstallprompt : l'installation y passe par
+   le menu Partager, il faut donc l'expliquer plutôt qu'un bouton. */
+function peutProposerInstallation(){
+  if(appDejaInstallee()) return false;
+  return !!promptInstallation || estIOS();
+}
+
+async function lancerInstallation(){
+  if(estIOS() && !promptInstallation){
+    alert("Sur iPhone et iPad :\n\n1. Touche le bouton Partager, en bas de Safari\n2. Choisis « Sur l'écran d'accueil »\n3. Valide\n\nL'application s'ouvrira alors en plein écran, et tes données seront mieux protégées.");
+    return;
+  }
+  if(!promptInstallation) return;
+  promptInstallation.prompt();
+  try{ await promptInstallation.userChoice; }catch(e){}
+  promptInstallation = null;
+  rafraichirSiAccueil();
+}
+
+/* Demande au navigateur de ne pas purger ces données.
+   Sans effet visible, jamais bloquant : en cas de refus ou d'API
+   absente, l'application fonctionne exactement comme avant. */
+async function demanderStockageDurable(){
+  try{
+    if(!navigator.storage || typeof navigator.storage.persist !== "function"){
+      stockageDurable = null;
+      return null;
+    }
+    if(typeof navigator.storage.persisted === "function" && await navigator.storage.persisted()){
+      stockageDurable = true;
+      return true;
+    }
+    stockageDurable = await navigator.storage.persist();
+    return stockageDurable;
+  }catch(e){
+    stockageDurable = null;
+    return null;
+  }
+}
+
+/* Place occupée, pour informer l'apiculteur sans jargon. */
+async function estimationStockage(){
+  try{
+    if(!navigator.storage || typeof navigator.storage.estimate !== "function") return null;
+    const e = await navigator.storage.estimate();
+    if(!e || !e.usage) return null;
+    return { utiliseKo: Math.round(e.usage / 1024), quotaMo: e.quota ? Math.round(e.quota / 1048576) : null };
+  }catch(e){ return null; }
+}
+
+function rafraichirSiAccueil(){
+  if(state.page === "home" || state.page === "menu" || state.page === "admin"){
+    try{ showPage(state.page); }catch(e){}
+  }
+}
+
 function initApp(){
   setupAlertEngine();
+  // Sans attendre : le rendu ne doit pas dépendre de la réponse.
+  demanderStockageDurable();
   const raccourci = pageDemandeeParUrl();
 
   if(!state.onboardingDone){
@@ -8004,6 +8131,19 @@ function initApp(){
 function guideBanner(){
   const hasProfile = state.profil?.nom || state.profil?.napi;
   const hasHives = state.hives.length > 0;
+
+  // L'installation passe avant le reste : c'est elle qui protège les
+  // données, et le navigateur ne propose ce choix qu'un temps.
+  if(peutProposerInstallation()) return `
+    <div class="guide-banner">
+      <div class="guide-icon">📲</div>
+      <div class="guide-text">
+        <div class="guide-title">Installer l'application</div>
+        <div class="guide-sub">Icône sur l'écran d'accueil, plein écran, et tes données mieux protégées</div>
+      </div>
+      <button class="guide-btn" onclick="lancerInstallation()">Installer →</button>
+    </div>`;
+
   if(hasProfile && hasHives) return "";
   if(!hasProfile) return `
     <div class="guide-banner">
@@ -8200,6 +8340,9 @@ function showPage(page){
   if(page === "menu"){ setHero("Menu", "Navigation", true); html = menu(); }
   if(page === "mapGlobal"){ setHero("Carte", "Tous tes ruchers sur la carte", true); html = mapGlobalPage(); }
   document.getElementById("content").innerHTML = html;
+  // L'encart de stockage interroge deux API asynchrones : on le remplit
+  // après le rendu plutôt que de retarder l'affichage de la page.
+  if(page === "admin") afficherEtatStockage();
   if(page === "newHive") setTimeout(refreshNewHiveQr, 30);
   if(page === "mapGlobal") setTimeout(initGlobalMap, 150);
   updateStats();
