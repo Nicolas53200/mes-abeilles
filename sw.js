@@ -1,4 +1,4 @@
-const CACHE_NAME = "mes-abeilles-v36-3";
+const CACHE_NAME = "mes-abeilles-v37-0";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -29,8 +29,15 @@ self.addEventListener("install", event => {
             .catch(() => cache.add(new Request(url, { mode: "no-cors" })).catch(() => undefined))
         )
       ))
-      .then(() => self.skipWaiting())
+      // Pas de skipWaiting ici : le nouveau service worker attend en coulisse
+      // et l'application propose à l'utilisateur de recharger. Sans cela, il
+      // prendrait la main au milieu d'une session, pendant que la page tourne
+      // encore sur l'ancien code.
   );
+});
+
+self.addEventListener("message", event => {
+  if(event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", event => {

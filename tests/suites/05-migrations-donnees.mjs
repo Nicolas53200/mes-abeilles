@@ -62,6 +62,9 @@ export default () => executerSuite('Migrations de données', async ({ page, orig
   rapport.verifier('aucun instantané écrit inutilement', intact.instantane === null);
 
   rapport.section('Migration réelle : honey → mielRecolteKg');
+  // Amorcer sur une version ANTÉRIEURE à la migration testée : sinon la
+  // sauvegarde porte déjà la version cible et il n'y a rien à convertir.
+  publierVersion(dossier, 'v36.2', null);
   const page2 = await contexte.newPage();
   await page2.goto(origine); await page2.waitForTimeout(800);
   await page2.evaluate(semer);

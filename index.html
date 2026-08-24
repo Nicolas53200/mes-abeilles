@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v36.2</title>
+  <title>Mes Abeilles 🐝 v37.0</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2215,6 +2215,84 @@
     }
 
 
+    /* ── Bandeau de mise à jour ─────────────────────────
+       Apparaît quand une nouvelle version est déployée alors que
+       l'application est déjà ouverte. */
+    .maj-bandeau{
+      position:fixed;
+      top:0;
+      left:50%;
+      transform:translateX(-50%) translateY(-130%);
+      width:min(430px,100%);
+      z-index:360;
+      background:linear-gradient(135deg,#ff7a18,#ffd24a);
+      color:#130d04;
+      padding:12px 14px calc(12px + env(safe-area-inset-top,0px));
+      display:flex;
+      align-items:center;
+      gap:12px;
+      box-shadow:0 12px 34px rgba(0,0,0,.28);
+      border-bottom-left-radius:22px;
+      border-bottom-right-radius:22px;
+      transition:transform .28s ease;
+    }
+    .maj-bandeau.open{transform:translateX(-50%) translateY(0)}
+    .maj-bandeau-texte{flex:1;min-width:0;font-weight:900;font-size:14px;line-height:1.3}
+    .maj-bandeau-sous{font-weight:700;font-size:12px;opacity:.75}
+    .maj-bandeau-btn{
+      border:0;
+      border-radius:12px;
+      background:#130d04;
+      color:#fff;
+      font-weight:950;
+      font-size:13px;
+      padding:10px 14px;
+      flex-shrink:0;
+    }
+    .maj-bandeau-fermer{
+      border:0;background:transparent;color:#130d04;
+      font-size:20px;font-weight:900;padding:0 2px;flex-shrink:0;opacity:.6;
+    }
+    @media (prefers-reduced-motion: reduce){
+      .maj-bandeau{transition:none}
+    }
+
+    /* ── Panneau des nouveautés ─────────────────────────
+       Reprend la mise en forme de la surcouche calendrier. */
+    .nouveautes-liste{
+      display:grid;
+      gap:10px;
+      margin-bottom:18px;
+      max-height:52vh;
+      overflow-y:auto;
+    }
+    .nouveaute{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:12px 14px;
+      text-align:left;
+    }
+    .nouveaute-titre{
+      font-weight:950;
+      font-size:14px;
+      color:#0f172a;
+      margin-bottom:4px;
+    }
+    .nouveaute-texte{
+      font-size:13px;
+      color:#64748b;
+      line-height:1.5;
+    }
+    .nouveaute-version{
+      font-size:11px;
+      font-weight:950;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      color:#c2410c;
+      margin-bottom:10px;
+    }
+
     /* ── Accessibilité clavier ──────────────────────────
        Aucun style de focus n'était défini : la navigation au clavier
        était invisible. :focus-visible ne s'affiche qu'au clavier, la
@@ -2269,6 +2347,28 @@
 
   <a class="skip-link" href="#content">Aller au contenu</a>
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="majBandeau" class="maj-bandeau" role="status" aria-live="polite">
+    <div class="maj-bandeau-texte">
+      Nouvelle version disponible
+      <div class="maj-bandeau-sous">Recharge pour en profiter. Tes données sont conservées.</div>
+    </div>
+    <button class="maj-bandeau-btn" onclick="appliquerMiseAJour()">Recharger</button>
+    <button class="maj-bandeau-fermer" onclick="masquerBandeauMaj()" aria-label="Plus tard">×</button>
+  </div>
+
+  <div id="nouveautesModal" class="calendar-onboarding" onclick="fermerNouveautes()">
+    <div class="calendar-onboarding-panel" onclick="event.stopPropagation()"
+         role="dialog" aria-modal="true" aria-label="Nouveautés de cette version">
+      <div class="calendar-onboarding-icon">🎉</div>
+      <div class="nouveaute-version" id="nouveautesVersion"></div>
+      <div class="calendar-onboarding-title">Quoi de neuf</div>
+      <div class="nouveautes-liste" id="nouveautesListe"></div>
+      <div class="calendar-onboarding-actions">
+        <button class="calendar-primary-btn" onclick="fermerNouveautes()">J'ai compris</button>
+      </div>
+    </div>
+  </div>
 
   <div id="calendarOnboarding" class="calendar-onboarding" onclick="calendarOnboardingChoice(false)">
     <div class="calendar-onboarding-panel" onclick="event.stopPropagation()">
@@ -2421,7 +2521,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v36.2";
+const APP_VERSION = "v37.0";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -2558,7 +2658,9 @@ const state = {
   apiaries: [],
   onboardingDone: false,
   calendarPromptDone: false,
-  hiveTourDone: false
+  hiveTourDone: false,
+  // Dernière version dont les nouveautés ont été présentées à l'utilisateur.
+  derniereVersionVue: ""
 };
 loadState();
 
@@ -3476,6 +3578,7 @@ function menu(){
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('scan')">Scanner</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('admin')">Administration</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="openHive('RUCHE-001'); setHiveSection('conformite')">Conformité</button>
+      <button class="big-action" style="width:100%;margin-bottom:12px" onclick="ouvrirNouveautes(true)">🎉 Quoi de neuf · ${escapeHtml(APP_VERSION)}</button>
     </section>
   `;
 }
@@ -5890,6 +5993,7 @@ function mergeLoadedState(saved){
   if(typeof saved.onboardingDone === "boolean") state.onboardingDone = saved.onboardingDone;
   if(typeof saved.calendarPromptDone === "boolean") state.calendarPromptDone = saved.calendarPromptDone;
   if(typeof saved.hiveTourDone === "boolean") state.hiveTourDone = saved.hiveTourDone;
+  if(typeof saved.derniereVersionVue === "string") state.derniereVersionVue = saved.derniereVersionVue;
   return Array.isArray(saved.hives) || !!saved.profil;
 }
 
@@ -6044,7 +6148,7 @@ function importData(input){
       }
 
       // Validation de schéma : vérifier que chaque ruche a les champs requis
-      const ALLOWED_STATE_KEYS = ["hives","profil","complianceDocs","alertSettings","apiaries","onboardingDone","calendarPromptDone","hiveTourDone"];
+      const ALLOWED_STATE_KEYS = ["hives","profil","complianceDocs","alertSettings","apiaries","onboardingDone","calendarPromptDone","hiveTourDone","derniereVersionVue"];
       const sanitizedData = {};
       for(const key of ALLOWED_STATE_KEYS){
         if(key in data) sanitizedData[key] = data[key];
@@ -6079,6 +6183,7 @@ function importData(input){
       state.onboardingDone = typeof imported.onboardingDone === "boolean" ? imported.onboardingDone : state.onboardingDone;
       state.calendarPromptDone = typeof imported.calendarPromptDone === "boolean" ? imported.calendarPromptDone : state.calendarPromptDone;
       state.hiveTourDone = typeof imported.hiveTourDone === "boolean" ? imported.hiveTourDone : state.hiveTourDone;
+      state.derniereVersionVue = typeof imported.derniereVersionVue === "string" ? imported.derniereVersionVue : state.derniereVersionVue;
 
       normalizeHives();
       saveState();
@@ -7772,6 +7877,101 @@ function pageDemandeeParUrl(){
   }
 }
 
+/* ── Nouveautés et mise à jour ───────────────────────────
+   Deux mécanismes distincts :
+     - le PANNEAU des nouveautés, présenté une fois après une mise à
+       jour, et consultable ensuite depuis le menu ;
+     - le BANDEAU de mise à jour, qui apparaît quand une nouvelle
+       version est déployée alors que l'application est déjà ouverte.
+
+   Pour ajouter une entrée lors d'une prochaine version, insérer un objet
+   en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
+   version déjà vue par l'utilisateur lui sont présentées. */
+const JOURNAL_VERSIONS = [
+  {
+    version: "v37.0",
+    date: "Août 2026",
+    nouveautes: [
+      { titre: "Suggestions de saison",
+        texte: "La section Actions propose des repères adaptés à la période et à l'état réel de la colonie. Une hausse n'est plus suggérée sur une colonie faible, ni une récolte sur une colonie affaiblie." },
+      { titre: "Réglage de zone apicole",
+        texte: "Sud, Centre, Nord ou Montagne, à choisir dans Administration. Le printemps n'arrive pas en même temps partout : les repères se décalent en conséquence." },
+      { titre: "Carte et scanner hors connexion",
+        texte: "La carte du rucher, le lecteur de QR codes et la génération des QR fonctionnent désormais sans réseau." },
+      { titre: "Raccourcis sur l'icône",
+        texte: "Un appui long sur l'icône de l'application propose d'ouvrir directement le scanner, les alertes ou la création d'une ruche." },
+      { titre: "Contrôle des informations saisies",
+        texte: "Le SIRET, le téléphone et l'e-mail sont vérifiés à l'enregistrement. Une anomalie est signalée sans jamais bloquer la saisie." },
+      { titre: "Navigation au clavier",
+        texte: "L'application se parcourt entièrement au clavier, utile sur tablette avec clavier ou pour les lecteurs d'écran." },
+      { titre: "Corrections",
+        texte: "Le bouton retour affiche le nom de la section au lieu de « Élément ». Les messages de confirmation s'accordent correctement. Application plus rapide à l'ouverture." }
+    ]
+  }
+];
+
+/* Entrées plus récentes que ce que l'utilisateur a déjà vu. */
+function nouveautesNonVues(){
+  const vue = state.derniereVersionVue || "";
+  // Première installation : pas de « quoi de neuf » à présenter.
+  if(!vue) return [];
+  return JOURNAL_VERSIONS.filter(e => compareAppVersions(vue, e.version) < 0);
+}
+
+function ouvrirNouveautes(forcer){
+  const entrees = forcer ? JOURNAL_VERSIONS : nouveautesNonVues();
+  if(!entrees.length) return false;
+
+  const modal = document.getElementById("nouveautesModal");
+  const liste = document.getElementById("nouveautesListe");
+  const version = document.getElementById("nouveautesVersion");
+  if(!modal || !liste) return false;
+
+  version.textContent = `Version ${entrees[0].version} · ${entrees[0].date}`;
+  liste.innerHTML = entrees.flatMap(e => e.nouveautes).map(x => `
+    <div class="nouveaute">
+      <div class="nouveaute-titre">${escapeHtml(x.titre)}</div>
+      <div class="nouveaute-texte">${escapeHtml(x.texte)}</div>
+    </div>
+  `).join("");
+
+  modal.classList.add("open");
+  return true;
+}
+
+function fermerNouveautes(){
+  document.getElementById("nouveautesModal")?.classList.remove("open");
+  // Marque la version comme vue : le panneau ne se rouvrira plus seul.
+  if(state.derniereVersionVue !== APP_VERSION){
+    state.derniereVersionVue = APP_VERSION;
+    saveState();
+  }
+}
+
+/* ── Bandeau de mise à jour ── */
+let travailleurEnAttente = null;
+
+function afficherBandeauMaj(travailleur){
+  travailleurEnAttente = travailleur || null;
+  document.getElementById("majBandeau")?.classList.add("open");
+}
+
+function masquerBandeauMaj(){
+  document.getElementById("majBandeau")?.classList.remove("open");
+}
+
+function appliquerMiseAJour(){
+  masquerBandeauMaj();
+  if(travailleurEnAttente){
+    // Le nouveau service worker prend la main ; controllerchange rechargera.
+    travailleurEnAttente.postMessage({ type: "SKIP_WAITING" });
+    // Filet de sécurité si l'événement ne remonte pas.
+    setTimeout(() => location.reload(), 1500);
+  }else{
+    location.reload();
+  }
+}
+
 function initApp(){
   setupAlertEngine();
   const raccourci = pageDemandeeParUrl();
@@ -7784,9 +7984,19 @@ function initApp(){
   } else {
     document.getElementById("splash").style.display = "none";
     showPage(raccourci || "home");
+
+    // Nouveautés d'abord : c'est ce qui explique ce qui a changé.
+    const nouveautesPresentees = !raccourci && ouvrirNouveautes(false);
+    if(!nouveautesPresentees && state.derniereVersionVue !== APP_VERSION){
+      // Rien à présenter (première installation) : on enregistre la version
+      // pour que la prochaine mise à jour, elle, soit annoncée.
+      state.derniereVersionVue = APP_VERSION;
+      saveState();
+    }
+
     // L'invite calendrier n'a pas sa place quand l'utilisateur vient
-    // d'appuyer sur un raccourci pour une action précise.
-    if(!raccourci) setTimeout(()=>showCalendarOnboarding(false), 900);
+    // d'appuyer sur un raccourci, ni par-dessus les nouveautés.
+    if(!raccourci && !nouveautesPresentees) setTimeout(()=>showCalendarOnboarding(false), 900);
   }
 }
 
@@ -8228,6 +8438,9 @@ document.addEventListener("keydown", event => {
     return;
   }
 
+  const nouveautes = document.getElementById("nouveautesModal");
+  if(nouveautes && nouveautes.classList.contains("open")){ fermerNouveautes(); return; }
+
   const calendar = document.getElementById("calendarOnboarding");
   if(calendar && calendar.classList.contains("open")){
     calendar.classList.remove("open");
@@ -8253,8 +8466,42 @@ if('serviceWorker' in navigator){
       return;
     }
     navigator.serviceWorker.register('./sw.js')
-      .then(reg => console.log('[PWA] Service Worker enregistré', reg.scope))
+      .then(reg => {
+        console.log('[PWA] Service Worker enregistré', reg.scope);
+
+        // Une version déjà installée attend son tour : la proposer.
+        if(reg.waiting && navigator.serviceWorker.controller){
+          afficherBandeauMaj(reg.waiting);
+        }
+
+        reg.addEventListener('updatefound', () => {
+          const nouveau = reg.installing;
+          if(!nouveau) return;
+          nouveau.addEventListener('statechange', () => {
+            // Un contrôleur existant signifie que ce n'est pas la première
+            // installation, mais bien une mise à jour.
+            if(nouveau.state === 'installed' && navigator.serviceWorker.controller){
+              afficherBandeauMaj(nouveau);
+            }
+          });
+        });
+
+        // Le navigateur ne vérifie pas de lui-même pendant une longue session.
+        const verifier = () => reg.update().catch(() => {});
+        document.addEventListener('visibilitychange', () => {
+          if(document.visibilityState === 'visible') verifier();
+        });
+        setInterval(verifier, 3600000);
+      })
       .catch(err => console.warn('[PWA] SW erreur:', err));
+
+    // Le nouveau service worker a pris la main : on recharge une seule fois.
+    let rechargementMaj = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if(rechargementMaj) return;
+      rechargementMaj = true;
+      location.reload();
+    });
   });
 }
 
