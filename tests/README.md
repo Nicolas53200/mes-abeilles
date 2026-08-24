@@ -38,6 +38,7 @@ navigateur, il pilote celui que tu as déjà.
 | `09-manifest-raccourcis` | Les raccourcis PWA ouvrent réellement leur page |
 | `10-suggestions-saison` | Repères de saison, décalage par zone, badge d'alertes intact |
 | `11-nouveautes-maj` | Panneau des nouveautés, bandeau de mise à jour, service worker |
+| `12-donnees-locales` | Aucune donnée saisie ne quitte l'appareil (vérifié réseau) |
 
 ## Pourquoi ces tests existent
 
