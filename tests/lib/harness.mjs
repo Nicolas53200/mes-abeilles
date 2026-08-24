@@ -161,7 +161,14 @@ export async function executerSuite(nom, corps){
 export function publierVersion(dossier, version, migration){
   const PLACEHOLDER = '  // Aucune migration nécessaire à ce jour.';
   let html = fs.readFileSync(path.join(RACINE, 'index.html'), 'utf-8');
-  html = html.replace('const APP_VERSION = "v36.2";', `const APP_VERSION = "${version}";`);
+  // Motif générique : ne pas coupler le harnais au numéro de version courant.
+  // Avec une valeur en dur, un bump d'APP_VERSION faisait échouer ce
+  // remplacement en silence, et les suites testaient la mauvaise version.
+  const motif = /const APP_VERSION = "[^"]+";/;
+  // On vérifie la PRÉSENCE du motif, pas que le texte change : publier la
+  // version déjà en place est légitime et ne modifie rien.
+  if(!motif.test(html)) throw new Error("publierVersion : APP_VERSION introuvable dans index.html");
+  html = html.replace(motif, `const APP_VERSION = "${version}";`);
   if(migration) html = html.replace(PLACEHOLDER, migration);
   fs.writeFileSync(path.join(dossier, 'index.html'), html);
 }

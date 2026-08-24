@@ -33,8 +33,12 @@ export default () => executerSuite('Survie des données à une mise à jour', as
   let html = (await import('node:fs')).readFileSync(dossier + '/index.html', 'utf-8');
   publierVersion(dossier, 'v37.0', null);
   const fs = await import('node:fs');
-  html = fs.readFileSync(dossier + '/index.html', 'utf-8')
-           .replace('  hiveTourDone: false\n};', '  hiveTourDone: false,\n  nouvelleOptionV37: "valeur par défaut"\n};');
+  // Ancrage sur l'ouverture de l'objet state : stable quand de nouvelles
+  // clés y sont ajoutées, contrairement à un ancrage sur la dernière ligne.
+  const source = fs.readFileSync(dossier + '/index.html', 'utf-8');
+  const ancre = 'const state = {';
+  if(!source.includes(ancre)) throw new Error("objet state introuvable");
+  html = source.replace(ancre, ancre + '\n  nouvelleOptionV37: "valeur par défaut",');
   fs.writeFileSync(dossier + '/index.html', html);
 
   await page.reload();
