@@ -69,7 +69,11 @@ export default () => executerSuite('Nouveautés et mise à jour', async ({ page,
     texte: document.getElementById('nouveautesListe')?.innerText || ''
   }));
   rapport.verifier('le panneau s\'ouvre', apres.ouvert);
-  rapport.verifier('il annonce la version', /v37\.0/.test(apres.version), apres.version);
+  // Version lue depuis la page : coder un numéro en dur ferait échouer
+  // ce test à chaque publication, sans qu'aucun bug ne soit en cause.
+  const versionCourante = await p2.evaluate(() => APP_VERSION);
+  rapport.verifier('il annonce la version',
+    apres.version.includes(versionCourante), `${apres.version} contient ${versionCourante}`);
   rapport.verifier('il liste les nouveautés', apres.nb >= 5, `${apres.nb} entrées`);
   rapport.verifier('les suggestions de saison y figurent', apres.texte.includes('Suggestions de saison'));
   rapport.verifier('le hors-connexion y figure', apres.texte.includes('hors connexion'));
@@ -81,7 +85,8 @@ export default () => executerSuite('Nouveautés et mise à jour', async ({ page,
     !(await p2.evaluate(() => document.getElementById('nouveautesModal').classList.contains('open'))));
   const memorise = await p2.evaluate(() =>
     JSON.parse(localStorage.getItem('mesAbeilles_data_v1')).derniereVersionVue);
-  rapport.verifier('version écrite dans la sauvegarde', memorise === 'v37.0', String(memorise));
+  rapport.verifier('version écrite dans la sauvegarde', memorise === versionCourante,
+    `${memorise} attendu ${versionCourante}`);
 
   await p2.reload();
   await p2.waitForTimeout(1500);
@@ -89,7 +94,8 @@ export default () => executerSuite('Nouveautés et mise à jour', async ({ page,
     ouvert: document.getElementById('nouveautesModal')?.classList.contains('open'),
     relu: state.derniereVersionVue
   }));
-  rapport.verifier('la clé est bien RELUE au chargement', relance.relu === 'v37.0', String(relance.relu));
+  rapport.verifier('la clé est bien RELUE au chargement', relance.relu === versionCourante,
+    `${relance.relu} attendu ${versionCourante}`);
   rapport.verifier('le panneau ne se rouvre pas', !relance.ouvert);
   await p2.reload();
   await p2.waitForTimeout(1400);
