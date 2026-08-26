@@ -40,6 +40,7 @@ navigateur, il pilote celui que tu as déjà.
 | `11-nouveautes-maj` | Panneau des nouveautés, bandeau de mise à jour, service worker |
 | `12-donnees-locales` | Aucune donnée saisie ne quitte l'appareil |
 | `13-installation-stockage` | Invite d'installation, stockage durable, dégradation propre |
+| `14-qrcode-ruche` | Génération, scan et ouverture de la fiche depuis un QR |
 | `12-donnees-locales` | Aucune donnée saisie ne quitte l'appareil (vérifié réseau) |
 
 ## Pourquoi ces tests existent

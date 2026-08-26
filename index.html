@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.0</title>
+  <title>Mes Abeilles 🐝 v37.1</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2521,7 +2521,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.0";
+const APP_VERSION = "v37.1";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -2663,6 +2663,35 @@ const state = {
   derniereVersionVue: ""
 };
 loadState();
+
+/* Recherche d'une ruche par son code, en tolérant la casse et les
+   séparateurs. Le champ du code est librement modifiable à la création :
+   un apiculteur qui saisit « Ruche-001 » ou « Rucher Nord 3 » doit
+   retrouver sa ruche en scannant son QR, ce qui n'était pas le cas —
+   le scan renvoyait le code en majuscules et la comparaison était
+   stricte, d'où un « Ruche introuvable » sur son propre QR code.
+
+   L'ordre compte : correspondance exacte d'abord, pour ne jamais
+   confondre deux ruches réellement distinctes. */
+function codeCompact(valeur){
+  return String(valeur ?? "").replace(/[\s_-]+/g, "").toUpperCase();
+}
+
+function trouverRucheParCode(code){
+  const liste = Array.isArray(state.hives) ? state.hives : [];
+  if(!code && code !== 0) return null;
+
+  const exact = liste.find(x => x.code === code);
+  if(exact) return exact;
+
+  const brut = String(code).trim();
+  const insensible = liste.find(x => String(x.code || "").trim().toLowerCase() === brut.toLowerCase());
+  if(insensible) return insensible;
+
+  const compact = codeCompact(brut);
+  if(!compact) return null;
+  return liste.find(x => codeCompact(x.code) === compact) || null;
+}
 
 function hiveCard(h){
   const warn = h.alerts > 0;
@@ -2844,7 +2873,7 @@ function changeHiveApiary(code){
 }
 
 function openApiaryPicker(code){
-  const h = state.hives.find(x=>x.code===code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
   const current = apiaryNameForHive(h);
   const names = knownApiaries().filter(n=>n !== "Sans rucher");
@@ -2911,7 +2940,7 @@ function addApiaryChoice(){
 }
 
 function saveApiaryChoice(code){
-  const h = state.hives.find(x=>x.code===code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
   const selected = document.querySelector('input[name="apiaryPick"]:checked');
   const clean = String(selected?.value || "").trim();
@@ -3158,7 +3187,7 @@ function isAlertDismissed(h, alertText){
 }
 
 function dismissAlert(code, encodedAlert){
-  const h = state.hives.find(x=>x.code === code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
   const alertText = decodeURIComponent(encodedAlert || "");
   if(!h.dismissedAlerts) h.dismissedAlerts = [];
@@ -3173,7 +3202,7 @@ function dismissAlert(code, encodedAlert){
 }
 
 function clearHiveAlerts(code){
-  const h = state.hives.find(x=>x.code === code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
   if(!confirm("Supprimer / masquer toutes les alertes actuelles de cette ruche ?\\n\\nLes nouvelles alertes pourront réapparaître si la situation change.")) return;
 
@@ -3191,7 +3220,7 @@ function clearHiveAlerts(code){
 }
 
 function restoreHiveAlerts(code){
-  const h = state.hives.find(x=>x.code === code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
   h.dismissedAlerts = [];
   recomputeAutomaticAlerts(false);
@@ -3297,7 +3326,7 @@ function mostRelevantAlertDate(h){
 }
 
 function downloadGroupedAlertReminder(code){
-  const h = state.hives.find(x=>x.code === code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
   const list = Array.isArray(h.alertList) ? h.alertList : [];
   const start = mostRelevantAlertDate(h);
@@ -3610,7 +3639,7 @@ function menu(){
 }
 
 function hiveDetail(code){
-  const h = state.hives.find(x=>x.code===code) || state.hives[0];
+  const h = trouverRucheParCode(code) || state.hives[0];
   state.currentHive = h;
   const isRuchette = h.type === "ruchette";
 
@@ -4967,7 +4996,7 @@ function statusScoreHTML(h){
 }
 
 function openScoreModal(code){
-  const h = state.hives.find(x=>x.code===code) || state.currentHive || state.hives[0];
+  const h = trouverRucheParCode(code) || state.currentHive || state.hives[0];
   if(!h) return;
   const s = latestVisitScore(h);
   const modal = document.getElementById("scoreModal");
@@ -5391,7 +5420,7 @@ function renderResumeNextVisit(h){
 }
 
 function mbAddNextVisitCalendar(code){
-  const h = state.hives.find(x=>x.code === code) || state.currentHive;
+  const h = trouverRucheParCode(code) || state.currentHive;
   const last = mbLastVisit(h);
   if(!h || !last){
     showToast("Aucune visite à programmer");
@@ -6420,11 +6449,33 @@ function removeComplianceDocument(bucketId){
 }
 
 
+/* Contenu du QR code collé sur la ruche.
+
+   Encoder le code seul — « RUCHE-001 » — ne produit qu'un texte : scanné
+   avec l'appareil photo du téléphone, le geste le plus naturel devant un
+   QR, il ne se passait rien. On encode donc une URL qui ouvre
+   directement la fiche de la ruche, quel que soit le scanner utilisé.
+
+   Sur file://, une URL locale n'aurait aucun sens sur un autre appareil :
+   on garde alors le code seul, que le scanner de l'application sait lire.
+   Les QR déjà imprimés restent valides : normalizeScannedCode() accepte
+   aussi bien un code brut qu'une URL. */
+function lienRuche(code){
+  const valeur = String(code || "").trim();
+  try{
+    if(location.protocol === "http:" || location.protocol === "https:"){
+      return location.origin + location.pathname + "?code=" + encodeURIComponent(valeur);
+    }
+  }catch(e){}
+  return valeur;
+}
+
 function drawAllQr(code){
-  drawQr("heroQr", code);
-  drawQr("bigQr", code);
-  drawQr("printQr", code);
-  drawQr("newHiveQrPreview", code);
+  const contenu = lienRuche(code);
+  drawQr("heroQr", contenu);
+  drawQr("bigQr", contenu);
+  drawQr("printQr", contenu);
+  drawQr("newHiveQrPreview", contenu);
 }
 function drawQr(id, text){
   const c = document.getElementById(id);
@@ -6773,7 +6824,7 @@ function copyHiveGps(lat, lon){
 }
 
 function convertirEnRuche(code){
-  const h = state.hives.find(x => x.code === code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
   if(!confirm(`Convertir la ruchette "${h.name}" en ruche ?\n\nTout l'historique sera conservé.`)) return;
   h.type   = "ruche";
@@ -6796,7 +6847,7 @@ function convertirEnRuche(code){
 }
 
 function deleteHive(code){
-  const h = state.hives.find(x => x.code === code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
 
   const label = (h.type === "ruchette" ? "la ruchette" : "la ruche") + " " + (h.name || h.code);
@@ -7337,7 +7388,7 @@ function suggestedDateForAlert(h, alertText){
 }
 
 function downloadAlertReminder(code, encodedAlert){
-  const h = state.hives.find(x=>x.code === code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
   const alertText = decodeURIComponent(encodedAlert || "Alerte Mes Abeilles");
   const start = suggestedDateForAlert(h, alertText);
@@ -7351,7 +7402,7 @@ function downloadCalendarEvent({h, start, title, desc, filename, location, allDa
 }
 
 function downloadVisitReminder(code){
-  const h = state.hives.find(x=>x.code === code);
+  const h = trouverRucheParCode(code);
   if(!h) return;
   const start = nextVisitDateForHive(h);
   const title = `Visite ruche ${h.name} (${h.code})`;
@@ -7903,6 +7954,19 @@ function pageDemandeeParUrl(){
   }
 }
 
+/* Code de ruche demandé par l'URL : c'est ce que contient le QR collé
+   sur la ruche, pour qu'un scan avec n'importe quel appareil photo
+   ouvre directement la bonne fiche. */
+function rucheDemandeeParUrl(){
+  try{
+    const demande = new URL(location.href).searchParams.get("code");
+    if(!demande) return null;
+    return trouverRucheParCode(normalizeScannedCode(demande));
+  }catch(e){
+    return null;
+  }
+}
+
 /* ── Nouveautés et mise à jour ───────────────────────────
    Deux mécanismes distincts :
      - le PANNEAU des nouveautés, présenté une fois après une mise à
@@ -7914,6 +7978,14 @@ function pageDemandeeParUrl(){
    en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
+  {
+    version: "v37.1",
+    date: "Août 2026",
+    nouveautes: [
+      { titre: "QR codes réparés",
+        texte: "Scanner le QR d'une ruche ouvre bien sa fiche, même si tu as personnalisé son code. Le QR contient désormais un lien : l'appareil photo du téléphone suffit, plus besoin de passer par le scanner de l'application. Les QR déjà imprimés restent valables." }
+    ]
+  },
   {
     version: "v37.0",
     date: "Août 2026",
@@ -8110,7 +8182,14 @@ function initApp(){
     showPage("home");
   } else {
     document.getElementById("splash").style.display = "none";
-    showPage(raccourci || "home");
+
+    // Un QR scanné prime sur tout : l'apiculteur est devant sa ruche.
+    const rucheScannee = rucheDemandeeParUrl();
+    if(rucheScannee){
+      openHive(rucheScannee.code);
+    }else{
+      showPage(raccourci || "home");
+    }
 
     // Nouveautés d'abord : c'est ce qui explique ce qui a changé.
     const nouveautesPresentees = !raccourci && ouvrirNouveautes(false);
@@ -8353,7 +8432,7 @@ function openHive(code){
   // Remettre overflow normal si on venait de la carte
   const phoneEl = document.querySelector(".phone");
   if(phoneEl) phoneEl.style.overflow = "";
-  const h = state.hives.find(x=>x.code===code);
+  const h = trouverRucheParCode(code);
   if(!h){
     alert("Ruche introuvable : " + code);
     return;
@@ -8513,10 +8592,14 @@ function normalizeScannedCode(value){
     code = url.searchParams.get("code") || fromHash || fromPath || code;
   }catch(e){}
 
+  // Un QR peut contenir du texte autour du code : on isole le motif
+  // RUCHE-nnn quand il est présent, sinon on garde la valeur telle quelle.
   const match = String(code).match(/RUCHE[-_ ]?\d+/i);
   if(match) code = match[0].replace(/[ _]/g, "-");
 
-  return code.trim().toUpperCase();
+  // Plus de passage en majuscules : la recherche tolère désormais la
+  // casse, et déformer le code empêchait de retrouver « Ruche-001 ».
+  return code.trim();
 }
 
 function handleScannedCode(value){
