@@ -8030,8 +8030,15 @@ const JOURNAL_VERSIONS = [
 /* Entrées plus récentes que ce que l'utilisateur a déjà vu. */
 function nouveautesNonVues(){
   const vue = state.derniereVersionVue || "";
-  // Première installation : pas de « quoi de neuf » à présenter.
-  if(!vue) return [];
+  if(!vue){
+    // Aucune version mémorisée. Deux cas très différents :
+    //  · l'accueil n'a pas encore été passé → première installation,
+    //    rien à annoncer à quelqu'un qui découvre l'application ;
+    //  · l'accueil est passé et des données existent → apiculteur venu
+    //    d'une version antérieure au journal (v36.2 et avant). Lui a
+    //    bien droit au récapitulatif de ce qui a changé depuis.
+    return state.onboardingDone ? JOURNAL_VERSIONS.slice() : [];
+  }
   return JOURNAL_VERSIONS.filter(e => compareAppVersions(vue, e.version) < 0);
 }
 
@@ -8194,11 +8201,25 @@ function initApp(){
   demanderStockageDurable();
   const raccourci = pageDemandeeParUrl();
 
+  /* Mémoriser la version courante, quel que soit le chemin suivi.
+     Auparavant ce n'était fait que pour un utilisateur ayant déjà passé
+     l'accueil : celui qui découvrait l'application ne l'enregistrait
+     jamais, et ratait donc les nouveautés de la version SUIVANTE.
+     À appeler seulement une fois le panneau des nouveautés traité, sinon
+     il n'aurait plus rien à annoncer. */
+  const memoriserVersion = () => {
+    if(state.derniereVersionVue !== APP_VERSION){
+      state.derniereVersionVue = APP_VERSION;
+      saveState();
+    }
+  };
+
   if(!state.onboardingDone){
     // Splash visible, app masquée en arrière-plan.
     // L'accueil de départ prime sur le raccourci : mieux vaut ne pas
     // déposer un nouvel utilisateur directement dans le scanner.
     showPage("home");
+    memoriserVersion();
   } else {
     document.getElementById("splash").style.display = "none";
 
@@ -8211,13 +8232,10 @@ function initApp(){
     }
 
     // Nouveautés d'abord : c'est ce qui explique ce qui a changé.
+    // fermerNouveautes() se charge d'enregistrer la version quand le
+    // panneau est présenté ; sinon on l'enregistre tout de suite.
     const nouveautesPresentees = !raccourci && ouvrirNouveautes(false);
-    if(!nouveautesPresentees && state.derniereVersionVue !== APP_VERSION){
-      // Rien à présenter (première installation) : on enregistre la version
-      // pour que la prochaine mise à jour, elle, soit annoncée.
-      state.derniereVersionVue = APP_VERSION;
-      saveState();
-    }
+    if(!nouveautesPresentees) memoriserVersion();
 
     // L'invite calendrier n'a pas sa place quand l'utilisateur vient
     // d'appuyer sur un raccourci, ni par-dessus les nouveautés.
@@ -8696,6 +8714,9 @@ document.addEventListener("keydown", event => {
 });
 
 /* ── Service Worker PWA ─────────────────────────── */
+const chargementPage = Date.now();
+let activationSilencieuse = false;
+
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
     const isLocal = ['localhost','127.0.0.1',''].includes(location.hostname);
@@ -8714,10 +8735,27 @@ if('serviceWorker' in navigator){
       .then(reg => {
         console.log('[PWA] Service Worker enregistré', reg.scope);
 
-        // Une version déjà installée attend son tour : la proposer.
-        if(reg.waiting && navigator.serviceWorker.controller){
-          afficherBandeauMaj(reg.waiting);
-        }
+        /* Le service worker sert le réseau en priorité : la page qui
+           vient de se charger est DÉJÀ la dernière version. Un nouveau
+           service worker détecté dans la foulée ne fait que rattraper son
+           retard — annoncer « nouvelle version disponible » à ce moment
+           serait faux, l'utilisateur y est déjà.
+           On l'active donc en silence, sans recharger. Le bandeau est
+           réservé aux mises à jour survenant PENDANT la session, où la
+           page tourne réellement sur l'ancien code. */
+        const auDemarrage = () => (Date.now() - chargementPage) < 12000;
+
+        const traiter = travailleur => {
+          if(!travailleur || !navigator.serviceWorker.controller) return;
+          if(auDemarrage()){
+            activationSilencieuse = true;
+            travailleur.postMessage({ type: "SKIP_WAITING" });
+          }else{
+            afficherBandeauMaj(travailleur);
+          }
+        };
+
+        if(reg.waiting) traiter(reg.waiting);
 
         reg.addEventListener('updatefound', () => {
           const nouveau = reg.installing;
@@ -8725,9 +8763,7 @@ if('serviceWorker' in navigator){
           nouveau.addEventListener('statechange', () => {
             // Un contrôleur existant signifie que ce n'est pas la première
             // installation, mais bien une mise à jour.
-            if(nouveau.state === 'installed' && navigator.serviceWorker.controller){
-              afficherBandeauMaj(nouveau);
-            }
+            if(nouveau.state === 'installed') traiter(nouveau);
           });
         });
 
@@ -8740,9 +8776,15 @@ if('serviceWorker' in navigator){
       })
       .catch(err => console.warn('[PWA] SW erreur:', err));
 
-    // Le nouveau service worker a pris la main : on recharge une seule fois.
+    // Le nouveau service worker a pris la main : on recharge une seule
+    // fois — sauf s'il s'agit de l'activation silencieuse du démarrage,
+    // où la page affiche déjà la bonne version.
     let rechargementMaj = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if(activationSilencieuse){
+        activationSilencieuse = false;
+        return;
+      }
       if(rechargementMaj) return;
       rechargementMaj = true;
       location.reload();

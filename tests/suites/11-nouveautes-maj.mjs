@@ -23,7 +23,8 @@ export default () => executerSuite('Nouveautés et mise à jour', async ({ page,
     new RegExp(`version:\\s*"${appV.replace('.', '\\.')}"`).test(html));
 
   rapport.section('Première installation : rien à annoncer');
-  await amorcer(page, { ...RUCHER_TYPE });   // aucune derniereVersionVue
+  // Un vrai nouveau venu n'a pas encore passé l'accueil.
+  await amorcer(page, {});
   await page.goto(origine);
   await page.waitForTimeout(1400);
   const neuf = await page.evaluate(() => ({
@@ -32,9 +33,30 @@ export default () => executerSuite('Nouveautés et mise à jour', async ({ page,
     nonVues: nouveautesNonVues().length
   }));
   rapport.verifier('aucun panneau au premier lancement', !neuf.ouvert);
-  rapport.verifier('la version est mémorisée pour la suite',
+  rapport.verifier('la version est mémorisée dès l\'accueil',
     neuf.versionEnregistree === await page.evaluate(() => APP_VERSION), neuf.versionEnregistree);
   rapport.verifier('rien de « non vu »', neuf.nonVues === 0);
+
+  rapport.section('Apiculteur venu d\'avant le journal');
+  // Compte déjà installé, mais aucune version mémorisée : c'est quelqu'un
+  // qui vient de la v36.2 ou antérieure. Il doit recevoir le récapitulatif,
+  // pas être confondu avec une première installation.
+  const ctxAncien = await navigateur.newContext();
+  const pAncien = await ctxAncien.newPage();
+  pAncien.on('pageerror', e => erreurs.push(String(e).split('\n')[0]));
+  await amorcer(pAncien, { ...RUCHER_TYPE });   // aucune derniereVersionVue
+  await pAncien.goto(origine);
+  await pAncien.waitForTimeout(1500);
+  const ancien = await pAncien.evaluate(() => ({
+    ouvert: document.getElementById('nouveautesModal')?.classList.contains('open'),
+    nonVues: nouveautesNonVues().length,
+    ruches: state.hives.length
+  }));
+  rapport.verifier('le panneau lui présente le journal complet', !!ancien.ouvert);
+  rapport.verifier('toutes les versions du journal sont proposées',
+    ancien.nonVues > 0, ancien.nonVues + ' version(s)');
+  rapport.verifier('ses ruches sont intactes', ancien.ruches === 2);
+  await ctxAncien.close();
 
   rapport.section('Après une mise à jour : le panneau se présente');
   // Contexte SANS script d'amorce : addInitScript se rejoue à chaque
