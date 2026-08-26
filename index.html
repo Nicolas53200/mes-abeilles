@@ -6472,16 +6472,24 @@ function lienRuche(code){
 
 function drawAllQr(code){
   const contenu = lienRuche(code);
-  drawQr("heroQr", contenu);
-  drawQr("bigQr", contenu);
-  drawQr("printQr", contenu);
-  drawQr("newHiveQrPreview", contenu);
+  drawQr("heroQr", contenu, code);
+  drawQr("bigQr", contenu, code);
+  drawQr("printQr", contenu, code);
+  drawQr("newHiveQrPreview", contenu, code);
 }
-function drawQr(id, text){
+/* `text` est ce qu'on aimerait encoder — une URL ouvrant la fiche.
+   `replique` est la valeur de secours, le code brut, seule chose que
+   l'encodeur local sache produire : il se limite à 25 caractères
+   alphanumériques majuscules, une URL le ferait échouer.
+   Sans ce second paramètre, passer une URL au repli produisait un QR
+   vide, d'apparence normale mais illisible. */
+function drawQr(id, text, replique){
   const c = document.getElementById(id);
   if(!c) return Promise.resolve(false);
 
   const value = String(text || "").trim();
+  const secours = String(replique ?? text ?? "").trim();
+
   if(window.QRCode && QRCode.toCanvas){
     return new Promise(resolve => {
       QRCode.toCanvas(c, value, {
@@ -6491,7 +6499,7 @@ function drawQr(id, text){
         color: { dark: "#000000", light: "#ffffff" }
       }, function(err){
         if(err){
-          drawFallbackQr(c, value);
+          drawFallbackQr(c, secours);
           resolve(false);
         }else{
           c.dataset.qrValue = value;
@@ -6501,7 +6509,7 @@ function drawQr(id, text){
     });
   }
 
-  const fallbackOk = drawFallbackQr(c, value);
+  const fallbackOk = drawFallbackQr(c, secours);
   return Promise.resolve(!!fallbackOk);
 }
 
@@ -6515,12 +6523,23 @@ function drawFallbackQr(c, text){
     c.dataset.qrValue = value;
     return true;
   }catch(e){
-    // Dernier secours visuel, normalement jamais utilisé pour les codes RUCHE-001.
-    const ctx=c.getContext("2d"), cells=29, cell=Math.floor(c.width/cells);
-    ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
-    function finder(x,y){ctx.fillStyle="#000";ctx.fillRect(x*cell,y*cell,7*cell,7*cell);ctx.fillStyle="#fff";ctx.fillRect((x+1)*cell,(y+1)*cell,5*cell,5*cell);ctx.fillStyle="#000";ctx.fillRect((x+2)*cell,(y+2)*cell,3*cell,3*cell)}
-    finder(1,1);finder(21,1);finder(1,21);
-    ctx.fillStyle="#000";ctx.font="14px system-ui";ctx.fillText(value, 12, c.height-12);
+    /* Ne PAS dessiner un motif ressemblant à un QR code.
+       L'ancienne version traçait trois carrés de repère et le texte :
+       l'image passait pour un QR valide, se collait sur une ruche, et
+       ne contenait aucune donnée. Un scan ne renvoyait rien, sans que
+       rien n'indique le problème. Mieux vaut l'annoncer clairement. */
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = "#b45309";
+    ctx.textAlign = "center";
+    ctx.font = "700 " + Math.max(11, Math.round(c.width / 11)) + "px system-ui";
+    ctx.fillText("QR indisponible", c.width / 2, c.height / 2 - 6);
+    ctx.font = Math.max(9, Math.round(c.width / 15)) + "px system-ui";
+    ctx.fillText("Code trop long ou", c.width / 2, c.height / 2 + 12);
+    ctx.fillText("caractère non géré", c.width / 2, c.height / 2 + 26);
+    ctx.textAlign = "start";
+    delete c.dataset.qrValue;
+    console.warn("[Mes Abeilles] QR local impossible pour", value, e);
     return false;
   }
 }

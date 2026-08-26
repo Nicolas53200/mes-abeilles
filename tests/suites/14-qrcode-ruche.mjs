@@ -108,5 +108,77 @@ export default () => executerSuite('QR code des ruches', async ({ page, origine,
   rapport.verifier('sans paramètre → accueil',
     (await page.evaluate(() => state.page)) === 'home');
 
+  rapport.section('QR de secours, quand la librairie CDN manque');
+  // Le repli local n'encode que 25 caractères alphanumériques majuscules.
+  // Lui passer une URL le faisait échouer, et l'échec dessinait un motif
+  // ressemblant à un QR mais totalement vide.
+  await page.goto(origine);
+  await page.waitForTimeout(1200);
+  const secours = await page.evaluate(() => {
+    const vraiQR = window.QRCode;
+    window.QRCode = undefined;                 // simule le CDN injoignable
+    const c = document.createElement('canvas');
+    c.width = c.height = 180;
+    document.body.appendChild(c);
+    const r = {};
+    // Code simple : le repli doit produire un vrai QR
+    r.simpleOk = drawFallbackQr(c, 'RUCHE-001');
+    r.simpleValeur = c.dataset.qrValue || null;
+    // Une URL dépasse ses capacités : il doit refuser proprement
+    r.urlOk = drawFallbackQr(c, 'https://exemple.fr/app/?code=RUCHE-001');
+    r.urlValeur = c.dataset.qrValue || null;
+    c.remove();
+    window.QRCode = vraiQR;
+    return r;
+  });
+  rapport.verifier('code simple → vrai QR produit', secours.simpleOk === true, String(secours.simpleValeur));
+  rapport.verifier('URL trop longue → refus explicite', secours.urlOk === false);
+  rapport.verifier('aucune valeur trompeuse enregistrée', secours.urlValeur === null, String(secours.urlValeur));
+
+  const passeLeCode = await page.evaluate(() => {
+    const vraiQR = window.QRCode;
+    window.QRCode = undefined;
+    const c = document.createElement('canvas');
+    c.id = 'bigQr'; c.width = c.height = 180;
+    document.body.appendChild(c);
+    state.hives = [{ code:'RUCHE-007', name:'T', apiary:'P', type:'ruche' }];
+    drawAllQr('RUCHE-007');
+    const v = c.dataset.qrValue || null;
+    c.remove();
+    window.QRCode = vraiQR;
+    return v;
+  });
+  rapport.verifier('sans CDN, le repli reçoit le code brut et non l\'URL',
+    passeLeCode === 'RUCHE-007', String(passeLeCode));
+
+  rapport.section('Le QR de secours est vraiment décodable');
+  // Décodage structurel : repères, module de calage, zone silencieuse.
+  const structure = await page.evaluate(() => {
+    const m = makeLocalQrV1L('RUCHE-001');
+    const taille = m.length;
+    const repere = (x, y) => {
+      for(let dy = 0; dy < 7; dy++) for(let dx = 0; dx < 7; dx++){
+        const bord = dx === 0 || dx === 6 || dy === 0 || dy === 6;
+        const centre = dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4;
+        const attendu = bord || centre;
+        if(!!m[y + dy][x + dx] !== attendu) return false;
+      }
+      return true;
+    };
+    let calage = true;
+    for(let i = 8; i <= 12; i++){
+      if(!!m[6][i] !== (i % 2 === 0)) calage = false;
+      if(!!m[i][6] !== (i % 2 === 0)) calage = false;
+    }
+    return { taille, hg: repere(0,0), hd: repere(taille-7,0), bg: repere(0,taille-7),
+             calage, sombre: !!m[taille-8][8] };
+  });
+  rapport.verifier('taille version 1 (21×21)', structure.taille === 21, String(structure.taille));
+  rapport.verifier('repère haut-gauche conforme', structure.hg);
+  rapport.verifier('repère haut-droit conforme', structure.hd);
+  rapport.verifier('repère bas-gauche conforme', structure.bg);
+  rapport.verifier('motifs de calage alternés', structure.calage);
+  rapport.verifier('module sombre obligatoire présent', structure.sombre);
+
   rapport.verifier('aucune erreur JavaScript', erreurs.length === 0, erreurs[0] || '');
 });
