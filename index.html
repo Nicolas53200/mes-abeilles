@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.1</title>
+  <title>Mes Abeilles 🐝 v37.2</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -328,6 +328,7 @@
     }
     .bottom-inner{
       background:rgba(255,255,255,.94);
+      -webkit-backdrop-filter:blur(16px);
       backdrop-filter:blur(16px);
       border:1px solid rgba(226,232,240,.9);
       border-radius:26px;
@@ -785,7 +786,12 @@
       align-items:center;justify-content:space-between;
       padding:60px 32px calc(40px + env(safe-area-inset-bottom,0px));
       transition:opacity .5s;
-    
+      /* Sans cela, sur un écran d'iPhone le bouton « Découvrir
+         l'application » tombait sous le bas de l'écran, dans un bloc
+         fixe non défilable : l'apiculteur ne pouvait plus entrer dans
+         l'application du tout. */
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
     }
     .splash.out{opacity:0;pointer-events:none}
     .splash-top{
@@ -834,6 +840,42 @@
       padding:20px;
       box-shadow:0 14px 36px rgba(255,122,24,.4);
       letter-spacing:-.02em;
+    }
+
+    /* Le bouton ne doit jamais être comprimé ni repoussé hors de l'écran.
+       Collé au bas de la zone défilante, il reste sous les yeux et sous
+       le pouce quel que soit l'écran ; sur un grand écran, où rien ne
+       déborde, « sticky » n'a aucun effet visible et l'accueil garde son
+       aspect d'origine. */
+    .splash-btn{flex:0 0 auto;position:sticky;bottom:0}
+    .splash-top{flex:1 0 auto}
+
+    /* Écrans courts (iPhone SE, 12 mini, 13, et tout iPhone dont la
+       barre Safari mange une centaine de pixels) : on resserre le
+       rythme vertical pour que tout tienne sans défilement. */
+    @media (max-height: 900px){
+      .splash{padding:28px 24px calc(20px + env(safe-area-inset-bottom,0px))}
+      .splash-glow{width:104px;height:104px;border-radius:26px;margin-bottom:14px}
+      .splash-title{font-size:29px;margin-bottom:10px}
+      .splash-sub{font-size:14px;line-height:1.45}
+      .splash-features{margin:18px 0;gap:8px}
+      .splash-feat{padding:10px 14px;border-radius:14px}
+      .splash-feat-icon{font-size:21px}
+      .splash-feat-text{font-size:13px}
+      .splash-feat-text strong{font-size:14px}
+      /* Le bouton flotte au-dessus du contenu qui défile : une bande
+         de la couleur du fond l'isole, sinon le texte des cartes vient
+         se coller à ses bords. */
+      .splash-btn{
+        padding:16px;font-size:17px;border-radius:18px;
+        box-shadow:0 10px 26px rgba(255,122,24,.38), 0 0 0 26px #071225;
+      }
+      .splash{padding-bottom:calc(34px + env(safe-area-inset-bottom,0px))}
+    }
+    @media (max-height: 700px){
+      .splash-features{margin:12px 0}
+      .splash-title{font-size:25px}
+      .splash-glow{width:84px;height:84px;margin-bottom:10px}
     }
 
     /* ── Coach marks (tour guidé) ───────────────────── */
@@ -2521,7 +2563,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.1";
+const APP_VERSION = "v37.2";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -6100,6 +6142,15 @@ window.addEventListener("beforeunload", saveState);
 function showToast(msg){
   const t = document.getElementById("toast");
   if(!t) return;
+
+  /* L'écran de bienvenue n'est pas un endroit pour un message fugace.
+     La vérification météo du démarrage y affichait « Ajoute des
+     coordonnées GPS aux ruches », par-dessus le texte d'accueil et à
+     propos de ruches que l'apiculteur n'a pas encore créées. */
+  const accueil = document.getElementById("splash");
+  if(accueil && !accueil.classList.contains("out")
+     && getComputedStyle(accueil).display !== "none") return;
+
   t.textContent = msg;
   t.classList.add("show");
   setTimeout(()=>t.classList.remove("show"), 2200);
@@ -7997,6 +8048,14 @@ function rucheDemandeeParUrl(){
    en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
+  {
+    version: "v37.2",
+    date: "Août 2026",
+    nouveautes: [
+      { titre: "Écran de bienvenue utilisable sur tous les téléphones",
+        texte: "Sur un iPhone, le bouton « Découvrir l'application » tombait sous le bas de l'écran et l'accueil ne défilait pas : impossible d'entrer dans l'application. L'accueil s'adapte maintenant à la hauteur de l'écran et le bouton reste toujours accessible." }
+    ]
+  },
   {
     version: "v37.1",
     date: "Août 2026",
