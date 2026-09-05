@@ -57,7 +57,11 @@ const TYPES = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css',
    le localStorage doit survivre aux rechargements. */
 export async function servir(dossier){
   const serveur = http.createServer((req, res) => {
-    const rel = req.url === '/' ? 'index.html' : decodeURIComponent(req.url.split('?')[0]);
+    // La partie ? doit être retirée AVANT de reconnaître la racine, sinon
+    // « /?code=RUCHE-001 » — l'adresse d'un QR code — tombe sur le dossier
+    // au lieu de index.html et renvoie 404.
+    const chemin = decodeURIComponent(req.url.split('?')[0]);
+    const rel = (chemin === '/' || chemin === '') ? 'index.html' : chemin;
     const fichier = path.join(dossier, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
     fs.readFile(fichier, (err, data) => {
       if(err){ res.writeHead(404); return res.end('introuvable'); }
