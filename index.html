@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.4</title>
+  <title>Mes Abeilles 🐝 v37.5</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2563,7 +2563,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.4";
+const APP_VERSION = "v37.5";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -3675,6 +3675,7 @@ function menu(){
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('scan')">Scanner</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('admin')">Administration</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="openHive('RUCHE-001'); setHiveSection('conformite')">Conformité</button>
+      <button class="big-action" style="width:100%;margin-bottom:12px" onclick="revoirGuide()">🧭 Revoir le guide</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="ouvrirNouveautes(true)">🎉 Quoi de neuf · ${escapeHtml(APP_VERSION)}</button>
     </section>
   `;
@@ -7301,10 +7302,20 @@ function icsDate(d){
 }
 
 
+function coachVisible(){
+  const b = document.getElementById("coachBubble");
+  return !!b && getComputedStyle(b).display !== "none";
+}
+
 function showCalendarOnboarding(force=false){
   const el = document.getElementById("calendarOnboarding");
   if(!el) return;
   if(!force && state.calendarPromptDone) return;
+  /* Le tour guidé occupe l'écran, et cette invite lui passe au-dessus
+     dans l'empilement (340 contre 210) : elle recouvrait entièrement le
+     guide au premier démarrage, bouton « Suivant » compris. Le guide
+     était donc inutilisable la seule fois où il se lançait. */
+  if(!force && coachVisible()) return;
   el.classList.add("open");
 }
 
@@ -7597,9 +7608,9 @@ function splashFinish(){
   }catch(e){
     console.error("[Mes Abeilles] Erreur affichage accueil", e);
   }
-  // Lancer les aides sans bloquer l'entrée dans l'application.
-  setTimeout(()=>{ try{ coachStart(); }catch(e){ console.warn("[Mes Abeilles] Tour guidé ignoré", e); } }, 400);
-  setTimeout(()=>{ try{ showCalendarOnboarding(false); }catch(e){ console.warn("[Mes Abeilles] Aide calendrier ignorée", e); } }, 900);
+  /* Le guide d'abord, seul. L'invite calendrier suit à la fin du tour
+     (voir coachEnd) : lancée ici, elle recouvrait le guide. */
+  setTimeout(()=>{ try{ coachStart(false); }catch(e){ console.warn("[Mes Abeilles] Tour guidé ignoré", e); } }, 400);
 }
 window.splashFinish = splashFinish;
 
@@ -7658,8 +7669,13 @@ const COACH_STEPS = [
 ];
 
 let coachStep = 0;
+/* Le tour se lançait uniquement au tout premier démarrage, et se
+   terminait en poussant vers le profil. Rejoué depuis le menu, il ne
+   doit ni déplacer l'apiculteur ni lui parler de ses premiers pas. */
+let coachRelance = false;
 
-function coachStart(){
+function coachStart(depuisMenu){
+  coachRelance = !!depuisMenu;
   coachStep = 0;
   buildCoachDots();
   coachShow();
@@ -7678,7 +7694,9 @@ function coachShow(){
   // Textes
   document.getElementById("coachStep").textContent = "Étape " + (coachStep+1) + " / " + COACH_STEPS.length;
   document.getElementById("coachTitle").textContent = step.title;
-  document.getElementById("coachBody").textContent = step.body;
+  document.getElementById("coachBody").textContent = (step.last && coachRelance)
+    ? "Tu peux rouvrir ce guide quand tu veux depuis le menu ☰. Sur la fiche d'une ruche, le bouton « ? » explique chaque onglet. Bonne apiculture ! 🐝"
+    : step.body;
   document.getElementById("coachNextBtn").textContent = step.last ? "Terminer ✓" : "Suivant →";
 
   // Dots
@@ -7770,11 +7788,32 @@ function coachEnd(){
   document.getElementById("coachSvg").style.display = "none";
   document.getElementById("coachBubble").style.display = "none";
   document.getElementById("coachHighlight").style.display = "none";
-  // Guider vers admin
+
+  // Rejoué depuis le menu : on laisse l'apiculteur là où il était.
+  if(coachRelance){
+    coachRelance = false;
+    return;
+  }
+
+  // Premier passage : guider vers le profil, puis proposer les rappels.
   setTimeout(()=>{
     showPage("admin");
     showToast("👋 Commence par remplir ton profil !");
+    setTimeout(()=>{
+      try{ showCalendarOnboarding(false); }
+      catch(e){ console.warn("[Mes Abeilles] Aide calendrier ignorée", e); }
+    }, 700);
   }, 200);
+}
+
+/* Rejouer le guide depuis le menu. Les étapes désignent des éléments de
+   l'accueil (statistiques, barre du bas, bouton +) : il faut y être. */
+function revoirGuide(){
+  showPage("home");
+  setTimeout(() => {
+    try{ coachStart(true); }
+    catch(e){ console.warn("[Mes Abeilles] Guide indisponible", e); }
+  }, 350);
 }
 
 /* ── Tour guidé fiche ruche ──────────────────────── */
@@ -8052,6 +8091,14 @@ function rucheDemandeeParUrl(){
    en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
+  {
+    version: "v37.5",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Le guide se retrouve, et fonctionne enfin",
+        texte: "Le tour guidé ne se lançait qu'une fois, au tout premier démarrage, et rien ne permettait de le rouvrir : il est maintenant dans le menu ☰, sous « Revoir le guide ». Surtout, l'invite « Rappels calendrier » s'ouvrait par-dessus lui et le rendait inutilisable la seule fois où il apparaissait ; elle attend désormais la fin du guide. Sur la fiche d'une ruche, le bouton « ? » explique toujours chaque onglet." }
+    ]
+  },
   {
     version: "v37.4",
     date: "Septembre 2026",
