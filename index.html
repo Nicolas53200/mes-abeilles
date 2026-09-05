@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.2</title>
+  <title>Mes Abeilles 🐝 v37.3</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2563,7 +2563,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.2";
+const APP_VERSION = "v37.3";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -8049,6 +8049,14 @@ function rucheDemandeeParUrl(){
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
   {
+    version: "v37.3",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Le geste de retour ne quitte plus l'application",
+        texte: "Sur téléphone, balayer du bord gauche vers la droite faisait sortir de l'application et perdre la fiche en cours. Ce geste remonte maintenant d'un niveau à l'intérieur : il ferme le formulaire ouvert, puis revient à la ruche, à la liste, et enfin à l'accueil. Depuis l'accueil, deux gestes de suite permettent toujours de sortir." }
+    ]
+  },
+  {
     version: "v37.2",
     date: "Août 2026",
     nouveautes: [
@@ -8521,6 +8529,7 @@ function showPage(page){
   if(page === "newHive") setTimeout(refreshNewHiveQr, 30);
   if(page === "mapGlobal") setTimeout(initGlobalMap, 150);
   updateStats();
+  armerRetour();
 }
 
 function openHive(code){
@@ -8553,6 +8562,7 @@ function openHive(code){
   if(!state.hiveTourDone){
     setTimeout(hiveCoachStart, 500);
   }
+  armerRetour();
 }
 
 
@@ -8725,6 +8735,91 @@ document.addEventListener("click", (event)=>{
   }
 });
 
+/* ── Geste de retour du téléphone ───────────────────
+   Sur mobile, le balayage du bord gauche vers la droite (et le bouton
+   retour d'Android) déclenchent le retour arrière du navigateur.
+   L'application ne déposant aucune étape dans l'historique, ce geste
+   faisait quitter le site : l'apiculteur perdait la fiche qu'il était
+   en train de consulter, souvent devant sa ruche.
+
+   On garde donc en permanence une étape d'avance dans l'historique.
+   Le geste la consomme, l'application remonte d'un niveau, et on en
+   redépose une aussitôt. L'adresse de la page n'est jamais modifiée :
+   les liens de QR code (?code=...) restent intacts.
+
+   Depuis l'accueil, deux gestes rapprochés permettent toujours de
+   sortir — il n'est pas question d'enfermer qui que ce soit. */
+
+const MARQUE_RETOUR = "mesAbeillesRetour";
+
+function historiqueUtilisable(){
+  // Sur file:// l'API lève une SecurityError : l'ouverture directe du
+  // fichier doit rester propre.
+  try{
+    return typeof history === "object" && typeof history.pushState === "function"
+      && (location.protocol === "http:" || location.protocol === "https:");
+  }catch(e){ return false; }
+}
+
+function armerRetour(){
+  if(!historiqueUtilisable()) return;
+  try{
+    if(history.state && history.state[MARQUE_RETOUR]) return;   // déjà une étape d'avance
+    history.pushState({ [MARQUE_RETOUR]: true }, "");
+  }catch(e){
+    // Un catch muet avait déjà masqué une erreur ici : on la signale.
+    console.warn("[Mes Abeilles] geste de retour indisponible", e);
+  }
+}
+
+/* Une fiche de ruche est-elle à l'écran ? openHive affiche ce bouton,
+   showPage le retire : c'est le repère fiable, state.page ne changeant
+   pas à l'ouverture d'une ruche. */
+function ficheRucheAffichee(){
+  const btn = document.getElementById("hiveHelpBtn");
+  return !!(state.currentHive && btn && btn.classList.contains("visible"));
+}
+
+/* Remonte d'un niveau, du plus local au plus global.
+   Renvoie false quand il n'y a plus rien à remonter : on est à l'accueil. */
+function retourInterne(){
+  if(fermerSurcoucheOuverte()) return true;
+
+  if(ficheRucheAffichee()){
+    if(state.moduleFormOpen){ closeModuleForm(); return true; }
+    if(state.visitFormOpen){ closeNewVisit(); return true; }
+    if(state.queenFormOpen){ closeQueenForm(); return true; }
+    // Une sous-section revient à la grille des sections de la ruche.
+    if(state.hiveSection && state.hiveSection !== "grid"){ setHiveSection("grid"); return true; }
+    // La fiche revient à la liste des ruches.
+    showPage("ruchers");
+    return true;
+  }
+
+  if(state.page !== "home"){ showPage("home"); return true; }
+  return false;
+}
+
+let dernierGesteSortie = 0;
+
+window.addEventListener("popstate", () => {
+  if(retourInterne()){
+    dernierGesteSortie = 0;
+    armerRetour();
+    return;
+  }
+
+  // Déjà à l'accueil : le premier geste prévient, le second laisse partir.
+  const maintenant = Date.now();
+  if(maintenant - dernierGesteSortie < 3000){
+    try{ history.back(); }catch(e){}
+    return;   // volontairement sans réarmement : la sortie reste toujours possible
+  }
+  dernierGesteSortie = maintenant;
+  showToast("Tu es à l'accueil · refais le geste pour quitter");
+  armerRetour();
+});
+
 initApp();
 window.addEventListener("load", () => {
   const h = state.currentHive || state.hives[0];
@@ -8747,30 +8842,32 @@ document.addEventListener("keydown", event => {
   actionable.click();
 });
 
-/* Échap ferme la surcouche ouverte, de la plus locale à la plus globale. */
-document.addEventListener("keydown", event => {
-  if(event.key !== "Escape" && event.key !== "Esc") return;
-
-  const apiaryPicker = document.getElementById("apiaryPickerModal");
-  if(apiaryPicker){ closeApiaryPicker(); return; }
+/* Ferme la surcouche ouverte, de la plus locale à la plus globale.
+   Partagé par la touche Échap et par le geste de retour du téléphone,
+   pour que les deux se comportent exactement pareil. */
+function fermerSurcoucheOuverte(){
+  if(document.getElementById("apiaryPickerModal")){ closeApiaryPicker(); return true; }
 
   const score = document.getElementById("scoreModal");
-  if(score && score.classList.contains("open")){
-    score.classList.remove("open");
-    return;
-  }
+  if(score && score.classList.contains("open")){ score.classList.remove("open"); return true; }
 
   const nouveautes = document.getElementById("nouveautesModal");
-  if(nouveautes && nouveautes.classList.contains("open")){ fermerNouveautes(); return; }
+  if(nouveautes && nouveautes.classList.contains("open")){ fermerNouveautes(); return true; }
 
   const calendar = document.getElementById("calendarOnboarding");
-  if(calendar && calendar.classList.contains("open")){
-    calendar.classList.remove("open");
-    return;
-  }
+  if(calendar && calendar.classList.contains("open")){ calendar.classList.remove("open"); return true; }
 
+  return false;
+}
+
+/* Échap ferme la surcouche ouverte. */
+document.addEventListener("keydown", event => {
+  if(event.key !== "Escape" && event.key !== "Esc") return;
+  if(fermerSurcoucheOuverte()) return;
   if(state.moduleFormOpen) closeModuleForm();
 });
+
+
 
 /* ── Service Worker PWA ─────────────────────────── */
 const chargementPage = Date.now();
