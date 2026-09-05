@@ -124,6 +124,15 @@ export default () => executerSuite('Nouveautés et mise à jour', async ({ page,
   rapport.verifier('ni au lancement suivant',
     !(await p2.evaluate(() => document.getElementById('nouveautesModal')?.classList.contains('open'))));
 
+  rapport.section("Rien ne barre le panneau des nouveautés");
+  // La vérification météo automatique affichait sa bandelette par-dessus
+  // le panneau, en travers du texte.
+  const gene = await p2.evaluate(() => {
+    const t = document.getElementById('toast');
+    return { visible: !!t && t.classList.contains('show'), texte: (t?.innerText || '').slice(0, 40) };
+  });
+  rapport.verifier('aucun message fugace en travers', !gene.visible, gene.texte || 'aucun');
+
   rapport.section('Consultable à tout moment depuis le menu');
   const menu = await p2.evaluate(() => {
     showPage('menu');

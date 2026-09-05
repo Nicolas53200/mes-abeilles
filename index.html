@@ -7235,7 +7235,11 @@ async function refreshWeatherAlerts(force=false){
   recomputeAutomaticAlerts(true);
   saveState();
   if(state.page === "alerts") showPage("alerts");
-  showToast(checked ? "✓ Météo vérifiée" : "Ajoute des coordonnées GPS aux ruches pour la météo");
+  // Seule la vérification demandée par l'apiculteur mérite un message.
+  // La vérification automatique du démarrage affichait le sien par-dessus
+  // ce qui était à l'écran — écran de bienvenue, panneau des nouveautés —
+  // et parlait parfois de ruches pas encore créées.
+  if(force) showToast(checked ? "✓ Météo vérifiée" : "Ajoute des coordonnées GPS aux ruches pour la météo");
 }
 
 async function requestNotificationPermission(){
