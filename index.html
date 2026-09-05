@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.3</title>
+  <title>Mes Abeilles 🐝 v37.4</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2563,7 +2563,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.3";
+const APP_VERSION = "v37.4";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -8053,6 +8053,14 @@ function rucheDemandeeParUrl(){
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
   {
+    version: "v37.4",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Installer l'application : une explication pour chaque navigateur",
+        texte: "Selon le navigateur, l'installation ne se propose pas toute seule — et l'accueil ne disait alors rien du tout. Il explique désormais la marche à suivre dans chaque cas : bouton d'installation quand le navigateur le permet, menu Partager sur iPhone, menu du navigateur sur Firefox. Et si le lien a été ouvert depuis une messagerie, il prévient qu'il faut le rouvrir dans le vrai navigateur : la caméra et l'installation y sont bloquées." }
+    ]
+  },
+  {
     version: "v37.3",
     date: "Septembre 2026",
     nouveautes: [
@@ -8210,23 +8218,108 @@ function estIOS(){
       || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
-/* iOS ne propose pas beforeinstallprompt : l'installation y passe par
-   le menu Partager, il faut donc l'expliquer plutôt qu'un bouton. */
+/* Un lien reçu dans Messenger, Instagram, WhatsApp… s'ouvre dans le
+   navigateur intégré de l'application. On n'y peut RIEN installer :
+   ni invite automatique, ni menu « ajouter à l'écran d'accueil ».
+   Le seul conseil utile est d'ouvrir le lien dans le vrai navigateur. */
+function navigateurIntegre(){
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|FB_IAB|Instagram|Snapchat|TikTok|Pinterest|LinkedInApp|MicroMessenger|Line\/|Twitter/i.test(ua);
+}
+
+/* Sur iPhone, seul Safari sait ajouter à l'écran d'accueil. Chrome,
+   Firefox ou Edge pour iOS ne le peuvent pas : ce sont des habillages
+   du même moteur, sans le menu Partager qui va bien. */
+function safariIOS(){
+  return estIOS() && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent || "") && !navigateurIntegre();
+}
+
+/* Dans quelle situation se trouve la personne, vis-à-vis de
+   l'installation ? Chaque cas appelle une explication différente —
+   auparavant, trois d'entre eux n'affichaient tout simplement rien. */
+function contexteInstallation(){
+  if(appDejaInstallee()) return "installee";
+  if(navigateurIntegre()) return "navigateur-integre";
+  if(promptInstallation) return "invite";      // Chrome, Edge, Samsung : bouton natif
+  if(safariIOS()) return "ios";                // Safari : menu Partager
+  if(estIOS()) return "ios-autre";             // Chrome/Firefox iOS : impossible
+  return "manuel";                             // Firefox, ordinateur… : menu du navigateur
+}
+
+/* En tête de l'accueil : les cas où l'apiculteur doit agir maintenant.
+   Soit le geste aboutit tout de suite, soit il est dans un navigateur
+   où RIEN ne fonctionnera correctement — et mieux vaut le lui dire à la
+   première visite qu'après avoir saisi ses ruches. */
 function peutProposerInstallation(){
-  if(appDejaInstallee()) return false;
-  return !!promptInstallation || estIOS();
+  const c = contexteInstallation();
+  if(c === "installee") return false;
+  // Sur téléphone, l'installation compte dès la première visite : c'est
+  // elle qui met l'icône sur l'écran d'accueil et protège les données
+  // d'un effacement par le navigateur. Firefox et Samsung Internet ne
+  // déclenchent aucune invite : sans ce cas, ils ne voyaient rien.
+  if(c === "manuel") return estMobile();
+  return true;
+}
+
+/* Sur ordinateur, l'explication passe après le profil et la première
+   ruche : l'invite native y arrive souvent d'elle-même. */
+function peutExpliquerInstallation(){
+  return contexteInstallation() === "manuel" && !estMobile();
+}
+
+function estMobile(){
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+}
+
+/* Le texte de la bannière suit la situation réelle. */
+function texteInstallation(){
+  switch(contexteInstallation()){
+    case "navigateur-integre":
+      return { titre: "Ouvre le lien dans ton navigateur",
+               sous: "Depuis une messagerie, l'application ne peut ni s'installer ni utiliser la caméra",
+               bouton: "Comment ? →" };
+    case "ios-autre":
+      return { titre: "Ouvre le lien dans Safari",
+               sous: "Sur iPhone, seul Safari sait ajouter une application à l'écran d'accueil",
+               bouton: "Comment ? →" };
+    case "ios":
+      return { titre: "Installer l'application",
+               sous: "Partager puis « Sur l'écran d'accueil » : plein écran, et tes données mieux protégées",
+               bouton: "Comment ? →" };
+    default:
+      return { titre: "Installer l'application",
+               sous: "Icône sur l'écran d'accueil, plein écran, et tes données mieux protégées",
+               bouton: "Installer →" };
+  }
 }
 
 async function lancerInstallation(){
-  if(estIOS() && !promptInstallation){
+  const contexte = contexteInstallation();
+
+  if(contexte === "invite"){
+    promptInstallation.prompt();
+    try{ await promptInstallation.userChoice; }catch(e){}
+    promptInstallation = null;
+    rafraichirSiAccueil();
+    return;
+  }
+
+  if(contexte === "ios"){
     alert("Sur iPhone et iPad :\n\n1. Touche le bouton Partager, en bas de Safari\n2. Choisis « Sur l'écran d'accueil »\n3. Valide\n\nL'application s'ouvrira alors en plein écran, et tes données seront mieux protégées.");
     return;
   }
-  if(!promptInstallation) return;
-  promptInstallation.prompt();
-  try{ await promptInstallation.userChoice; }catch(e){}
-  promptInstallation = null;
-  rafraichirSiAccueil();
+
+  if(contexte === "navigateur-integre"){
+    alert("Ce lien s'est ouvert dans le navigateur d'une application de messagerie, qui ne sait pas installer d'application.\n\n1. Touche les trois points « ⋯ » en haut de l'écran\n2. Choisis « Ouvrir dans le navigateur » (Safari sur iPhone, Chrome sur Android)\n3. Recommence l'installation depuis là\n\nTu peux aussi copier l'adresse et la coller dans ton navigateur.");
+    return;
+  }
+
+  if(contexte === "ios-autre"){
+    alert("Sur iPhone, seul Safari sait ajouter une application à l'écran d'accueil.\n\n1. Copie l'adresse de cette page\n2. Ouvre Safari et colle-la\n3. Touche Partager, puis « Sur l'écran d'accueil »");
+    return;
+  }
+
+  alert("Dans le menu de ton navigateur (les trois points « ⋮ » ou les trois traits « ☰ ») :\n\n· cherche « Installer l'application »\n· ou « Ajouter à l'écran d'accueil »\n\nL'application s'ouvrira alors comme une vraie application, et fonctionnera sans connexion.");
 }
 
 /* Demande au navigateur de ne pas purger ces données.
@@ -8321,15 +8414,18 @@ function guideBanner(){
 
   // L'installation passe avant le reste : c'est elle qui protège les
   // données, et le navigateur ne propose ce choix qu'un temps.
-  if(peutProposerInstallation()) return `
+  if(peutProposerInstallation()){
+    const t = texteInstallation();
+    return `
     <div class="guide-banner">
       <div class="guide-icon">📲</div>
       <div class="guide-text">
-        <div class="guide-title">Installer l'application</div>
-        <div class="guide-sub">Icône sur l'écran d'accueil, plein écran, et tes données mieux protégées</div>
+        <div class="guide-title">${escapeHtml(t.titre)}</div>
+        <div class="guide-sub">${escapeHtml(t.sous)}</div>
       </div>
-      <button class="guide-btn" onclick="lancerInstallation()">Installer →</button>
+      <button class="guide-btn" onclick="lancerInstallation()">${escapeHtml(t.bouton)}</button>
     </div>`;
+  }
 
   if(hasProfile && hasHives) return "";
   if(!hasProfile) return `
@@ -8350,6 +8446,22 @@ function guideBanner(){
       </div>
       <button class="guide-btn" onclick="showPage('newHive')">Créer →</button>
     </div>`;
+
+  /* Navigateur qui ne propose pas l'installation de lui-même : lien
+     ouvert dans une messagerie, Chrome sur iPhone, Firefox… L'accueil
+     ne disait rien du tout, et l'apiculteur repartait en pensant que
+     l'application ne s'installe pas. En dernier, pour ne pas passer
+     devant le profil et la première ruche. */
+  if(peutExpliquerInstallation()) return `
+    <div class="guide-banner">
+      <div class="guide-icon">📲</div>
+      <div class="guide-text">
+        <div class="guide-title">Installer l'application</div>
+        <div class="guide-sub">Depuis le menu de ton navigateur, en deux gestes</div>
+      </div>
+      <button class="guide-btn" onclick="lancerInstallation()">Comment ? →</button>
+    </div>`;
+
   return "";
 }
 
