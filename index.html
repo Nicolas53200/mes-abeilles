@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.4</title>
+  <title>Mes Abeilles 🐝 v37.6</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2417,7 +2417,7 @@
       <div class="calendar-onboarding-icon">📅</div>
       <div class="calendar-onboarding-title">Rappels calendrier</div>
       <div class="calendar-onboarding-text">
-        Mes Abeilles peut préparer des rappels à ajouter dans le calendrier de ton téléphone. Tu gardes toujours la main : le téléphone te demandera de valider chaque événement.
+        Mes Abeilles peut préparer des rappels pour le calendrier de ton téléphone. Accepter ici ne remplit pas ton agenda : cela fait apparaître un bouton « Ajouter au calendrier » à côté de chaque échéance, et c'est toi qui décides, une par une.
       </div>
       <div class="calendar-onboarding-list">
         <div>🐝 Visites de ruches à prévoir</div>
@@ -2429,10 +2429,27 @@
         <button class="calendar-primary-btn" onclick="calendarOnboardingChoice(true)">✅ Oui, proposer les rappels</button>
         <button class="calendar-secondary-btn" onclick="calendarOnboardingChoice(false)">Plus tard</button>
       </div>
-      <div class="calendar-info-card">Important : l'application ne modifie pas ton agenda toute seule. Elle prépare un rappel, puis tu confirmes dans Google Agenda / Calendrier.</div>
+      <div class="calendar-info-card">Une fois le rappel dans ton agenda, c'est lui qui te préviendra — l'alerte sonne 12 h avant, même application fermée.</div>
     </div>
   </div>
 
+
+  <div id="choixCalendrier" class="calendar-onboarding" onclick="fermerChoixCalendrier()" role="dialog" aria-modal="true" aria-label="Ajouter ce rappel au calendrier">
+    <div class="calendar-onboarding-panel" onclick="event.stopPropagation()">
+      <div class="calendar-onboarding-icon">📅</div>
+      <div class="calendar-onboarding-title">Ajouter ce rappel</div>
+      <div class="calendar-onboarding-text" id="choixCalendrierResume"></div>
+      <div class="calendar-onboarding-actions">
+        <button class="calendar-primary-btn" onclick="rappelVersGoogleAgenda()">📅 Ouvrir Google Agenda</button>
+        <button class="calendar-secondary-btn" onclick="rappelVersFichier()">⬇️ Télécharger le fichier (.ics)</button>
+        <button class="calendar-secondary-btn" onclick="fermerChoixCalendrier()">Annuler</button>
+      </div>
+      <div class="calendar-info-card" id="choixCalendrierNote">
+        Google Agenda s'ouvre avec l'événement pré-rempli : il ne reste qu'à l'enregistrer. Le nom de la ruche et le texte du rappel passent alors par Google.<br><br>
+        Le fichier .ics ne fait sortir aucune donnée de l'appareil, mais il faut ensuite l'ouvrir depuis les téléchargements du téléphone pour que l'agenda le prenne. Il convient aussi à l'agenda d'Apple.
+      </div>
+    </div>
+  </div>
 
   <div id="scoreModal" class="score-modal" onclick="closeScoreModal(event)" role="dialog" aria-modal="true" aria-label="Détail du score de la ruche">
     <div class="score-modal-panel" onclick="event.stopPropagation()">
@@ -2563,7 +2580,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.4";
+const APP_VERSION = "v37.6";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -3675,6 +3692,7 @@ function menu(){
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('scan')">Scanner</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('admin')">Administration</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="openHive('RUCHE-001'); setHiveSection('conformite')">Conformité</button>
+      <button class="big-action" style="width:100%;margin-bottom:12px" onclick="revoirGuide()">🧭 Revoir le guide</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="ouvrirNouveautes(true)">🎉 Quoi de neuf · ${escapeHtml(APP_VERSION)}</button>
     </section>
   `;
@@ -5533,6 +5551,8 @@ function hiveSectionContent(h){
 
     ${renderHiveGpsSummary(h)}
 
+    ${renderResumeNextVisit(h)}
+
         <div class="danger-zone">
       <div class="danger-title">Zone sensible</div>
       <div class="danger-text">Supprime cette ${isRuchette ? "ruchette" : "ruche"} uniquement si elle a été créée par erreur ou si tu veux vraiment la retirer de l'application. L'export PC reste conseillé avant suppression.</div>
@@ -7077,6 +7097,24 @@ function updateStats(){
   if(elA) elA.textContent = alertes;
   if(elM) elM.textContent = miel + " kg";
   if(elB){ elB.textContent = alertes; elB.style.display = alertes>0?"flex":"none"; }
+  majPastilleIcone(alertes);
+}
+
+/* Pastille chiffrée sur l'icône de l'application (écran d'accueil).
+   Elle ne peut se rafraîchir qu'à l'ouverture — aucun processus ne
+   tourne en arrière-plan — mais elle PERSISTE ensuite sur l'icône :
+   l'apiculteur garde ses alertes sous les yeux entre deux ouvertures.
+   Absente des navigateurs de bureau anciens et d'iOS avant 16.4 : sans
+   effet là-bas, jamais bloquant. */
+function majPastilleIcone(nombre){
+  try{
+    const n = Number(nombre) || 0;
+    if(n > 0 && typeof navigator.setAppBadge === "function"){
+      navigator.setAppBadge(n).catch(()=>{});
+    }else if(typeof navigator.clearAppBadge === "function"){
+      navigator.clearAppBadge().catch(()=>{});
+    }
+  }catch(e){ /* pastille indisponible : sans conséquence */ }
 }
 
 
@@ -7301,10 +7339,20 @@ function icsDate(d){
 }
 
 
+function coachVisible(){
+  const b = document.getElementById("coachBubble");
+  return !!b && getComputedStyle(b).display !== "none";
+}
+
 function showCalendarOnboarding(force=false){
   const el = document.getElementById("calendarOnboarding");
   if(!el) return;
   if(!force && state.calendarPromptDone) return;
+  /* Le tour guidé occupe l'écran, et cette invite lui passe au-dessus
+     dans l'empilement (340 contre 210) : elle recouvrait entièrement le
+     guide au premier démarrage, bouton « Suivant » compris. Le guide
+     était donc inutilisable la seule fois où il se lançait. */
+  if(!force && coachVisible()) return;
   el.classList.add("open");
 }
 
@@ -7314,7 +7362,9 @@ function calendarOnboardingChoice(enable){
   state.calendarPromptDone = true;
   state.alertSettings = {...getAlertSettings(), calendar: !!enable};
   saveState();
-  showToast(enable ? "✓ Rappels calendrier activés" : "Rappels calendrier désactivés");
+  showToast(enable
+    ? "✓ Bouton « Ajouter au calendrier » activé sur les échéances"
+    : "Rappels calendrier désactivés");
   if(state.page === "alerts") showPage("alerts");
 }
 
@@ -7429,7 +7479,7 @@ function mbDownloadCalendarEvent({h, start, title, desc, filename, allDay=true, 
   document.body.appendChild(a);
   a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 600);
-  showToast("✓ Rappel calendrier préparé");
+  showToast("✓ Fichier téléchargé · ouvre-le pour l'ajouter à ton agenda");
 }
 
 function moduleReminderControl(section, label, defaultDays){
@@ -7471,9 +7521,79 @@ function downloadAlertReminder(code, encodedAlert){
   downloadCalendarEvent({h, start, title, desc, filename:`alerte-${h.code}.ics`});
 }
 
-function downloadCalendarEvent({h, start, title, desc, filename, location, allDay=true}){
-  mbDownloadCalendarEvent({h, start, title, desc, filename, location, allDay});
+/* Un rappel préparé attend le choix de l'apiculteur : ouvrir Google
+   Agenda, ou télécharger le fichier .ics. Auparavant le fichier partait
+   directement dans les téléchargements du téléphone, sans un mot — et
+   l'apiculteur allait ensuite chercher en vain l'événement dans son
+   agenda, où rien n'était arrivé. */
+let rappelEnAttente = null;
+
+function downloadCalendarEvent(args){
+  rappelEnAttente = args || null;
+  if(!rappelEnAttente){ showToast("Rappel indisponible"); return; }
+
+  const quand = rappelEnAttente.start instanceof Date
+    ? rappelEnAttente.start
+    : (mbParseDate ? mbParseDate(rappelEnAttente.start) : new Date(rappelEnAttente.start));
+  const resume = document.getElementById("choixCalendrierResume");
+  if(resume){
+    const date = (quand && !isNaN(quand)) ? mbFormatDate(quand) : "";
+    resume.textContent = (rappelEnAttente.title || "Rappel Mes Abeilles") + (date ? " · " + date : "");
+  }
+  const modal = document.getElementById("choixCalendrier");
+  if(!modal){                       // filet : pas de panneau, on garde l'ancien geste
+    mbDownloadCalendarEvent(rappelEnAttente);
+    rappelEnAttente = null;
+    return;
+  }
+  modal.classList.add("open");
 }
+
+function fermerChoixCalendrier(){
+  document.getElementById("choixCalendrier")?.classList.remove("open");
+  rappelEnAttente = null;
+}
+
+function rappelVersFichier(){
+  const args = rappelEnAttente;
+  fermerChoixCalendrier();
+  if(!args) return;
+  mbDownloadCalendarEvent(args);
+}
+
+/* Adresse officielle de création d'événement Google Agenda. Ouverte dans
+   un nouvel onglet : sur téléphone, l'application Google Agenda prend la
+   main si elle est installée. */
+function lienGoogleAgenda({start, title, desc, location, h}){
+  const d = start instanceof Date ? start : (mbParseDate ? mbParseDate(start) : new Date(start));
+  if(!d || isNaN(d)) return null;
+  const jour = mbIcsDateOnly(d);
+  const lendemain = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  lendemain.setDate(lendemain.getDate() + 1);
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title || "Rappel Mes Abeilles",
+    dates: jour + "/" + mbIcsDateOnly(lendemain),
+    details: desc || "Rappel généré par Mes Abeilles.",
+    location: location || h?.apiary || h?.gps || ""
+  });
+  return "https://calendar.google.com/calendar/render?" + params.toString();
+}
+
+function rappelVersGoogleAgenda(){
+  const args = rappelEnAttente;
+  fermerChoixCalendrier();
+  if(!args) return;
+  const url = lienGoogleAgenda(args);
+  if(!url){ showToast("Date calendrier invalide"); return; }
+  try{
+    window.open(url, "_blank", "noopener");
+    showToast("Google Agenda s'ouvre · pense à enregistrer");
+  }catch(e){
+    showToast("Impossible d'ouvrir Google Agenda");
+  }
+}
+
 
 function downloadVisitReminder(code){
   const h = trouverRucheParCode(code);
@@ -7597,9 +7717,9 @@ function splashFinish(){
   }catch(e){
     console.error("[Mes Abeilles] Erreur affichage accueil", e);
   }
-  // Lancer les aides sans bloquer l'entrée dans l'application.
-  setTimeout(()=>{ try{ coachStart(); }catch(e){ console.warn("[Mes Abeilles] Tour guidé ignoré", e); } }, 400);
-  setTimeout(()=>{ try{ showCalendarOnboarding(false); }catch(e){ console.warn("[Mes Abeilles] Aide calendrier ignorée", e); } }, 900);
+  /* Le guide d'abord, seul. L'invite calendrier suit à la fin du tour
+     (voir coachEnd) : lancée ici, elle recouvrait le guide. */
+  setTimeout(()=>{ try{ coachStart(false); }catch(e){ console.warn("[Mes Abeilles] Tour guidé ignoré", e); } }, 400);
 }
 window.splashFinish = splashFinish;
 
@@ -7658,8 +7778,13 @@ const COACH_STEPS = [
 ];
 
 let coachStep = 0;
+/* Le tour se lançait uniquement au tout premier démarrage, et se
+   terminait en poussant vers le profil. Rejoué depuis le menu, il ne
+   doit ni déplacer l'apiculteur ni lui parler de ses premiers pas. */
+let coachRelance = false;
 
-function coachStart(){
+function coachStart(depuisMenu){
+  coachRelance = !!depuisMenu;
   coachStep = 0;
   buildCoachDots();
   coachShow();
@@ -7678,7 +7803,9 @@ function coachShow(){
   // Textes
   document.getElementById("coachStep").textContent = "Étape " + (coachStep+1) + " / " + COACH_STEPS.length;
   document.getElementById("coachTitle").textContent = step.title;
-  document.getElementById("coachBody").textContent = step.body;
+  document.getElementById("coachBody").textContent = (step.last && coachRelance)
+    ? "Tu peux rouvrir ce guide quand tu veux depuis le menu ☰. Sur la fiche d'une ruche, le bouton « ? » explique chaque onglet. Bonne apiculture ! 🐝"
+    : step.body;
   document.getElementById("coachNextBtn").textContent = step.last ? "Terminer ✓" : "Suivant →";
 
   // Dots
@@ -7770,11 +7897,32 @@ function coachEnd(){
   document.getElementById("coachSvg").style.display = "none";
   document.getElementById("coachBubble").style.display = "none";
   document.getElementById("coachHighlight").style.display = "none";
-  // Guider vers admin
+
+  // Rejoué depuis le menu : on laisse l'apiculteur là où il était.
+  if(coachRelance){
+    coachRelance = false;
+    return;
+  }
+
+  // Premier passage : guider vers le profil, puis proposer les rappels.
   setTimeout(()=>{
     showPage("admin");
     showToast("👋 Commence par remplir ton profil !");
+    setTimeout(()=>{
+      try{ showCalendarOnboarding(false); }
+      catch(e){ console.warn("[Mes Abeilles] Aide calendrier ignorée", e); }
+    }, 700);
   }, 200);
+}
+
+/* Rejouer le guide depuis le menu. Les étapes désignent des éléments de
+   l'accueil (statistiques, barre du bas, bouton +) : il faut y être. */
+function revoirGuide(){
+  showPage("home");
+  setTimeout(() => {
+    try{ coachStart(true); }
+    catch(e){ console.warn("[Mes Abeilles] Guide indisponible", e); }
+  }, 350);
 }
 
 /* ── Tour guidé fiche ruche ──────────────────────── */
@@ -8052,6 +8200,26 @@ function rucheDemandeeParUrl(){
    en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
+  {
+    version: "v37.6",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Les rappels arrivent vraiment dans l'agenda",
+        texte: "« Ajouter au calendrier » téléchargeait un fichier sans un mot : il restait dans les téléchargements du téléphone et n'arrivait jamais dans l'agenda. Un panneau propose maintenant deux chemins — ouvrir Google Agenda avec l'événement pré-rempli, ou télécharger le fichier pour tout autre agenda. Une fois le rappel enregistré, le téléphone alerte 12 h avant, application fermée." },
+      { titre: "Un rappel pour la prochaine visite",
+        texte: "Le Résumé d'une ruche affiche la date de la prochaine visite et permet de la mettre en rappel. C'est l'échéance la plus utile, et elle n'était proposée nulle part." },
+      { titre: "Pastille d'alertes sur l'icône",
+        texte: "Quand l'application est installée sur l'écran d'accueil, le nombre d'alertes s'affiche sur son icône. Le chiffre se met à jour à chaque ouverture et reste visible entre deux." }
+    ]
+  },
+  {
+    version: "v37.5",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Le guide se retrouve, et fonctionne enfin",
+        texte: "Le tour guidé ne se lançait qu'une fois, au tout premier démarrage, et rien ne permettait de le rouvrir : il est maintenant dans le menu ☰, sous « Revoir le guide ». Surtout, l'invite « Rappels calendrier » s'ouvrait par-dessus lui et le rendait inutilisable la seule fois où il apparaissait ; elle attend désormais la fin du guide. Sur la fiche d'une ruche, le bouton « ? » explique toujours chaque onglet." }
+    ]
+  },
   {
     version: "v37.4",
     date: "Septembre 2026",
@@ -8963,6 +9131,9 @@ document.addEventListener("keydown", event => {
    pour que les deux se comportent exactement pareil. */
 function fermerSurcoucheOuverte(){
   if(document.getElementById("apiaryPickerModal")){ closeApiaryPicker(); return true; }
+
+  const choixCal = document.getElementById("choixCalendrier");
+  if(choixCal && choixCal.classList.contains("open")){ fermerChoixCalendrier(); return true; }
 
   const score = document.getElementById("scoreModal");
   if(score && score.classList.contains("open")){ score.classList.remove("open"); return true; }
