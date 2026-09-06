@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.9</title>
+  <title>Mes Abeilles 🐝 v38.0</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2641,7 +2641,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.9";
+const APP_VERSION = "v38.0";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -2706,6 +2706,11 @@ const LS_LEGACY_KEYS = [
    que laissée à moitié convertie. Un instantané d'avant migration
    est écrit dans LS_PREMIGRATION_KEY quand le quota le permet. */
 const LS_PREMIGRATION_KEY = "mesAbeilles_data_avant_migration";
+/* Copie prise juste avant un import. L'import REMPLACE tout : sans ce
+   filet, un fichier plus ancien choisi par erreur — le va-et-vient
+   téléphone ↔ ordinateur en multiplie les occasions — effaçait une
+   saison entière sans retour possible. */
+const LS_AVANT_IMPORT = "mesAbeilles_avant_import";
 
 const DATA_MIGRATIONS = [
   // Aucune migration nécessaire à ce jour.
@@ -3559,11 +3564,25 @@ function admin(){
         Le bouton télécharge une sauvegarde <strong>.json</strong>. Sur téléphone, la fenêtre de partage permet de l'envoyer directement vers ton Drive, ton courriel ou ton PC — range-la quelque part hors de ce téléphone. Si un écran de code s'affiche, ce n'est pas une erreur : c'est le contenu de la sauvegarde ; passe par le menu du navigateur → <strong>Télécharger</strong>.
       </div>
 
+      ${copieAvantImport() ? `
+      <button class="assist-btn secondary" style="width:100%" onclick="annulerImport()">↩️ Annuler le dernier import</button>
+      <div class="export-help">
+        Une copie de tes données a été prise juste avant le dernier import. Tu peux y revenir tant que tu n'as pas fait de nouvel import.
+      </div>` : ""}
+
+      <div class="export-help">
+        <strong>Ton ordinateur comme copie de secours</strong><br>
+        L'application s'ouvre aussi sur un ordinateur, à la même adresse. Chaque appareil garde ses propres données : il n'y a pas de synchronisation automatique, c'est le fichier qui fait le lien.<br>
+        <strong>Chaque mois :</strong> exporte depuis le téléphone et range le fichier sur ton PC.<br>
+        <strong>Attention :</strong> importer remplace tout sur l'appareil. Garde le téléphone comme référence et n'importe vers lui qu'un fichier plus récent que ce qu'il contient.
+      </div>
+
       <div class="export-help">
         <strong>Changer de téléphone</strong><br>
         Tes données ne sont que sur cet appareil : aucun compte, aucun serveur. Un nouveau téléphone ouvrira donc une application vide, et rien ne pourra être récupéré sans fichier.<br>
         <strong>1.</strong> Sur l'ancien téléphone : <em>Exporter vers PC</em>, puis envoie-toi le fichier.<br>
-        <strong>2.</strong> Sur le nouveau : ouvre l'application, puis <em>Importer depuis PC</em> et choisis ce fichier.
+        <strong>2.</strong> Sur le nouveau : ouvre l'application, puis <em>Importer depuis PC</em> et choisis ce fichier.<br>
+        Le fichier rangé sur ton ordinateur fait tout aussi bien l'affaire : PC → nouveau téléphone, c'est le même geste.
       </div>
 
       <button class="assist-btn" style="width:100%" onclick="rappelSauvegardeAgenda()">📅 Me rappeler de sauvegarder chaque mois</button>
@@ -6428,6 +6447,69 @@ function downloadExportBlob(blob, filename){
   showToast("✓ Export téléchargé");
 }
 
+/* Ce que contient l'état courant, en une phrase lisible. */
+function resumeDonnees(hives, dateSauvegarde, libelleDate){
+  const liste = Array.isArray(hives) ? hives : [];
+  const n = liste.length;
+  let derniere = "";
+  liste.forEach(h => {
+    (h && h.visites || []).forEach(v => {
+      const d = String(v && v.date || "").slice(0,10);
+      if(d > derniere) derniere = d;
+    });
+  });
+  const bouts = [n + " ruche" + (n > 1 ? "s" : "")];
+  if(derniere) bouts.push("dernière visite le " + formatDateFr(derniere));
+  else bouts.push("aucune visite enregistrée");
+  if(dateSauvegarde){
+    bouts.push((libelleDate || "fichier du ") + formatDateFr(String(dateSauvegarde).slice(0,10)));
+  }
+  return bouts.join(", ");
+}
+
+function sauvegarderAvantImport(){
+  try{
+    const copie = (typeof normalizeStateForExport === "function")
+      ? normalizeStateForExport(state, false) : state;
+    localStorage.setItem(LS_AVANT_IMPORT, JSON.stringify({
+      pris: new Date().toISOString(),
+      etat: copie
+    }));
+    return true;
+  }catch(e){
+    console.warn("[Mes Abeilles] copie avant import impossible", e);
+    return false;
+  }
+}
+
+function copieAvantImport(){
+  try{
+    const brut = localStorage.getItem(LS_AVANT_IMPORT);
+    if(!brut) return null;
+    const p = JSON.parse(brut);
+    return (p && p.etat && Array.isArray(p.etat.hives)) ? p : null;
+  }catch(e){ return null; }
+}
+
+function annulerImport(){
+  const p = copieAvantImport();
+  if(!p){ showToast("Aucun import à annuler"); return; }
+  const avant = resumeDonnees(p.etat.hives, "");
+  if(!confirm("Revenir à l'état d'avant l'import ?\n\n" + avant +
+              "\n\nCe qui a été importé sera remplacé.")) return;
+  const restaure = p.etat;
+  state.hives = restaure.hives || [];
+  state.profil = restaure.profil || {};
+  state.complianceDocs = restaure.complianceDocs || {};
+  state.alertSettings = {...getAlertSettings(), ...(restaure.alertSettings || {})};
+  if(typeof restaure.derniereSauvegarde === "string") state.derniereSauvegarde = restaure.derniereSauvegarde;
+  try{ localStorage.removeItem(LS_AVANT_IMPORT); }catch(e){}
+  normalizeHives();
+  saveState();
+  showPage("admin");
+  showToast("✓ Import annulé");
+}
+
 function importData(input){
   const file = input.files[0];
   if(!file) return;
@@ -6465,6 +6547,25 @@ function importData(input){
         sanitizedData.profil = {};
       }
 
+      /* L'import REMPLACE tout. Tant qu'il n'y avait rien à perdre, le
+         faire en silence passait ; dès qu'un apiculteur fait des
+         allers-retours avec son ordinateur, un fichier plus ancien
+         choisi par erreur emporte la saison. On montre donc ce qui va
+         être remplacé, et par quoi. */
+      const actuel = Array.isArray(state.hives) ? state.hives : [];
+      if(actuel.length){
+        const messageA = resumeDonnees(actuel, state.derniereSauvegarde, "dernière sauvegarde le ");
+        const messageB = resumeDonnees(sanitizedData.hives, sanitizedData.derniereSauvegarde, "fichier du ");
+        if(!confirm("Cet import va REMPLACER toutes les données de cet appareil.\n\n" +
+                    "Sur l'appareil : " + messageA + "\n" +
+                    "Dans le fichier : " + messageB + "\n\n" +
+                    "Continuer ?")){
+          showToast("Import annulé");
+          return;
+        }
+        sauvegarderAvantImport();
+      }
+
       // Import complet : on restaure les ruches, le profil, la conformité et les réglages
       // sans écraser les valeurs par défaut utiles absentes des anciens exports.
       const imported = runDataMigrations(sanitizedData, "fichier importé");
@@ -6481,7 +6582,9 @@ function importData(input){
       normalizeHives();
       saveState();
       showPage("home");
-      showToast("✓ Données importées");
+      showToast(copieAvantImport()
+        ? "✓ Données importées · annulable depuis l'Administration"
+        : "✓ Données importées");
     } catch(err){
       console.warn("[Mes Abeilles] import invalide", err);
       alert("Fichier invalide. Vérifie qu'il s'agit bien d'un export Mes Abeilles.");
@@ -8707,6 +8810,16 @@ function rucheDemandeeParUrl(){
    en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
+  {
+    version: "v38.0",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Un import ne peut plus effacer ta saison par surprise",
+        texte: "Importer un fichier remplace toutes les données de l'appareil. Cela se faisait en silence. L'application affiche maintenant ce qui va être remplacé et par quoi — nombre de ruches, dernière visite, date du fichier — et prend une copie juste avant. Si le mauvais fichier est passé, « Annuler le dernier import » remet tout en place." },
+      { titre: "Ton ordinateur comme copie de secours",
+        texte: "L'application s'ouvre aussi sur un ordinateur, à la même adresse, avec une mise en page élargie. Exporte depuis le téléphone chaque mois, range le fichier sur ton PC : il servira aussi bien à consulter tes ruches qu'à repartir sur un téléphone neuf. Chaque appareil garde ses propres données, c'est le fichier qui fait le lien." }
+    ]
+  },
   {
     version: "v37.9",
     date: "Septembre 2026",

@@ -1,4 +1,4 @@
-const CACHE_NAME = "mes-abeilles-v37-9";
+const CACHE_NAME = "mes-abeilles-v38-0";
 const APP_SHELL = [
   "./",
   "./index.html",
