@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v38.0</title>
+  <title>Mes Abeilles 🐝 v38.1</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -1420,11 +1420,13 @@
 .hive-grid-btn .hgb-label{font-size:13px;font-weight:800;color:var(--text);text-align:center;letter-spacing:-.01em}
 .hive-grid-btn .hgb-badge{
   position:absolute;top:10px;right:10px;
-  background:#ef4444;color:#fff;
+  background:#e2e8f0;color:#475569;
   font-size:10px;font-weight:800;
   padding:2px 6px;border-radius:999px;
   min-width:18px;text-align:center;
 }
+/* Rouge : il y a quelque chose à traiter. */
+.hive-grid-btn .hgb-badge.hgb-badge-alerte{background:#ef4444;color:#fff}
 .hive-grid-btn.hgb-accent{
   background:linear-gradient(135deg,#fff7ed,#fff);
   border-color:#fed7aa;
@@ -2641,7 +2643,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v38.0";
+const APP_VERSION = "v38.1";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -3826,9 +3828,15 @@ function hiveDetail(code){
     const photosCount = Array.isArray(h.photos) ? h.photos.length : 0;
     const haussesCount = Array.isArray(h.hausses) ? h.hausses.length : 0;
 
-    const gridBtn = (section, icon, label, badge="", accent=false) => `
+    /* Deux pastilles très différentes portaient la même couleur d'alerte :
+       celle d'Actions compte des choses À TRAITER, celles de Visites,
+       Traitements, Frelons, Hausses ou Photos ne comptent que des
+       enregistrements déjà faits. Un « 1 » rouge sur Visites se lisait
+       donc comme un rappel en attente. Le décompte devient neutre ;
+       le rouge reste réservé à ce qui appelle une action. */
+    const gridBtn = (section, icon, label, badge="", accent=false, alerte=false) => `
       <button class="hive-grid-btn${accent?" hgb-accent":""}" onclick="setHiveSection('${section}')">
-        ${badge ? `<div class="hgb-badge">${badge}</div>` : ""}
+        ${badge ? `<div class="hgb-badge${alerte?" hgb-badge-alerte":""}">${badge}</div>` : ""}
         <div class="hgb-icon">${icon}</div>
         <div class="hgb-label">${label}</div>
       </button>`;
@@ -3841,7 +3849,7 @@ function hiveDetail(code){
             ${gridBtn("visites","📅","Visites", visitCount > 0 ? visitCount : "")}
             ${gridBtn("materiel","🧰","Matériel")}
             ${gridBtn("reine","♛","Reine")}
-            ${gridBtn("actions","✅","Actions", alertCount > 0 ? alertCount : "")}
+            ${gridBtn("actions","✅","Actions", alertCount > 0 ? alertCount : "", false, true)}
             ${gridBtn("traitements","🛡️","Traitements", traitCount > 0 ? traitCount : "")}
             ${gridBtn("frelons","🐝","Frelons", frelonCount > 0 ? frelonCount : "")}
             ${gridBtn("nourrissement","🧃","Nourrissement")}
@@ -5706,6 +5714,8 @@ function hiveSectionContent(h){
   if(s === "visites") return `
     <h2 class="detail-title">Visites</h2>
     <div class="detail-sub">Historique et nouvelle inspection</div>
+
+    ${renderResumeNextVisit(h)}
 
     ${!state.visitFormOpen ? `
       <button class="big-action primary new-visit-btn" style="width:100%;min-height:70px;margin-bottom:12px" onclick="openNewVisit()">
@@ -8816,6 +8826,16 @@ function rucheDemandeeParUrl(){
    en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
+  {
+    version: "v38.1",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "La prochaine visite s'affiche dans Visites",
+        texte: "Elle était calculée et montrée dans les Alertes et sur le Résumé, mais pas dans la section Visites — là où on la cherche pourtant en premier. Elle y figure maintenant, avec sa date, le nombre de jours restants et le bouton pour en faire un rappel." },
+      { titre: "Les pastilles disent enfin ce qu'elles comptent",
+        texte: "Une pastille rouge sur Visites laissait croire à un rappel en attente, alors qu'elle comptait simplement les visites déjà enregistrées. Le rouge est désormais réservé à Actions, la seule qui compte des choses à traiter ; les autres décomptes passent en gris." }
+    ]
+  },
   {
     version: "v38.0",
     date: "Septembre 2026",
