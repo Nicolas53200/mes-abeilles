@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.7</title>
+  <title>Mes Abeilles 🐝 v38.0</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2641,7 +2641,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.7";
+const APP_VERSION = "v38.0";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -2706,6 +2706,11 @@ const LS_LEGACY_KEYS = [
    que laissée à moitié convertie. Un instantané d'avant migration
    est écrit dans LS_PREMIGRATION_KEY quand le quota le permet. */
 const LS_PREMIGRATION_KEY = "mesAbeilles_data_avant_migration";
+/* Copie prise juste avant un import. L'import REMPLACE tout : sans ce
+   filet, un fichier plus ancien choisi par erreur — le va-et-vient
+   téléphone ↔ ordinateur en multiplie les occasions — effaçait une
+   saison entière sans retour possible. */
+const LS_AVANT_IMPORT = "mesAbeilles_avant_import";
 
 const DATA_MIGRATIONS = [
   // Aucune migration nécessaire à ce jour.
@@ -2780,7 +2785,10 @@ const state = {
   calendarPromptDone: false,
   hiveTourDone: false,
   // Dernière version dont les nouveautés ont été présentées à l'utilisateur.
-  derniereVersionVue: ""
+  derniereVersionVue: "",
+  // Date du dernier export réussi. Sans elle, l'application ne peut pas
+  // savoir si l'apiculteur a une copie de ses données quelque part.
+  derniereSauvegarde: ""
 };
 loadState();
 
@@ -3552,8 +3560,34 @@ function admin(){
         </label>
       </div>
       <div class="export-help">
-        <strong>Export vers PC</strong><br>
-        Le bouton télécharge une sauvegarde <strong>.json</strong>. Si ton téléphone affiche une page avec du code, ce n'est pas une erreur : c'est le contenu de la sauvegarde. Utilise alors le menu du navigateur → <strong>Télécharger</strong> ou partage le fichier vers ton PC.
+        <strong>${escapeHtml(libelleDerniereSauvegarde())}</strong><br>
+        Le bouton télécharge une sauvegarde <strong>.json</strong>. Sur téléphone, la fenêtre de partage permet de l'envoyer directement vers ton Drive, ton courriel ou ton PC — range-la quelque part hors de ce téléphone. Si un écran de code s'affiche, ce n'est pas une erreur : c'est le contenu de la sauvegarde ; passe par le menu du navigateur → <strong>Télécharger</strong>.
+      </div>
+
+      ${copieAvantImport() ? `
+      <button class="assist-btn secondary" style="width:100%" onclick="annulerImport()">↩️ Annuler le dernier import</button>
+      <div class="export-help">
+        Une copie de tes données a été prise juste avant le dernier import. Tu peux y revenir tant que tu n'as pas fait de nouvel import.
+      </div>` : ""}
+
+      <div class="export-help">
+        <strong>Ton ordinateur comme copie de secours</strong><br>
+        L'application s'ouvre aussi sur un ordinateur, à la même adresse. Chaque appareil garde ses propres données : il n'y a pas de synchronisation automatique, c'est le fichier qui fait le lien.<br>
+        <strong>Chaque mois :</strong> exporte depuis le téléphone et range le fichier sur ton PC.<br>
+        <strong>Attention :</strong> importer remplace tout sur l'appareil. Garde le téléphone comme référence et n'importe vers lui qu'un fichier plus récent que ce qu'il contient.
+      </div>
+
+      <div class="export-help">
+        <strong>Changer de téléphone</strong><br>
+        Tes données ne sont que sur cet appareil : aucun compte, aucun serveur. Un nouveau téléphone ouvrira donc une application vide, et rien ne pourra être récupéré sans fichier.<br>
+        <strong>1.</strong> Sur l'ancien téléphone : <em>Exporter vers PC</em>, puis envoie-toi le fichier.<br>
+        <strong>2.</strong> Sur le nouveau : ouvre l'application, puis <em>Importer depuis PC</em> et choisis ce fichier.<br>
+        Le fichier rangé sur ton ordinateur fait tout aussi bien l'affaire : PC → nouveau téléphone, c'est le même geste.
+      </div>
+
+      <button class="assist-btn" style="width:100%" onclick="rappelSauvegardeAgenda()">📅 Me rappeler de sauvegarder chaque mois</button>
+      <div class="export-help">
+        Ajoute un rappel mensuel à ton agenda. C'est le seul moyen d'être prévenu quand l'application est fermée : elle ne tourne pas en arrière-plan.
       </div>
 
       <div class="export-help">
@@ -4920,9 +4954,11 @@ function saveModule(section){
   }
 
   if(section === "miel"){
+    const dateRecolte = val("mielDate", todayISO());
     const item = {
       id:"recolte_" + Date.now(),
-      date: val("mielDate", todayISO()),
+      date: dateRecolte,
+      lot: val("mielLot", "").trim() || lotSuivant(dateRecolte),
       kilos: Number(val("mielKilos","0")),
       type: val("mielType","Miel de printemps"),
       butinage: val("mielButinage","Lavande"),
@@ -5780,6 +5816,11 @@ function hiveSectionContent(h){
       <div class="module-form-card" id="moduleForm">
         ${moduleFormHeader("Nouvelle récolte")}
         <div class="field"><label>Date récolte</label><input id="mielDate" type="date" value="${todayISO()}"></div>
+        <div class="field">
+          <label for="mielLot">Numéro de lot</label>
+          <input id="mielLot" value="${escapeHtml(lotSuivant(todayISO()))}" maxlength="30">
+          <div class="mini-help">À reporter sur l'étiquette des pots. Obligatoire dès que tu vends : il relie le pot à cette récolte.</div>
+        </div>
         <div class="field"><label>Kilos récoltés</label><input id="mielKilos" type="number" step="0.1" placeholder="Ex : 12"></div>
         <div class="field"><label>Type de miel</label><select id="mielType"><option>Miel de printemps</option><option>Miel d’été</option><option>Miel toutes fleurs</option><option>Miel de lavande</option><option>Miel de châtaignier</option><option>Miel de forêt</option><option>Autre</option></select></div>
         <div class="field"><label>Butinage principal</label><select id="mielButinage"><option>Lavande</option><option>Acacia</option><option>Châtaignier</option><option>Tilleul</option><option>Tournesol</option><option>Colza</option><option>Ronces</option><option>Trèfle</option><option>Bruyère</option><option>Forêt</option><option>Prairie</option><option>Miellat</option></select></div>
@@ -5787,7 +5828,13 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('miel')">Enregistrer la récolte</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"recoltes","Aucune récolte enregistrée.", r => record(formatDateFr(r.date), escapeHtml(r.type) + " · " + escapeHtml(r.kilos) + " kg", `Butinage : ${escapeHtml(r.butinage)}` + (r.notes ? ` · ${escapeHtml(r.notes)}` : "")))}
+    ${moduleHistoryHTML(h,"recoltes","Aucune récolte enregistrée.", r => record(
+        formatDateFr(r.date),
+        escapeHtml(r.type) + " · " + escapeHtml(r.kilos) + " kg",
+        (r.lot
+          ? `<strong>Lot ${escapeHtml(r.lot)}</strong> · `
+          : `<button class="calendar-inline-btn" onclick="attribuerLot('${escapeJsAttr(h.code)}','${escapeJsAttr(r.id)}')">🏷️ Attribuer un lot</button><br>`)
+        + `Butinage : ${escapeHtml(r.butinage)}` + (r.notes ? ` · ${escapeHtml(r.notes)}` : "")))}
   `;
   
   if(s === "traitements") return `
@@ -6179,6 +6226,7 @@ function mergeLoadedState(saved){
   if(typeof saved.calendarPromptDone === "boolean") state.calendarPromptDone = saved.calendarPromptDone;
   if(typeof saved.hiveTourDone === "boolean") state.hiveTourDone = saved.hiveTourDone;
   if(typeof saved.derniereVersionVue === "string") state.derniereVersionVue = saved.derniereVersionVue;
+  if(typeof saved.derniereSauvegarde === "string") state.derniereSauvegarde = saved.derniereSauvegarde;
   return Array.isArray(saved.hives) || !!saved.profil;
 }
 
@@ -6293,8 +6341,76 @@ function normalizeStateForExport(inputState, includeHeavyFiles=false){
   return copy;
 }
 
+/* ── Sauvegarde : ne pas perdre son rucher ───────────
+   Les données ne vivent que sur cet appareil. Changer de téléphone, le
+   perdre, ou effacer les données du navigateur les efface aussi — les
+   copies de secours internes (backup, avant-migration) sont dans le même
+   stockage et disparaissent avec lui. Le fichier exporté est la seule
+   copie qui survit. Encore faut-il que l'apiculteur pense à le faire. */
+
+const JOURS_AVANT_RAPPEL_SAUVEGARDE = 30;
+
+function joursDepuisSauvegarde(){
+  const iso = String(state.derniereSauvegarde || "").slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;   // jamais sauvegardé
+  const d = mbParseDate ? mbParseDate(iso) : new Date(iso);
+  if(!d || isNaN(d)) return null;
+  const aujourdhui = new Date();
+  return Math.floor((new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), aujourdhui.getDate())
+                     - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+}
+
+/* Rien à perdre, rien à rappeler : on n'ennuie pas quelqu'un dont le
+   rucher est encore vide. */
+function aDesDonneesAProteger(){
+  const ruches = (state.hives || []).length;
+  if(!ruches) return false;
+  const saisies = (state.hives || []).some(h =>
+    (h.visites || []).length || (h.traitements || []).length || (h.recoltes || []).length);
+  return ruches >= 2 || saisies;
+}
+
+function sauvegardeARappeler(){
+  if(!aDesDonneesAProteger()) return false;
+  const jours = joursDepuisSauvegarde();
+  return jours === null || jours >= JOURS_AVANT_RAPPEL_SAUVEGARDE;
+}
+
+function libelleDerniereSauvegarde(){
+  const jours = joursDepuisSauvegarde();
+  if(jours === null) return "Jamais sauvegardé";
+  if(jours <= 0) return "Sauvegardé aujourd'hui";
+  if(jours === 1) return "Sauvegardé hier";
+  return `Dernière sauvegarde il y a ${jours} jours`;
+}
+
+function marquerSauvegardeFaite(){
+  state.derniereSauvegarde = todayISO();
+  saveState();
+  rafraichirSiAccueil();
+}
+
+/* Rappel mensuel dans l'agenda : c'est le seul mécanisme qui prévient
+   l'apiculteur quand l'application est fermée. */
+function rappelSauvegardeAgenda(){
+  const debut = mbDateAddISO(todayISO(), 30);
+  downloadCalendarEvent({
+    h: null,
+    start: debut,
+    title: "Sauvegarder Mes Abeilles",
+    desc: "Ouvrir Mes Abeilles → Administration → Exporter vers PC, puis ranger le fichier dans un endroit sûr (Drive, courriel, ordinateur).\n\nSans cette copie, un téléphone perdu emporte tout le rucher.",
+    filename: "sauvegarde-mes-abeilles.ics",
+    repetition: "FREQ=MONTHLY"
+  });
+}
+
 function exportData(){
-  const exportState = (typeof normalizeStateForExport === "function") ? normalizeStateForExport(state, false) : state;
+  const base = (typeof normalizeStateForExport === "function") ? normalizeStateForExport(state, false) : state;
+  // Le fichier doit porter la date du jour où il est fait, pas celle de
+  // l'export précédent : c'est lui qui la transportera vers le nouveau
+  // téléphone. L'état de l'application, lui, n'est marqué qu'en cas de
+  // succès — un export qui échoue ne doit pas faire croire à une copie.
+  const exportState = Object.assign({}, base, { derniereSauvegarde: todayISO() });
   const json = JSON.stringify(exportState, null, 2);
   const filename = "mes_abeilles_export_" + new Date().toISOString().slice(0,10) + ".json";
   const blob = new Blob([json], {type:"application/json;charset=utf-8"});
@@ -6306,12 +6422,13 @@ function exportData(){
       files:[file],
       title:"Export Mes Abeilles",
       text:"Sauvegarde Mes Abeilles"
-    }).then(()=>showToast("✓ Export prêt à partager"))
+    }).then(()=>{ marquerSauvegardeFaite(); showToast("✓ Export prêt à partager"); })
       .catch(()=>downloadExportBlob(blob, filename));
     return;
   }
 
   downloadExportBlob(blob, filename);
+  marquerSauvegardeFaite();
 }
 
 function downloadExportBlob(blob, filename){
@@ -6330,6 +6447,69 @@ function downloadExportBlob(blob, filename){
   showToast("✓ Export téléchargé");
 }
 
+/* Ce que contient l'état courant, en une phrase lisible. */
+function resumeDonnees(hives, dateSauvegarde, libelleDate){
+  const liste = Array.isArray(hives) ? hives : [];
+  const n = liste.length;
+  let derniere = "";
+  liste.forEach(h => {
+    (h && h.visites || []).forEach(v => {
+      const d = String(v && v.date || "").slice(0,10);
+      if(d > derniere) derniere = d;
+    });
+  });
+  const bouts = [n + " ruche" + (n > 1 ? "s" : "")];
+  if(derniere) bouts.push("dernière visite le " + formatDateFr(derniere));
+  else bouts.push("aucune visite enregistrée");
+  if(dateSauvegarde){
+    bouts.push((libelleDate || "fichier du ") + formatDateFr(String(dateSauvegarde).slice(0,10)));
+  }
+  return bouts.join(", ");
+}
+
+function sauvegarderAvantImport(){
+  try{
+    const copie = (typeof normalizeStateForExport === "function")
+      ? normalizeStateForExport(state, false) : state;
+    localStorage.setItem(LS_AVANT_IMPORT, JSON.stringify({
+      pris: new Date().toISOString(),
+      etat: copie
+    }));
+    return true;
+  }catch(e){
+    console.warn("[Mes Abeilles] copie avant import impossible", e);
+    return false;
+  }
+}
+
+function copieAvantImport(){
+  try{
+    const brut = localStorage.getItem(LS_AVANT_IMPORT);
+    if(!brut) return null;
+    const p = JSON.parse(brut);
+    return (p && p.etat && Array.isArray(p.etat.hives)) ? p : null;
+  }catch(e){ return null; }
+}
+
+function annulerImport(){
+  const p = copieAvantImport();
+  if(!p){ showToast("Aucun import à annuler"); return; }
+  const avant = resumeDonnees(p.etat.hives, "");
+  if(!confirm("Revenir à l'état d'avant l'import ?\n\n" + avant +
+              "\n\nCe qui a été importé sera remplacé.")) return;
+  const restaure = p.etat;
+  state.hives = restaure.hives || [];
+  state.profil = restaure.profil || {};
+  state.complianceDocs = restaure.complianceDocs || {};
+  state.alertSettings = {...getAlertSettings(), ...(restaure.alertSettings || {})};
+  if(typeof restaure.derniereSauvegarde === "string") state.derniereSauvegarde = restaure.derniereSauvegarde;
+  try{ localStorage.removeItem(LS_AVANT_IMPORT); }catch(e){}
+  normalizeHives();
+  saveState();
+  showPage("admin");
+  showToast("✓ Import annulé");
+}
+
 function importData(input){
   const file = input.files[0];
   if(!file) return;
@@ -6342,7 +6522,7 @@ function importData(input){
       }
 
       // Validation de schéma : vérifier que chaque ruche a les champs requis
-      const ALLOWED_STATE_KEYS = ["hives","profil","complianceDocs","alertSettings","apiaries","onboardingDone","calendarPromptDone","hiveTourDone","derniereVersionVue"];
+      const ALLOWED_STATE_KEYS = ["hives","profil","complianceDocs","alertSettings","apiaries","onboardingDone","calendarPromptDone","hiveTourDone","derniereVersionVue","derniereSauvegarde"];
       const sanitizedData = {};
       for(const key of ALLOWED_STATE_KEYS){
         if(key in data) sanitizedData[key] = data[key];
@@ -6367,6 +6547,25 @@ function importData(input){
         sanitizedData.profil = {};
       }
 
+      /* L'import REMPLACE tout. Tant qu'il n'y avait rien à perdre, le
+         faire en silence passait ; dès qu'un apiculteur fait des
+         allers-retours avec son ordinateur, un fichier plus ancien
+         choisi par erreur emporte la saison. On montre donc ce qui va
+         être remplacé, et par quoi. */
+      const actuel = Array.isArray(state.hives) ? state.hives : [];
+      if(actuel.length){
+        const messageA = resumeDonnees(actuel, state.derniereSauvegarde, "dernière sauvegarde le ");
+        const messageB = resumeDonnees(sanitizedData.hives, sanitizedData.derniereSauvegarde, "fichier du ");
+        if(!confirm("Cet import va REMPLACER toutes les données de cet appareil.\n\n" +
+                    "Sur l'appareil : " + messageA + "\n" +
+                    "Dans le fichier : " + messageB + "\n\n" +
+                    "Continuer ?")){
+          showToast("Import annulé");
+          return;
+        }
+        sauvegarderAvantImport();
+      }
+
       // Import complet : on restaure les ruches, le profil, la conformité et les réglages
       // sans écraser les valeurs par défaut utiles absentes des anciens exports.
       const imported = runDataMigrations(sanitizedData, "fichier importé");
@@ -6378,11 +6577,14 @@ function importData(input){
       state.calendarPromptDone = typeof imported.calendarPromptDone === "boolean" ? imported.calendarPromptDone : state.calendarPromptDone;
       state.hiveTourDone = typeof imported.hiveTourDone === "boolean" ? imported.hiveTourDone : state.hiveTourDone;
       state.derniereVersionVue = typeof imported.derniereVersionVue === "string" ? imported.derniereVersionVue : state.derniereVersionVue;
+      state.derniereSauvegarde = typeof imported.derniereSauvegarde === "string" ? imported.derniereSauvegarde : state.derniereSauvegarde;
 
       normalizeHives();
       saveState();
       showPage("home");
-      showToast("✓ Données importées");
+      showToast(copieAvantImport()
+        ? "✓ Données importées · annulable depuis l'Administration"
+        : "✓ Données importées");
     } catch(err){
       console.warn("[Mes Abeilles] import invalide", err);
       alert("Fichier invalide. Vérifie qu'il s'agit bien d'un export Mes Abeilles.");
@@ -6815,6 +7017,70 @@ function qrReedSolomon(data, degree){
 }
 
 
+/* ── Numéro de lot des récoltes ──────────────────────
+   Dès qu'un pot est vendu, son étiquette doit porter un numéro de lot,
+   et ce numéro doit relier le pot à une récolte identifiée : date,
+   rucher, nombre de hausses. C'est le lien entre l'étagère du marché et
+   le registre d'élevage. Le format est libre, à condition d'être
+   univoque ; l'usage courant est « L 2026-09-A ». */
+
+function lettreLot(n){
+  let s = "";
+  n = Number(n) || 0;
+  do{
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  }while(n >= 0);
+  return s;
+}
+
+function indiceLettre(lettres){
+  let n = 0;
+  for(const c of String(lettres)) n = n * 26 + (c.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+/* Le prochain lot libre du mois, tous ruchers confondus : deux récoltes
+   du même mois ne doivent jamais porter le même numéro. */
+function lotSuivant(dateISO){
+  const mois = String(dateISO || todayISO()).slice(0, 7);
+  let max = -1;
+  (state.hives || []).forEach(h => {
+    (h.recoltes || []).forEach(r => {
+      const m = String(r && r.lot || "").trim().toUpperCase().match(/^L\s*(\d{4}-\d{2})-([A-Z]+)$/);
+      if(m && m[1] === mois) max = Math.max(max, indiceLettre(m[2]));
+    });
+  });
+  return "L " + mois + "-" + lettreLot(max + 1);
+}
+
+/* Attribue un lot à une récolte déjà enregistrée : sans cela, tout ce
+   qui a été saisi avant cette version resterait sans traçabilité. */
+function attribuerLot(codeRuche, idRecolte){
+  const h = trouverRucheParCode(codeRuche) || state.currentHive;
+  if(!h) return;
+  ensureModuleArrays(h);
+  const r = (h.recoltes || []).find(x => String(x.id) === String(idRecolte));
+  if(!r){ showToast("Récolte introuvable"); return; }
+  if(r.lot){ showToast("Cette récolte a déjà un lot"); return; }
+  r.lot = lotSuivant(r.date);
+  saveState();
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+  showToast("✓ Lot " + r.lot + " attribué");
+}
+
+/* Nombre de hausses retirées le jour de la récolte, quand l'apiculteur
+   l'a noté : c'est l'élément que la traçabilité demande en plus de la
+   date et du rucher. */
+function haussesRetirees(h, dateISO){
+  const jour = String(dateISO || "").slice(0,10);
+  if(!jour) return "";
+  const e = (h.hausses || []).find(x =>
+    String(x && x.date || "").slice(0,10) === jour && /retir/i.test(String(x.action || "")));
+  return e ? String(e.nombre || "") : "";
+}
+
 /* ── Registre d'élevage apicole ──────────────────────
    Obligatoire pour tout apiculteur qui vend ou cède sa production hors
    usage domestique (arrêté du 5 juin 2000), à conserver cinq ans. Aucun
@@ -6960,6 +7226,16 @@ function registreDocumentHTML(){
     registreCell(x.e.type), registreCell(x.e.kilos), registreCell(x.e.butinage)
   ]);
 
+  const lots = registreEvenements("recoltes", p)
+    .filter(x => String(x.e.lot || "").trim())
+    .map(x => [
+      registreCell(x.e.lot), registreCell(formatDateFr(x.e.date)),
+      registreCell(x.h.code), registreCell(x.h.name),
+      registreCell(apiaryNameForHive(x.h)),
+      registreCell(x.e.type), registreCell(x.e.kilos),
+      registreCell(haussesRetirees(x.h, x.e.date))
+    ]);
+
   const colonies = hives.map(h => [
     registreCell(h.code), registreCell(h.name),
     registreCell(apiaryNameForHive(h)),
@@ -7014,6 +7290,10 @@ function registreDocumentHTML(){
     ${registreTableau("Récoltes",
       ["Date","Code","Colonie","Type de miel","Kilos","Butinage"], recoltes,
       "Aucune récolte enregistrée sur la période.")}
+
+    ${registreTableau("Traçabilité des lots de miel",
+      ["Lot","Date","Code","Colonie","Rucher","Type de miel","Kilos","Hausses retirées"], lots,
+      "Aucun lot attribué sur la période.")}
 
     <div class="reg-pied">
       <p>Registre tenu en application de l'arrêté du 5 juin 2000. À conserver cinq ans, avec le récépissé de déclaration annuelle de ruches.</p>
@@ -7757,7 +8037,7 @@ function mbIcsDateOnly(date){
   return `${y}${m}${day}`;
 }
 
-function mbDownloadCalendarEvent({h, start, title, desc, filename, allDay=true, location=""}){
+function mbDownloadCalendarEvent({h, start, title, desc, filename, allDay=true, location="", repetition=""}){
   const startDate = start instanceof Date ? start : (mbParseDate ? mbParseDate(start) : new Date(start));
   if(!startDate || isNaN(startDate)){
     showToast("Date calendrier invalide");
@@ -7789,6 +8069,7 @@ function mbDownloadCalendarEvent({h, start, title, desc, filename, allDay=true, 
   lines.push("SUMMARY:" + mbIcsEscape(title || "Rappel Mes Abeilles"));
   lines.push("DESCRIPTION:" + mbIcsEscape(desc || "Rappel généré par Mes Abeilles."));
   lines.push("LOCATION:" + mbIcsEscape(location || h?.apiary || h?.gps || ""));
+  if(repetition) lines.push("RRULE:" + repetition);
   lines.push("STATUS:CONFIRMED");
   lines.push("TRANSP:OPAQUE");
   lines.push("BEGIN:VALARM");
@@ -7892,7 +8173,7 @@ function rappelVersFichier(){
 /* Adresse officielle de création d'événement Google Agenda. Ouverte dans
    un nouvel onglet : sur téléphone, l'application Google Agenda prend la
    main si elle est installée. */
-function lienGoogleAgenda({start, title, desc, location, h}){
+function lienGoogleAgenda({start, title, desc, location, h, repetition}){
   const d = start instanceof Date ? start : (mbParseDate ? mbParseDate(start) : new Date(start));
   if(!d || isNaN(d)) return null;
   const jour = mbIcsDateOnly(d);
@@ -7905,6 +8186,7 @@ function lienGoogleAgenda({start, title, desc, location, h}){
     details: desc || "Rappel généré par Mes Abeilles.",
     location: location || h?.apiary || h?.gps || ""
   });
+  if(repetition) params.set("recur", "RRULE:" + repetition);
   return "https://calendar.google.com/calendar/render?" + params.toString();
 }
 
@@ -8529,6 +8811,38 @@ function rucheDemandeeParUrl(){
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
   {
+    version: "v38.0",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Un import ne peut plus effacer ta saison par surprise",
+        texte: "Importer un fichier remplace toutes les données de l'appareil. Cela se faisait en silence. L'application affiche maintenant ce qui va être remplacé et par quoi — nombre de ruches, dernière visite, date du fichier — et prend une copie juste avant. Si le mauvais fichier est passé, « Annuler le dernier import » remet tout en place." },
+      { titre: "Ton ordinateur comme copie de secours",
+        texte: "L'application s'ouvre aussi sur un ordinateur, à la même adresse, avec une mise en page élargie. Exporte depuis le téléphone chaque mois, range le fichier sur ton PC : il servira aussi bien à consulter tes ruches qu'à repartir sur un téléphone neuf. Chaque appareil garde ses propres données, c'est le fichier qui fait le lien." }
+    ]
+  },
+  {
+    version: "v37.9",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "L'application te rappelle de sauvegarder",
+        texte: "Tes données ne sont que sur ce téléphone. L'application sait maintenant quand tu as fait ta dernière copie et te le rappelle sur l'accueil au bout d'un mois — avant tout autre conseil, parce que perdre son rucher est pire que tout. Un rucher encore vide n'est jamais dérangé." },
+      { titre: "Un rappel mensuel dans ton agenda",
+        texte: "Depuis l'Administration, tu peux ajouter un rappel de sauvegarde qui revient chaque mois. C'est le seul moyen d'être prévenu quand l'application est fermée : elle ne tourne pas en arrière-plan." },
+      { titre: "Changer de téléphone, expliqué",
+        texte: "L'Administration explique la marche à suivre : exporter depuis l'ancien téléphone, importer sur le nouveau. Sans ce fichier, rien n'est récupérable — il n'y a ni compte ni serveur, et c'est justement ce qui garde tes données chez toi." }
+    ]
+  },
+  {
+    version: "v37.8",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Numéro de lot sur les récoltes",
+        texte: "Dès qu'un pot est vendu, son étiquette doit porter un numéro de lot reliant le pot à une récolte identifiée. Chaque nouvelle récolte en reçoit un automatiquement, au format L 2026-09-A, modifiable. Deux récoltes du même mois n'ont jamais le même, même sur des ruches différentes. Tes récoltes déjà saisies peuvent en recevoir un d'un simple appui sur « Attribuer un lot »." },
+      { titre: "Le registre trace les lots",
+        texte: "Une nouvelle section du registre d'élevage relie chaque lot à sa date, sa colonie, son rucher et le nombre de hausses retirées ce jour-là — exactement le lien que la traçabilité demande entre le pot et la récolte." }
+    ]
+  },
+  {
     version: "v37.7",
     date: "Septembre 2026",
     nouveautes: [
@@ -8916,11 +9230,16 @@ function guideBanner(){
   const hasProfile = state.profil?.nom || state.profil?.napi;
   const hasHives = state.hives.length > 0;
 
-  // L'installation passe avant le reste : c'est elle qui protège les
-  // données, et le navigateur ne propose ce choix qu'un temps.
+  /* Deux conseils peuvent coexister sans se voler la place. Installer et
+     sauvegarder ne se remplacent pas : l'installation protège d'un
+     effacement par le navigateur, la sauvegarde protège d'un téléphone
+     perdu. Les faire concurrencer un seul emplacement revenait à taire
+     l'un des deux. On en affiche donc au plus deux, par ordre d'urgence. */
+  const encarts = [];
+
   if(peutProposerInstallation()){
     const t = texteInstallation();
-    return `
+    encarts.push(`
     <div class="guide-banner">
       <div class="guide-icon">📲</div>
       <div class="guide-text">
@@ -8928,11 +9247,26 @@ function guideBanner(){
         <div class="guide-sub">${escapeHtml(t.sous)}</div>
       </div>
       <button class="guide-btn" onclick="lancerInstallation()">${escapeHtml(t.bouton)}</button>
-    </div>`;
+    </div>`);
   }
 
-  if(hasProfile && hasHives) return "";
-  if(!hasProfile) return `
+  if(sauvegardeARappeler()){
+    const jamais = joursDepuisSauvegarde() === null;
+    encarts.push(`
+    <div class="guide-banner">
+      <div class="guide-icon">💾</div>
+      <div class="guide-text">
+        <div class="guide-title">${jamais ? "Mets tes données à l'abri" : "Sauvegarde à refaire"}</div>
+        <div class="guide-sub">${jamais
+          ? "Elles ne sont que sur ce téléphone. Sans copie, le perdre ou en changer les efface."
+          : escapeHtml(libelleDerniereSauvegarde()) + " · une copie récente t'évite de tout ressaisir"}</div>
+      </div>
+      <button class="guide-btn" onclick="showPage('admin')">Sauvegarder →</button>
+    </div>`);
+  }
+
+  if(!hasProfile){
+    encarts.push(`
     <div class="guide-banner">
       <div class="guide-icon">👤</div>
       <div class="guide-text">
@@ -8940,8 +9274,9 @@ function guideBanner(){
         <div class="guide-sub">Renseigne ton NAPI et tes infos apiculteur</div>
       </div>
       <button class="guide-btn" onclick="showPage('admin')">Aller →</button>
-    </div>`;
-  if(!hasHives) return `
+    </div>`);
+  }else if(!hasHives){
+    encarts.push(`
     <div class="guide-banner">
       <div class="guide-icon">🏠</div>
       <div class="guide-text">
@@ -8949,14 +9284,16 @@ function guideBanner(){
         <div class="guide-sub">Crée sa fiche et génère son QR code</div>
       </div>
       <button class="guide-btn" onclick="showPage('newHive')">Créer →</button>
-    </div>`;
+    </div>`);
+  }
 
   /* Navigateur qui ne propose pas l'installation de lui-même : lien
      ouvert dans une messagerie, Chrome sur iPhone, Firefox… L'accueil
      ne disait rien du tout, et l'apiculteur repartait en pensant que
-     l'application ne s'installe pas. En dernier, pour ne pas passer
-     devant le profil et la première ruche. */
-  if(peutExpliquerInstallation()) return `
+     l'application ne s'installe pas. En dernier : c'est le moins
+     urgent des conseils. */
+  if(peutExpliquerInstallation()){
+    encarts.push(`
     <div class="guide-banner">
       <div class="guide-icon">📲</div>
       <div class="guide-text">
@@ -8964,9 +9301,10 @@ function guideBanner(){
         <div class="guide-sub">Depuis le menu de ton navigateur, en deux gestes</div>
       </div>
       <button class="guide-btn" onclick="lancerInstallation()">Comment ? →</button>
-    </div>`;
+    </div>`);
+  }
 
-  return "";
+  return encarts.slice(0, 2).join("");
 }
 
 // ── CARTE GLOBALE ──────────────────────────────────────────────────
