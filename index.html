@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.8</title>
+  <title>Mes Abeilles 🐝 v37.9</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2641,7 +2641,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.8";
+const APP_VERSION = "v37.9";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -2780,7 +2780,10 @@ const state = {
   calendarPromptDone: false,
   hiveTourDone: false,
   // Dernière version dont les nouveautés ont été présentées à l'utilisateur.
-  derniereVersionVue: ""
+  derniereVersionVue: "",
+  // Date du dernier export réussi. Sans elle, l'application ne peut pas
+  // savoir si l'apiculteur a une copie de ses données quelque part.
+  derniereSauvegarde: ""
 };
 loadState();
 
@@ -3552,8 +3555,20 @@ function admin(){
         </label>
       </div>
       <div class="export-help">
-        <strong>Export vers PC</strong><br>
-        Le bouton télécharge une sauvegarde <strong>.json</strong>. Si ton téléphone affiche une page avec du code, ce n'est pas une erreur : c'est le contenu de la sauvegarde. Utilise alors le menu du navigateur → <strong>Télécharger</strong> ou partage le fichier vers ton PC.
+        <strong>${escapeHtml(libelleDerniereSauvegarde())}</strong><br>
+        Le bouton télécharge une sauvegarde <strong>.json</strong>. Sur téléphone, la fenêtre de partage permet de l'envoyer directement vers ton Drive, ton courriel ou ton PC — range-la quelque part hors de ce téléphone. Si un écran de code s'affiche, ce n'est pas une erreur : c'est le contenu de la sauvegarde ; passe par le menu du navigateur → <strong>Télécharger</strong>.
+      </div>
+
+      <div class="export-help">
+        <strong>Changer de téléphone</strong><br>
+        Tes données ne sont que sur cet appareil : aucun compte, aucun serveur. Un nouveau téléphone ouvrira donc une application vide, et rien ne pourra être récupéré sans fichier.<br>
+        <strong>1.</strong> Sur l'ancien téléphone : <em>Exporter vers PC</em>, puis envoie-toi le fichier.<br>
+        <strong>2.</strong> Sur le nouveau : ouvre l'application, puis <em>Importer depuis PC</em> et choisis ce fichier.
+      </div>
+
+      <button class="assist-btn" style="width:100%" onclick="rappelSauvegardeAgenda()">📅 Me rappeler de sauvegarder chaque mois</button>
+      <div class="export-help">
+        Ajoute un rappel mensuel à ton agenda. C'est le seul moyen d'être prévenu quand l'application est fermée : elle ne tourne pas en arrière-plan.
       </div>
 
       <div class="export-help">
@@ -6192,6 +6207,7 @@ function mergeLoadedState(saved){
   if(typeof saved.calendarPromptDone === "boolean") state.calendarPromptDone = saved.calendarPromptDone;
   if(typeof saved.hiveTourDone === "boolean") state.hiveTourDone = saved.hiveTourDone;
   if(typeof saved.derniereVersionVue === "string") state.derniereVersionVue = saved.derniereVersionVue;
+  if(typeof saved.derniereSauvegarde === "string") state.derniereSauvegarde = saved.derniereSauvegarde;
   return Array.isArray(saved.hives) || !!saved.profil;
 }
 
@@ -6306,8 +6322,76 @@ function normalizeStateForExport(inputState, includeHeavyFiles=false){
   return copy;
 }
 
+/* ── Sauvegarde : ne pas perdre son rucher ───────────
+   Les données ne vivent que sur cet appareil. Changer de téléphone, le
+   perdre, ou effacer les données du navigateur les efface aussi — les
+   copies de secours internes (backup, avant-migration) sont dans le même
+   stockage et disparaissent avec lui. Le fichier exporté est la seule
+   copie qui survit. Encore faut-il que l'apiculteur pense à le faire. */
+
+const JOURS_AVANT_RAPPEL_SAUVEGARDE = 30;
+
+function joursDepuisSauvegarde(){
+  const iso = String(state.derniereSauvegarde || "").slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;   // jamais sauvegardé
+  const d = mbParseDate ? mbParseDate(iso) : new Date(iso);
+  if(!d || isNaN(d)) return null;
+  const aujourdhui = new Date();
+  return Math.floor((new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), aujourdhui.getDate())
+                     - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+}
+
+/* Rien à perdre, rien à rappeler : on n'ennuie pas quelqu'un dont le
+   rucher est encore vide. */
+function aDesDonneesAProteger(){
+  const ruches = (state.hives || []).length;
+  if(!ruches) return false;
+  const saisies = (state.hives || []).some(h =>
+    (h.visites || []).length || (h.traitements || []).length || (h.recoltes || []).length);
+  return ruches >= 2 || saisies;
+}
+
+function sauvegardeARappeler(){
+  if(!aDesDonneesAProteger()) return false;
+  const jours = joursDepuisSauvegarde();
+  return jours === null || jours >= JOURS_AVANT_RAPPEL_SAUVEGARDE;
+}
+
+function libelleDerniereSauvegarde(){
+  const jours = joursDepuisSauvegarde();
+  if(jours === null) return "Jamais sauvegardé";
+  if(jours <= 0) return "Sauvegardé aujourd'hui";
+  if(jours === 1) return "Sauvegardé hier";
+  return `Dernière sauvegarde il y a ${jours} jours`;
+}
+
+function marquerSauvegardeFaite(){
+  state.derniereSauvegarde = todayISO();
+  saveState();
+  rafraichirSiAccueil();
+}
+
+/* Rappel mensuel dans l'agenda : c'est le seul mécanisme qui prévient
+   l'apiculteur quand l'application est fermée. */
+function rappelSauvegardeAgenda(){
+  const debut = mbDateAddISO(todayISO(), 30);
+  downloadCalendarEvent({
+    h: null,
+    start: debut,
+    title: "Sauvegarder Mes Abeilles",
+    desc: "Ouvrir Mes Abeilles → Administration → Exporter vers PC, puis ranger le fichier dans un endroit sûr (Drive, courriel, ordinateur).\n\nSans cette copie, un téléphone perdu emporte tout le rucher.",
+    filename: "sauvegarde-mes-abeilles.ics",
+    repetition: "FREQ=MONTHLY"
+  });
+}
+
 function exportData(){
-  const exportState = (typeof normalizeStateForExport === "function") ? normalizeStateForExport(state, false) : state;
+  const base = (typeof normalizeStateForExport === "function") ? normalizeStateForExport(state, false) : state;
+  // Le fichier doit porter la date du jour où il est fait, pas celle de
+  // l'export précédent : c'est lui qui la transportera vers le nouveau
+  // téléphone. L'état de l'application, lui, n'est marqué qu'en cas de
+  // succès — un export qui échoue ne doit pas faire croire à une copie.
+  const exportState = Object.assign({}, base, { derniereSauvegarde: todayISO() });
   const json = JSON.stringify(exportState, null, 2);
   const filename = "mes_abeilles_export_" + new Date().toISOString().slice(0,10) + ".json";
   const blob = new Blob([json], {type:"application/json;charset=utf-8"});
@@ -6319,12 +6403,13 @@ function exportData(){
       files:[file],
       title:"Export Mes Abeilles",
       text:"Sauvegarde Mes Abeilles"
-    }).then(()=>showToast("✓ Export prêt à partager"))
+    }).then(()=>{ marquerSauvegardeFaite(); showToast("✓ Export prêt à partager"); })
       .catch(()=>downloadExportBlob(blob, filename));
     return;
   }
 
   downloadExportBlob(blob, filename);
+  marquerSauvegardeFaite();
 }
 
 function downloadExportBlob(blob, filename){
@@ -6355,7 +6440,7 @@ function importData(input){
       }
 
       // Validation de schéma : vérifier que chaque ruche a les champs requis
-      const ALLOWED_STATE_KEYS = ["hives","profil","complianceDocs","alertSettings","apiaries","onboardingDone","calendarPromptDone","hiveTourDone","derniereVersionVue"];
+      const ALLOWED_STATE_KEYS = ["hives","profil","complianceDocs","alertSettings","apiaries","onboardingDone","calendarPromptDone","hiveTourDone","derniereVersionVue","derniereSauvegarde"];
       const sanitizedData = {};
       for(const key of ALLOWED_STATE_KEYS){
         if(key in data) sanitizedData[key] = data[key];
@@ -6391,6 +6476,7 @@ function importData(input){
       state.calendarPromptDone = typeof imported.calendarPromptDone === "boolean" ? imported.calendarPromptDone : state.calendarPromptDone;
       state.hiveTourDone = typeof imported.hiveTourDone === "boolean" ? imported.hiveTourDone : state.hiveTourDone;
       state.derniereVersionVue = typeof imported.derniereVersionVue === "string" ? imported.derniereVersionVue : state.derniereVersionVue;
+      state.derniereSauvegarde = typeof imported.derniereSauvegarde === "string" ? imported.derniereSauvegarde : state.derniereSauvegarde;
 
       normalizeHives();
       saveState();
@@ -7848,7 +7934,7 @@ function mbIcsDateOnly(date){
   return `${y}${m}${day}`;
 }
 
-function mbDownloadCalendarEvent({h, start, title, desc, filename, allDay=true, location=""}){
+function mbDownloadCalendarEvent({h, start, title, desc, filename, allDay=true, location="", repetition=""}){
   const startDate = start instanceof Date ? start : (mbParseDate ? mbParseDate(start) : new Date(start));
   if(!startDate || isNaN(startDate)){
     showToast("Date calendrier invalide");
@@ -7880,6 +7966,7 @@ function mbDownloadCalendarEvent({h, start, title, desc, filename, allDay=true, 
   lines.push("SUMMARY:" + mbIcsEscape(title || "Rappel Mes Abeilles"));
   lines.push("DESCRIPTION:" + mbIcsEscape(desc || "Rappel généré par Mes Abeilles."));
   lines.push("LOCATION:" + mbIcsEscape(location || h?.apiary || h?.gps || ""));
+  if(repetition) lines.push("RRULE:" + repetition);
   lines.push("STATUS:CONFIRMED");
   lines.push("TRANSP:OPAQUE");
   lines.push("BEGIN:VALARM");
@@ -7983,7 +8070,7 @@ function rappelVersFichier(){
 /* Adresse officielle de création d'événement Google Agenda. Ouverte dans
    un nouvel onglet : sur téléphone, l'application Google Agenda prend la
    main si elle est installée. */
-function lienGoogleAgenda({start, title, desc, location, h}){
+function lienGoogleAgenda({start, title, desc, location, h, repetition}){
   const d = start instanceof Date ? start : (mbParseDate ? mbParseDate(start) : new Date(start));
   if(!d || isNaN(d)) return null;
   const jour = mbIcsDateOnly(d);
@@ -7996,6 +8083,7 @@ function lienGoogleAgenda({start, title, desc, location, h}){
     details: desc || "Rappel généré par Mes Abeilles.",
     location: location || h?.apiary || h?.gps || ""
   });
+  if(repetition) params.set("recur", "RRULE:" + repetition);
   return "https://calendar.google.com/calendar/render?" + params.toString();
 }
 
@@ -8620,6 +8708,18 @@ function rucheDemandeeParUrl(){
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
   {
+    version: "v37.9",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "L'application te rappelle de sauvegarder",
+        texte: "Tes données ne sont que sur ce téléphone. L'application sait maintenant quand tu as fait ta dernière copie et te le rappelle sur l'accueil au bout d'un mois — avant tout autre conseil, parce que perdre son rucher est pire que tout. Un rucher encore vide n'est jamais dérangé." },
+      { titre: "Un rappel mensuel dans ton agenda",
+        texte: "Depuis l'Administration, tu peux ajouter un rappel de sauvegarde qui revient chaque mois. C'est le seul moyen d'être prévenu quand l'application est fermée : elle ne tourne pas en arrière-plan." },
+      { titre: "Changer de téléphone, expliqué",
+        texte: "L'Administration explique la marche à suivre : exporter depuis l'ancien téléphone, importer sur le nouveau. Sans ce fichier, rien n'est récupérable — il n'y a ni compte ni serveur, et c'est justement ce qui garde tes données chez toi." }
+    ]
+  },
+  {
     version: "v37.8",
     date: "Septembre 2026",
     nouveautes: [
@@ -9017,11 +9117,16 @@ function guideBanner(){
   const hasProfile = state.profil?.nom || state.profil?.napi;
   const hasHives = state.hives.length > 0;
 
-  // L'installation passe avant le reste : c'est elle qui protège les
-  // données, et le navigateur ne propose ce choix qu'un temps.
+  /* Deux conseils peuvent coexister sans se voler la place. Installer et
+     sauvegarder ne se remplacent pas : l'installation protège d'un
+     effacement par le navigateur, la sauvegarde protège d'un téléphone
+     perdu. Les faire concurrencer un seul emplacement revenait à taire
+     l'un des deux. On en affiche donc au plus deux, par ordre d'urgence. */
+  const encarts = [];
+
   if(peutProposerInstallation()){
     const t = texteInstallation();
-    return `
+    encarts.push(`
     <div class="guide-banner">
       <div class="guide-icon">📲</div>
       <div class="guide-text">
@@ -9029,11 +9134,26 @@ function guideBanner(){
         <div class="guide-sub">${escapeHtml(t.sous)}</div>
       </div>
       <button class="guide-btn" onclick="lancerInstallation()">${escapeHtml(t.bouton)}</button>
-    </div>`;
+    </div>`);
   }
 
-  if(hasProfile && hasHives) return "";
-  if(!hasProfile) return `
+  if(sauvegardeARappeler()){
+    const jamais = joursDepuisSauvegarde() === null;
+    encarts.push(`
+    <div class="guide-banner">
+      <div class="guide-icon">💾</div>
+      <div class="guide-text">
+        <div class="guide-title">${jamais ? "Mets tes données à l'abri" : "Sauvegarde à refaire"}</div>
+        <div class="guide-sub">${jamais
+          ? "Elles ne sont que sur ce téléphone. Sans copie, le perdre ou en changer les efface."
+          : escapeHtml(libelleDerniereSauvegarde()) + " · une copie récente t'évite de tout ressaisir"}</div>
+      </div>
+      <button class="guide-btn" onclick="showPage('admin')">Sauvegarder →</button>
+    </div>`);
+  }
+
+  if(!hasProfile){
+    encarts.push(`
     <div class="guide-banner">
       <div class="guide-icon">👤</div>
       <div class="guide-text">
@@ -9041,8 +9161,9 @@ function guideBanner(){
         <div class="guide-sub">Renseigne ton NAPI et tes infos apiculteur</div>
       </div>
       <button class="guide-btn" onclick="showPage('admin')">Aller →</button>
-    </div>`;
-  if(!hasHives) return `
+    </div>`);
+  }else if(!hasHives){
+    encarts.push(`
     <div class="guide-banner">
       <div class="guide-icon">🏠</div>
       <div class="guide-text">
@@ -9050,14 +9171,16 @@ function guideBanner(){
         <div class="guide-sub">Crée sa fiche et génère son QR code</div>
       </div>
       <button class="guide-btn" onclick="showPage('newHive')">Créer →</button>
-    </div>`;
+    </div>`);
+  }
 
   /* Navigateur qui ne propose pas l'installation de lui-même : lien
      ouvert dans une messagerie, Chrome sur iPhone, Firefox… L'accueil
      ne disait rien du tout, et l'apiculteur repartait en pensant que
-     l'application ne s'installe pas. En dernier, pour ne pas passer
-     devant le profil et la première ruche. */
-  if(peutExpliquerInstallation()) return `
+     l'application ne s'installe pas. En dernier : c'est le moins
+     urgent des conseils. */
+  if(peutExpliquerInstallation()){
+    encarts.push(`
     <div class="guide-banner">
       <div class="guide-icon">📲</div>
       <div class="guide-text">
@@ -9065,9 +9188,10 @@ function guideBanner(){
         <div class="guide-sub">Depuis le menu de ton navigateur, en deux gestes</div>
       </div>
       <button class="guide-btn" onclick="lancerInstallation()">Comment ? →</button>
-    </div>`;
+    </div>`);
+  }
 
-  return "";
+  return encarts.slice(0, 2).join("");
 }
 
 // ── CARTE GLOBALE ──────────────────────────────────────────────────
