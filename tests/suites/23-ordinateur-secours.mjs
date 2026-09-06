@@ -170,5 +170,62 @@ export default () => executerSuite("Ordinateur de secours et import",
   rapport.verifier("le filet est consommé, pas un historique infini", revenu.copie === false);
   await neuf.ctx.close();
 
+  rapport.section("Un import sur un appareil n'en touche aucun autre");
+  /* Question naturelle quand on découvre l'import : « si j'importe sur
+     le PC, le téléphone perd-il ses données ? ». Chaque navigateur a son
+     propre stockage, donc non — mais cela se prouve plutôt que cela ne
+     s'affirme. Le téléphone reste ICI ouvert pendant tout l'import. */
+  const telOuvert = await appareil({ seed: SAISON });
+  const copie = await exporter(telOuvert.page, 'mes-abeilles-isolation.json');
+  const avantPc = await telOuvert.page.evaluate(() => ({
+    ruches: state.hives.length,
+    noms: state.hives.map(h => h.name).join(','),
+    visites: state.hives.reduce((s,h) => s + (h.visites || []).length, 0),
+    lot: state.hives[0]?.recoltes?.[0]?.lot,
+    octets: (localStorage.getItem('mesAbeilles_data_v1') || '').length
+  }));
+
+  const autrePc = await appareil({ pc:true, seed: {
+    ...SAISON,
+    hives: [{ code:'AUTRE-9', name:'Vieux essai', apiary:'X', type:'ruche', honey:0, alerts:0 }] } });
+  autrePc.page.on('dialog', async d => { await d.accept(); });
+  await versAdmin(autrePc.page);
+  await autrePc.page.setInputFiles('input[type=file][accept=".json"]', copie);
+  await autrePc.page.waitForTimeout(1400);
+  rapport.verifier("l'ordinateur reçoit bien le rucher",
+    await autrePc.page.evaluate(() => state.hives.map(h => h.name).join(',')) === 'Lavande,Tilleul');
+
+  await telOuvert.page.waitForTimeout(500);
+  const apresPc = await telOuvert.page.evaluate(() => ({
+    ruches: state.hives.length,
+    noms: state.hives.map(h => h.name).join(','),
+    visites: state.hives.reduce((s,h) => s + (h.visites || []).length, 0),
+    lot: state.hives[0]?.recoltes?.[0]?.lot,
+    octets: (localStorage.getItem('mesAbeilles_data_v1') || '').length
+  }));
+  rapport.verifier('le téléphone garde ses ruches, ses visites et son lot',
+    apresPc.ruches === avantPc.ruches && apresPc.noms === avantPc.noms
+    && apresPc.visites === avantPc.visites && apresPc.lot === avantPc.lot,
+    apresPc.noms);
+  rapport.verifier("son stockage local est intact, à l'octet près",
+    apresPc.octets === avantPc.octets, apresPc.octets + ' octets');
+
+  await telOuvert.page.reload();
+  await telOuvert.page.waitForTimeout(1400);
+  const recharge = await telOuvert.page.evaluate(() => ({
+    ruches: state.hives.length,
+    visites: state.hives.reduce((s,h) => s + (h.visites || []).length, 0) }));
+  rapport.verifier("rien n'a été écrit dans son dos : tout est là après rechargement",
+    recharge.ruches === 2 && recharge.visites === 2);
+
+  await autrePc.page.evaluate(() => { state.hives[0].name = 'Modifié sur PC'; saveState(); });
+  await autrePc.page.waitForTimeout(400);
+  await telOuvert.page.reload();
+  await telOuvert.page.waitForTimeout(1400);
+  rapport.verifier('et une modification faite sur le PC ne descend pas sur le téléphone',
+    await telOuvert.page.evaluate(() => state.hives[0].name) === 'Lavande');
+  await autrePc.ctx.close();
+  await telOuvert.ctx.close();
+
   rapport.verifier('aucune erreur JavaScript', erreurs.length === 0, erreurs.slice(0,2).join(' | '));
 });
