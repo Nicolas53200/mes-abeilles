@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.6</title>
+  <title>Mes Abeilles 🐝 v37.7</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -1695,7 +1695,68 @@
       .print-only,.print-only *{visibility:visible}
       .print-only{display:block;position:absolute;left:0;top:0;width:100%;padding:24px;text-align:center}
       .print-only canvas{width:260px;height:260px;image-rendering:pixelated}
+
+      /* Impression du registre : c'est LUI qu'on imprime, pas l'étiquette QR.
+         Le décor de l'application est retiré du flux — masqué par
+         visibility il occupait encore la page, et son fond sombre
+         s'imprimait en bandeau au-dessus du document. */
+      body.impression-registre{background:#fff !important;background-image:none !important}
+      body.impression-registre .print-only,
+      body.impression-registre #heroTop,
+      body.impression-registre #pageHero,
+      body.impression-registre .bottom,
+      body.impression-registre #splash,
+      body.impression-registre #hiveHelpBtn,
+      body.impression-registre #content > .panel:not(.registre-doc){display:none !important}
+      body.impression-registre .phone{
+        max-width:none !important;min-height:0 !important;padding:0 !important;
+        overflow:visible !important;background:#fff !important;
+      }
+      body.impression-registre #content{padding:0 !important}
+      body.impression-registre .registre-doc,
+      body.impression-registre .registre-doc *{visibility:visible}
+      body.impression-registre .registre-doc{
+        position:static;width:auto;
+        margin:0;padding:0;border:0;border-radius:0;box-shadow:none;
+        background:#fff;color:#000;
+      }
+      body.impression-registre .reg-scroll{overflow:visible}
+      body.impression-registre .reg-table{font-size:9pt}
+      body.impression-registre .reg-h3{break-after:avoid;page-break-after:avoid}
+      body.impression-registre .reg-table tr{break-inside:avoid;page-break-inside:avoid}
+      body.impression-registre .reg-pied{break-before:auto;page-break-inside:avoid}
+      @page{margin:14mm}
     }
+
+    /* ── Registre d'élevage ── */
+    .registre-doc{padding:20px}
+    .reg-entete{border-bottom:2px solid var(--ink,#0f172a);padding-bottom:12px;margin-bottom:18px}
+    .reg-titre{font-size:22px;font-weight:950;letter-spacing:-.03em;color:#0f172a}
+    .reg-sous{font-size:13px;color:#64748b;margin-top:4px}
+    .reg-h3{
+      font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;
+      color:#0f172a;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #cbd5e1;
+    }
+    .reg-vide{font-size:13px;color:#94a3b8;font-style:italic;margin:0 0 4px}
+    .reg-scroll{overflow-x:auto}
+    .reg-table{border-collapse:collapse;width:100%;font-size:12px}
+    .reg-table th,.reg-table td{
+      border:1px solid #cbd5e1;padding:5px 7px;text-align:left;vertical-align:top;
+    }
+    .reg-table th{background:#f1f5f9;font-weight:800;white-space:nowrap}
+    .reg-fiche{border-collapse:collapse;width:100%;font-size:13px}
+    .reg-fiche th{
+      border:1px solid #cbd5e1;padding:6px 8px;text-align:left;
+      background:#f1f5f9;font-weight:800;width:38%;white-space:nowrap;
+    }
+    .reg-fiche td{border:1px solid #cbd5e1;padding:6px 8px}
+    .reg-pied{margin-top:26px;font-size:11.5px;color:#475569;line-height:1.5}
+    .reg-pied p{margin:0 0 6px}
+    .reg-signature{
+      display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px;
+    }
+    .reg-signature div{border-top:1px solid #94a3b8;padding-top:6px;min-height:54px}
+    .reg-signature span{font-size:11px;color:#64748b}
   
     /* QR réels + scanner caméra */
     .scanner-view{
@@ -2580,7 +2641,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.6";
+const APP_VERSION = "v37.7";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -3530,6 +3591,12 @@ function admin(){
       </div>
 
       <button class="big-action primary" style="width:100%;min-height:78px" onclick="saveAdmin()">Enregistrer</button>
+
+      <div class="export-help" style="margin-top:16px">
+        <strong>Registre d'élevage</strong><br>
+        Obligatoire dès que tu vends ta production, à conserver cinq ans. Il reprend ce que tu as déjà saisi : traitements, mouvements de colonies, visites et récoltes.
+      </div>
+      <button class="assist-btn" style="width:100%" onclick="showPage('registre')">📗 Ouvrir le registre d'élevage</button>
     </section>
 
     <section class="panel" style="margin-top:0">
@@ -3692,6 +3759,7 @@ function menu(){
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('scan')">Scanner</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('admin')">Administration</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="openHive('RUCHE-001'); setHiveSection('conformite')">Conformité</button>
+      <button class="big-action" style="width:100%;margin-bottom:12px" onclick="showPage('registre')">📗 Registre d'élevage</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="revoirGuide()">🧭 Revoir le guide</button>
       <button class="big-action" style="width:100%;margin-bottom:12px" onclick="ouvrirNouveautes(true)">🎉 Quoi de neuf · ${escapeHtml(APP_VERSION)}</button>
     </section>
@@ -6746,6 +6814,266 @@ function qrReedSolomon(data, degree){
   return res;
 }
 
+
+/* ── Registre d'élevage apicole ──────────────────────
+   Obligatoire pour tout apiculteur qui vend ou cède sa production hors
+   usage domestique (arrêté du 5 juin 2000), à conserver cinq ans. Aucun
+   modèle officiel n'est imposé : seul le contenu compte.
+
+   Toutes les données étaient déjà saisies dans l'application ; il leur
+   manquait seulement de ressortir sous une forme présentable. L'export
+   JSON, illisible pour un contrôle, ne pouvait pas en tenir lieu. */
+
+let registrePeriodeChoisie = String(new Date().getFullYear());
+
+function registrePeriode(choix){
+  if(choix === "tout") return { debut:null, fin:null, libelle:"Tout l'historique" };
+  const a = Number(choix) || new Date().getFullYear();
+  return { debut:`${a}-01-01`, fin:`${a}-12-31`, libelle:`Année ${a}` };
+}
+
+function registreDansPeriode(iso, p){
+  if(!iso) return false;
+  if(!p.debut) return true;
+  const d = String(iso).slice(0,10);
+  return d >= p.debut && d <= p.fin;
+}
+
+/* Rassemble une catégorie d'événements de TOUTES les ruches, remise dans
+   l'ordre chronologique : un registre se lit par date, pas par ruche. */
+function registreEvenements(cle, p){
+  const lignes = [];
+  (state.hives || []).forEach(h => {
+    ensureModuleArrays(h);
+    (h[cle] || []).forEach(e => {
+      if(e && registreDansPeriode(e.date, p)) lignes.push({ h, e });
+    });
+  });
+  return lignes.sort((a, b) => String(a.e.date || "").localeCompare(String(b.e.date || "")));
+}
+
+function registreAnneesDisponibles(){
+  const annees = new Set([new Date().getFullYear()]);
+  const cles = ["visites","traitements","nourrissements","frelons","hausses",
+                "recoltes","divisions","transhumances","pesees"];
+  (state.hives || []).forEach(h => {
+    ensureModuleArrays(h);
+    cles.forEach(k => (h[k] || []).forEach(e => {
+      const a = Number(String(e && e.date || "").slice(0,4));
+      if(a >= 2000 && a <= 2100) annees.add(a);
+    }));
+  });
+  return [...annees].sort((a,b) => b - a);
+}
+
+function registreCell(v){
+  const t = String(v == null ? "" : v).trim();
+  return t ? escapeHtml(t) : "—";
+}
+
+function registreTableau(titre, colonnes, lignes, vide){
+  if(!lignes.length){
+    return `<h3 class="reg-h3">${escapeHtml(titre)}</h3>
+            <p class="reg-vide">${escapeHtml(vide)}</p>`;
+  }
+  return `
+    <h3 class="reg-h3">${escapeHtml(titre)}</h3>
+    <div class="reg-scroll">
+      <table class="reg-table">
+        <thead><tr>${colonnes.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+        <tbody>${lignes.map(l => `<tr>${l.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody>
+      </table>
+    </div>`;
+}
+
+function registreRuchers(){
+  const groupes = new Map();
+  (state.hives || []).forEach(h => {
+    const nom = apiaryNameForHive(h) || "Sans rucher";
+    if(!groupes.has(nom)) groupes.set(nom, { colonies:0, gps:"" });
+    const g = groupes.get(nom);
+    g.colonies++;
+    if(!g.gps){
+      const pos = typeof getHiveGps === "function" ? getHiveGps(h) : null;
+      if(pos && pos.lat != null && pos.lon != null){
+        g.gps = Number(pos.lat).toFixed(5) + ", " + Number(pos.lon).toFixed(5);
+      }
+    }
+  });
+  return [...groupes.entries()].map(([nom, g]) => [
+    registreCell(nom), String(g.colonies), registreCell(g.gps)
+  ]);
+}
+
+function registreDocumentHTML(){
+  const p = registrePeriode(registrePeriodeChoisie);
+  const prof = state.profil || {};
+  const hives = state.hives || [];
+  const ruches = hives.filter(h => h.type !== "ruchette").length;
+  const ruchettes = hives.filter(h => h.type === "ruchette").length;
+
+  const identite = [
+    ["Apiculteur", [prof.prenom, prof.nom].filter(Boolean).join(" ")],
+    ["Exploitation", prof.entreprise],
+    ["N° NAPI", prof.napi],
+    ["N° SIRET", prof.siret],
+    ["Adresse", prof.adresse],
+    ["Téléphone", prof.telephone],
+    ["Courriel", prof.email]
+  ];
+
+  const visites = registreEvenements("visites", p).map(x => [
+    registreCell(formatDateFr(x.e.date)), registreCell(x.h.code), registreCell(x.h.name),
+    registreCell(x.e.reine), registreCell(x.e.couvain), registreCell(x.e.force),
+    registreCell(x.e.reserves), registreCell(x.e.varroa), registreCell(x.e.notes)
+  ]);
+
+  const traitements = registreEvenements("traitements", p).map(x => [
+    registreCell(formatDateFr(x.e.date)), registreCell(x.h.code), registreCell(x.h.name),
+    registreCell(x.e.type), registreCell(x.e.quantite),
+    registreCell(x.e.retrait ? formatDateFr(x.e.retrait) : ""), registreCell(x.e.notes)
+  ]);
+
+  const nourrissements = registreEvenements("nourrissements", p).map(x => [
+    registreCell(formatDateFr(x.e.date)), registreCell(x.h.code), registreCell(x.h.name),
+    registreCell(x.e.type), registreCell(x.e.quantite), registreCell(x.e.notes)
+  ]);
+
+  const frelons = registreEvenements("frelons", p).map(x => [
+    registreCell(formatDateFr(x.e.date)), registreCell(x.h.code), registreCell(x.h.name),
+    registreCell(x.e.observation), registreCell(x.e.piege), registreCell(x.e.captures)
+  ]);
+
+  const transhumances = registreEvenements("transhumances", p).map(x => [
+    registreCell(formatDateFr(x.e.date)), registreCell(x.h.code), registreCell(x.h.name),
+    registreCell(x.e.depart), registreCell(x.e.arrivee), registreCell(x.e.nb), registreCell(x.e.floraison)
+  ]);
+
+  const divisions = registreEvenements("divisions", p).map(x => [
+    registreCell(formatDateFr(x.e.date)), registreCell(x.h.code), registreCell(x.h.name),
+    registreCell(x.e.newCode), registreCell(x.e.newName),
+    registreCell(x.e.couvain), registreCell(x.e.miel)
+  ]);
+
+  const recoltes = registreEvenements("recoltes", p).map(x => [
+    registreCell(formatDateFr(x.e.date)), registreCell(x.h.code), registreCell(x.h.name),
+    registreCell(x.e.type), registreCell(x.e.kilos), registreCell(x.e.butinage)
+  ]);
+
+  const colonies = hives.map(h => [
+    registreCell(h.code), registreCell(h.name),
+    registreCell(apiaryNameForHive(h)),
+    h.type === "ruchette" ? "Ruchette" : "Ruche",
+    registreCell(h.material && h.material.type)
+  ]);
+
+  return `
+    <div class="reg-entete">
+      <div class="reg-titre">Registre d'élevage apicole</div>
+      <div class="reg-sous">${escapeHtml(p.libelle)} · édité le ${escapeHtml(formatDateFr(todayISO()))}</div>
+    </div>
+
+    <h3 class="reg-h3">Fiche synthétique de l'exploitation</h3>
+    <table class="reg-fiche">
+      ${identite.map(kv => `<tr><th>${escapeHtml(kv[0])}</th><td>${registreCell(kv[1])}</td></tr>`).join("")}
+      <tr><th>Cheptel</th><td>${ruches} ruche${ruches>1?"s":""} · ${ruchettes} ruchette${ruchettes>1?"s":""}</td></tr>
+    </table>
+
+    ${registreTableau("Emplacement des ruchers",
+      ["Rucher","Colonies","Coordonnées GPS"], registreRuchers(),
+      "Aucun rucher enregistré.")}
+
+    ${registreTableau("Recensement des colonies",
+      ["Code","Nom","Rucher","Type","Matériel"], colonies,
+      "Aucune colonie enregistrée.")}
+
+    ${registreTableau("Traitements et soins vétérinaires",
+      ["Date","Code","Colonie","Produit","Quantité","Fin de délai d'attente","Observations"], traitements,
+      "Aucun traitement enregistré sur la période.")}
+
+    ${registreTableau("Mouvements de colonies — transhumances",
+      ["Date","Code","Colonie","Départ","Arrivée","Nombre","Floraison"], transhumances,
+      "Aucune transhumance enregistrée sur la période.")}
+
+    ${registreTableau("Mouvements de colonies — divisions",
+      ["Date","Code","Colonie d'origine","Nouveau code","Nouvelle colonie","Cadres couvain","Cadres miel"], divisions,
+      "Aucune division enregistrée sur la période.")}
+
+    ${registreTableau("Suivi zootechnique — visites",
+      ["Date","Code","Colonie","Reine","Couvain","Force","Réserves","Varroa","Observations"], visites,
+      "Aucune visite enregistrée sur la période.")}
+
+    ${registreTableau("Nourrissement",
+      ["Date","Code","Colonie","Type","Quantité","Observations"], nourrissements,
+      "Aucun nourrissement enregistré sur la période.")}
+
+    ${registreTableau("Surveillance du frelon asiatique",
+      ["Date","Code","Colonie","Observation","Piégeage","Captures"], frelons,
+      "Aucune observation enregistrée sur la période.")}
+
+    ${registreTableau("Récoltes",
+      ["Date","Code","Colonie","Type de miel","Kilos","Butinage"], recoltes,
+      "Aucune récolte enregistrée sur la période.")}
+
+    <div class="reg-pied">
+      <p>Registre tenu en application de l'arrêté du 5 juin 2000. À conserver cinq ans, avec le récépissé de déclaration annuelle de ruches.</p>
+      <p>Aucun modèle officiel n'existe : seule la présence des éléments exigés compte. Vérifie que ce document couvre bien ton activité avant de le présenter.</p>
+      <div class="reg-signature">
+        <div><span>Fait à</span></div>
+        <div><span>Le</span></div>
+        <div><span>Signature</span></div>
+      </div>
+    </div>`;
+}
+
+function registrePage(){
+  const annees = registreAnneesDisponibles();
+  const options = annees.map(a =>
+    `<option value="${a}" ${String(a) === registrePeriodeChoisie ? "selected" : ""}>Année ${a}</option>`).join("")
+    + `<option value="tout" ${registrePeriodeChoisie === "tout" ? "selected" : ""}>Tout l'historique</option>`;
+
+  return `
+    <section class="panel">
+      <h2>Registre d'élevage</h2>
+      <div class="muted" style="margin-bottom:14px">
+        Obligatoire dès que tu vends ou cèdes ta production hors usage domestique, et à conserver cinq ans.
+        Ce document reprend ce que tu as déjà saisi dans l'application.
+      </div>
+
+      <div class="field">
+        <label for="registreAnnee">Période</label>
+        <select id="registreAnnee" onchange="registreChangerPeriode(this.value)">${options}</select>
+      </div>
+
+      <button class="big-action primary" style="width:100%;min-height:64px" onclick="imprimerRegistre()">
+        🖨️ Imprimer ou enregistrer en PDF
+      </button>
+      <div class="muted" style="margin-top:8px;font-size:13px">
+        Sur téléphone, choisis « Enregistrer au format PDF » dans la fenêtre d'impression.
+      </div>
+    </section>
+
+    <section class="panel registre-doc" id="registreDoc" style="margin-top:0">
+      ${registreDocumentHTML()}
+    </section>`;
+}
+
+function registreChangerPeriode(valeur){
+  registrePeriodeChoisie = String(valeur || new Date().getFullYear());
+  const doc = document.getElementById("registreDoc");
+  if(doc) doc.innerHTML = registreDocumentHTML();
+}
+
+function imprimerRegistre(){
+  document.body.classList.add("impression-registre");
+  const nettoyer = () => document.body.classList.remove("impression-registre");
+  window.addEventListener("afterprint", nettoyer, { once:true });
+  // Filet : certains navigateurs mobiles n'émettent pas afterprint.
+  setTimeout(nettoyer, 60000);
+  setTimeout(() => window.print(), 80);
+}
+
+
 async function printQr(){
   const h=state.currentHive||state.hives[0];
   document.getElementById("printHiveName").textContent=h.code+" · Ruche "+h.name;
@@ -8201,6 +8529,14 @@ function rucheDemandeeParUrl(){
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
   {
+    version: "v37.7",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Le registre d'élevage sort enfin de l'application",
+        texte: "Obligatoire dès que tu vends ta production, et à conserver cinq ans. L'application saisissait déjà tout ce qu'il exige, mais rien n'en ressortait : le registre se trouve maintenant dans le menu ☰ et dans l'Administration. Choisis l'année, imprime-le ou enregistre-le en PDF. Il réunit ta fiche d'exploitation, l'emplacement des ruchers, le recensement des colonies, les traitements avec leur délai d'attente, les mouvements de colonies, les visites, le nourrissement et les récoltes." }
+    ]
+  },
+  {
     version: "v37.6",
     date: "Septembre 2026",
     nouveautes: [
@@ -8806,6 +9142,7 @@ function showPage(page){
   if(page === "admin"){ setHero("Administration", "Profil apiculteur", true); html = admin(); }
   if(page === "menu"){ setHero("Menu", "Navigation", true); html = menu(); }
   if(page === "mapGlobal"){ setHero("Carte", "Tous tes ruchers sur la carte", true); html = mapGlobalPage(); }
+  if(page === "registre"){ setHero("Registre d'élevage", "Document réglementaire à imprimer", true); html = registrePage(); }
   document.getElementById("content").innerHTML = html;
   // L'encart de stockage interroge deux API asynchrones : on le remplit
   // après le rendu plutôt que de retarder l'affichage de la page.
