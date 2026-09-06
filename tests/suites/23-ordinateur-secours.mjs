@@ -118,6 +118,16 @@ export default () => executerSuite("Ordinateur de secours et import",
     /ordinateur comme copie de secours/i.test(aide));
   rapport.verifier("elle prévient qu'importer remplace tout",
     /importer remplace tout/i.test(aide));
+  /* Question naturelle : « je branche le téléphone au PC, je ne peux pas
+     prendre les données ? ». Non — elles sont dans le stockage du
+     navigateur, hors d'atteinte du câble. Mais une fois exportées, si.
+     L'application doit le dire, sinon l'apiculteur cherche en vain. */
+  rapport.verifier("elle explique le câble et le Bluetooth",
+    /câble USB ou le Bluetooth/i.test(aide));
+  rapport.verifier("elle dit que le câble seul ne suffit pas",
+    /ni le câble ni le Bluetooth ne peuvent atteindre/i.test(aide));
+  rapport.verifier("et où trouver le fichier une fois exporté",
+    /Téléchargements/.test(aide));
   await neuf.page.setInputFiles('input[type=file][accept=".json"]', recent);
   await neuf.page.waitForTimeout(1200);
   const restaure = await neuf.page.evaluate(() => ({
