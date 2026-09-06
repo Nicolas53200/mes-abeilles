@@ -3561,7 +3561,13 @@ function admin(){
       </div>
       <div class="export-help">
         <strong>${escapeHtml(libelleDerniereSauvegarde())}</strong><br>
-        Le bouton télécharge une sauvegarde <strong>.json</strong>. Sur téléphone, la fenêtre de partage permet de l'envoyer directement vers ton Drive, ton courriel ou ton PC — range-la quelque part hors de ce téléphone. Si un écran de code s'affiche, ce n'est pas une erreur : c'est le contenu de la sauvegarde ; passe par le menu du navigateur → <strong>Télécharger</strong>.
+        Le bouton fabrique une sauvegarde <strong>.json</strong>. Sur téléphone, la fenêtre de partage qui s'ouvre propose <strong>Bluetooth</strong>, le partage rapide, ton Drive ou ton courriel — range le fichier quelque part hors de ce téléphone. Si un écran de code s'affiche, ce n'est pas une erreur : c'est le contenu de la sauvegarde ; passe par le menu du navigateur → <strong>Télécharger</strong>.
+      </div>
+
+      <div class="export-help">
+        <strong>Par le câble USB ou le Bluetooth</strong><br>
+        Les données vivent à l'intérieur du navigateur, dans un dossier système que ni le câble ni le Bluetooth ne peuvent atteindre : branché sur un PC, ton téléphone ne montre que Photos, Téléchargements et Documents. Il faut donc <em>d'abord</em> appuyer sur Exporter — c'est ce geste qui transforme tes ruches en fichier.<br>
+        Ensuite, tout est possible : le fichier se trouve dans <strong>Téléchargements</strong>, visible par le câble, et le bouton de partage propose le Bluetooth directement.
       </div>
 
       ${copieAvantImport() ? `
@@ -3580,7 +3586,7 @@ function admin(){
       <div class="export-help">
         <strong>Changer de téléphone</strong><br>
         Tes données ne sont que sur cet appareil : aucun compte, aucun serveur. Un nouveau téléphone ouvrira donc une application vide, et rien ne pourra être récupéré sans fichier.<br>
-        <strong>1.</strong> Sur l'ancien téléphone : <em>Exporter vers PC</em>, puis envoie-toi le fichier.<br>
+        <strong>1.</strong> Sur l'ancien téléphone : <em>Exporter vers PC</em>, puis récupère le fichier — câble USB, Bluetooth, courriel ou Drive, au choix.<br>
         <strong>2.</strong> Sur le nouveau : ouvre l'application, puis <em>Importer depuis PC</em> et choisis ce fichier.<br>
         Le fichier rangé sur ton ordinateur fait tout aussi bien l'affaire : PC → nouveau téléphone, c'est le même geste.
       </div>
