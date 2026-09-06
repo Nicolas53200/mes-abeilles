@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v37.7</title>
+  <title>Mes Abeilles 🐝 v37.8</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2641,7 +2641,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v37.7";
+const APP_VERSION = "v37.8";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -4920,9 +4920,11 @@ function saveModule(section){
   }
 
   if(section === "miel"){
+    const dateRecolte = val("mielDate", todayISO());
     const item = {
       id:"recolte_" + Date.now(),
-      date: val("mielDate", todayISO()),
+      date: dateRecolte,
+      lot: val("mielLot", "").trim() || lotSuivant(dateRecolte),
       kilos: Number(val("mielKilos","0")),
       type: val("mielType","Miel de printemps"),
       butinage: val("mielButinage","Lavande"),
@@ -5780,6 +5782,11 @@ function hiveSectionContent(h){
       <div class="module-form-card" id="moduleForm">
         ${moduleFormHeader("Nouvelle récolte")}
         <div class="field"><label>Date récolte</label><input id="mielDate" type="date" value="${todayISO()}"></div>
+        <div class="field">
+          <label for="mielLot">Numéro de lot</label>
+          <input id="mielLot" value="${escapeHtml(lotSuivant(todayISO()))}" maxlength="30">
+          <div class="mini-help">À reporter sur l'étiquette des pots. Obligatoire dès que tu vends : il relie le pot à cette récolte.</div>
+        </div>
         <div class="field"><label>Kilos récoltés</label><input id="mielKilos" type="number" step="0.1" placeholder="Ex : 12"></div>
         <div class="field"><label>Type de miel</label><select id="mielType"><option>Miel de printemps</option><option>Miel d’été</option><option>Miel toutes fleurs</option><option>Miel de lavande</option><option>Miel de châtaignier</option><option>Miel de forêt</option><option>Autre</option></select></div>
         <div class="field"><label>Butinage principal</label><select id="mielButinage"><option>Lavande</option><option>Acacia</option><option>Châtaignier</option><option>Tilleul</option><option>Tournesol</option><option>Colza</option><option>Ronces</option><option>Trèfle</option><option>Bruyère</option><option>Forêt</option><option>Prairie</option><option>Miellat</option></select></div>
@@ -5787,7 +5794,13 @@ function hiveSectionContent(h){
         <button class="big-action primary module-save-btn" style="width:100%;min-height:70px" onclick="saveModule('miel')">Enregistrer la récolte</button>
       </div>
     ` : ""}
-    ${moduleHistoryHTML(h,"recoltes","Aucune récolte enregistrée.", r => record(formatDateFr(r.date), escapeHtml(r.type) + " · " + escapeHtml(r.kilos) + " kg", `Butinage : ${escapeHtml(r.butinage)}` + (r.notes ? ` · ${escapeHtml(r.notes)}` : "")))}
+    ${moduleHistoryHTML(h,"recoltes","Aucune récolte enregistrée.", r => record(
+        formatDateFr(r.date),
+        escapeHtml(r.type) + " · " + escapeHtml(r.kilos) + " kg",
+        (r.lot
+          ? `<strong>Lot ${escapeHtml(r.lot)}</strong> · `
+          : `<button class="calendar-inline-btn" onclick="attribuerLot('${escapeJsAttr(h.code)}','${escapeJsAttr(r.id)}')">🏷️ Attribuer un lot</button><br>`)
+        + `Butinage : ${escapeHtml(r.butinage)}` + (r.notes ? ` · ${escapeHtml(r.notes)}` : "")))}
   `;
   
   if(s === "traitements") return `
@@ -6815,6 +6828,70 @@ function qrReedSolomon(data, degree){
 }
 
 
+/* ── Numéro de lot des récoltes ──────────────────────
+   Dès qu'un pot est vendu, son étiquette doit porter un numéro de lot,
+   et ce numéro doit relier le pot à une récolte identifiée : date,
+   rucher, nombre de hausses. C'est le lien entre l'étagère du marché et
+   le registre d'élevage. Le format est libre, à condition d'être
+   univoque ; l'usage courant est « L 2026-09-A ». */
+
+function lettreLot(n){
+  let s = "";
+  n = Number(n) || 0;
+  do{
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  }while(n >= 0);
+  return s;
+}
+
+function indiceLettre(lettres){
+  let n = 0;
+  for(const c of String(lettres)) n = n * 26 + (c.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+/* Le prochain lot libre du mois, tous ruchers confondus : deux récoltes
+   du même mois ne doivent jamais porter le même numéro. */
+function lotSuivant(dateISO){
+  const mois = String(dateISO || todayISO()).slice(0, 7);
+  let max = -1;
+  (state.hives || []).forEach(h => {
+    (h.recoltes || []).forEach(r => {
+      const m = String(r && r.lot || "").trim().toUpperCase().match(/^L\s*(\d{4}-\d{2})-([A-Z]+)$/);
+      if(m && m[1] === mois) max = Math.max(max, indiceLettre(m[2]));
+    });
+  });
+  return "L " + mois + "-" + lettreLot(max + 1);
+}
+
+/* Attribue un lot à une récolte déjà enregistrée : sans cela, tout ce
+   qui a été saisi avant cette version resterait sans traçabilité. */
+function attribuerLot(codeRuche, idRecolte){
+  const h = trouverRucheParCode(codeRuche) || state.currentHive;
+  if(!h) return;
+  ensureModuleArrays(h);
+  const r = (h.recoltes || []).find(x => String(x.id) === String(idRecolte));
+  if(!r){ showToast("Récolte introuvable"); return; }
+  if(r.lot){ showToast("Cette récolte a déjà un lot"); return; }
+  r.lot = lotSuivant(r.date);
+  saveState();
+  document.getElementById("content").innerHTML = hiveDetail(h.code);
+  drawAllQr(h.code);
+  showToast("✓ Lot " + r.lot + " attribué");
+}
+
+/* Nombre de hausses retirées le jour de la récolte, quand l'apiculteur
+   l'a noté : c'est l'élément que la traçabilité demande en plus de la
+   date et du rucher. */
+function haussesRetirees(h, dateISO){
+  const jour = String(dateISO || "").slice(0,10);
+  if(!jour) return "";
+  const e = (h.hausses || []).find(x =>
+    String(x && x.date || "").slice(0,10) === jour && /retir/i.test(String(x.action || "")));
+  return e ? String(e.nombre || "") : "";
+}
+
 /* ── Registre d'élevage apicole ──────────────────────
    Obligatoire pour tout apiculteur qui vend ou cède sa production hors
    usage domestique (arrêté du 5 juin 2000), à conserver cinq ans. Aucun
@@ -6960,6 +7037,16 @@ function registreDocumentHTML(){
     registreCell(x.e.type), registreCell(x.e.kilos), registreCell(x.e.butinage)
   ]);
 
+  const lots = registreEvenements("recoltes", p)
+    .filter(x => String(x.e.lot || "").trim())
+    .map(x => [
+      registreCell(x.e.lot), registreCell(formatDateFr(x.e.date)),
+      registreCell(x.h.code), registreCell(x.h.name),
+      registreCell(apiaryNameForHive(x.h)),
+      registreCell(x.e.type), registreCell(x.e.kilos),
+      registreCell(haussesRetirees(x.h, x.e.date))
+    ]);
+
   const colonies = hives.map(h => [
     registreCell(h.code), registreCell(h.name),
     registreCell(apiaryNameForHive(h)),
@@ -7014,6 +7101,10 @@ function registreDocumentHTML(){
     ${registreTableau("Récoltes",
       ["Date","Code","Colonie","Type de miel","Kilos","Butinage"], recoltes,
       "Aucune récolte enregistrée sur la période.")}
+
+    ${registreTableau("Traçabilité des lots de miel",
+      ["Lot","Date","Code","Colonie","Rucher","Type de miel","Kilos","Hausses retirées"], lots,
+      "Aucun lot attribué sur la période.")}
 
     <div class="reg-pied">
       <p>Registre tenu en application de l'arrêté du 5 juin 2000. À conserver cinq ans, avec le récépissé de déclaration annuelle de ruches.</p>
@@ -8528,6 +8619,16 @@ function rucheDemandeeParUrl(){
    en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
+  {
+    version: "v37.8",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Numéro de lot sur les récoltes",
+        texte: "Dès qu'un pot est vendu, son étiquette doit porter un numéro de lot reliant le pot à une récolte identifiée. Chaque nouvelle récolte en reçoit un automatiquement, au format L 2026-09-A, modifiable. Deux récoltes du même mois n'ont jamais le même, même sur des ruches différentes. Tes récoltes déjà saisies peuvent en recevoir un d'un simple appui sur « Attribuer un lot »." },
+      { titre: "Le registre trace les lots",
+        texte: "Une nouvelle section du registre d'élevage relie chaque lot à sa date, sa colonie, son rucher et le nombre de hausses retirées ce jour-là — exactement le lien que la traçabilité demande entre le pot et la récolte." }
+    ]
+  },
   {
     version: "v37.7",
     date: "Septembre 2026",
