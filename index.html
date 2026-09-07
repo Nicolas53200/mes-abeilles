@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v38.2</title>
+  <title>Mes Abeilles 🐝 v38.3</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -989,7 +989,13 @@
       position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
       background:#1e293b;color:#fff;border-radius:14px;padding:12px 20px;
       font-weight:900;font-size:14px;z-index:999;opacity:0;
-      transition:opacity .25s;pointer-events:none;white-space:nowrap;
+      transition:opacity .25s;pointer-events:none;
+      /* white-space:nowrap retiré : sans largeur maximale, tout message un
+         peu long débordait de l'écran et se retrouvait tronqué — sur un
+         petit téléphone, plus de la moitié du texte manquait. Un message
+         court tient toujours sur une ligne, il n'atteint jamais la borne. */
+      max-width:min(92vw, 420px);
+      text-align:center;line-height:1.35;
     }
     .toast.show{opacity:1}
 
@@ -1460,8 +1466,12 @@
 }
 #globalMap{
   width:100%;
-  height:calc(100vh - 260px);
-  min-height:340px;
+  /* 260px couvraient l'en-tête, mais ni la barre de navigation du bas
+     (~100px, en position fixe) ni le bouton de zone désormais au-dessus.
+     La carte débordait donc sous la barre, et poussait tout le reste hors
+     de l'écran. */
+  height:calc(100vh - 400px);
+  min-height:300px;
   background:#e8eff6;
   border-radius:26px;
   z-index:0;
@@ -2705,7 +2715,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v38.2";
+const APP_VERSION = "v38.3";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -8896,6 +8906,14 @@ function rucheDemandeeParUrl(){
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
   {
+    version: "v38.3",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Le bouton de la zone de butinage était introuvable",
+        texte: "Il était placé sous la carte — laquelle occupe presque tout l'écran d'un téléphone. Le bouton tombait donc hors de vue sur tous les modèles, et faire glisser le doigt sur la carte déplaçait la carte au lieu de faire défiler la page : il était impossible à atteindre. Il est maintenant juste au-dessus de la carte, visible dès l'ouverture. Et quand deux de tes ruchers se recouvrent, un message te le dit tout de suite au lieu d'attendre que tu descendes." }
+    ]
+  },
+  {
     version: "v38.2",
     date: "Septembre 2026",
     nouveautes: [
@@ -9587,6 +9605,19 @@ function basculerZonesButinage(){
     if(state.zonesButinage) _coucheZones = dessinerZonesButinage(map);
   }
   majPanneauZones();
+
+  /* Le panneau détaillé est sous la carte, donc hors de l'écran au moment
+     où l'apiculteur appuie. Le seul point qui ne peut pas attendre qu'il
+     défile, c'est un recouvrement entre ses ruchers. */
+  if(state.zonesButinage){
+    const paires = ruchersQuiSeRecouvrent();
+    if(paires.length){
+      const p = paires[0];
+      showToast(paires.length === 1
+        ? `⚠️ ${p.a} et ${p.b} se partagent une zone (${distanceLisible(p.distance)})`
+        : `⚠️ ${paires.length} ruchers se partagent une zone — détails sous la carte`);
+    }
+  }
 }
 
 function mapGlobalPage(){
@@ -9602,19 +9633,34 @@ function mapGlobalPage(){
   const noGpsCount = state.hives.length - hivesWithGps.length;
 
   const actif = !!state.zonesButinage;
-  const zoneHTML = hivesWithGps.length ? `
-      <button id="btnZoneVol" type="button" class="map-zone-btn${actif ? " on" : ""}" style="margin-top:10px"
+
+  /* LE BOUTON PASSE AU-DESSUS DE LA CARTE. Placé en dessous, il tombait
+     hors de l'écran sur TOUS les téléphones : la carte fait à elle seule
+     presque toute la hauteur utile, et la barre du bas mange le reste.
+     Mesuré sur iPhone 13 — carte de 218 à 802 px, barre du bas à 744, et
+     le bouton commençant à 861 sur un écran de 844. Il existait sans que
+     personne puisse le voir. Le faire défiler n'était pas une réponse :
+     poser le doigt sur la carte fait glisser la carte, pas la page. */
+  const boutonZone = hivesWithGps.length ? `
+      <button id="btnZoneVol" type="button" class="map-zone-btn${actif ? " on" : ""}"
               aria-pressed="${actif ? "true" : "false"}" onclick="basculerZonesButinage()">${
-        actif ? "🌸 Masquer la zone de butinage" : "🌸 Voir la zone de butinage"}</button>
-      <div id="zoneVolInfo" class="zone-info"${actif ? "" : ' style="display:none"'}>${panneauZonesHTML()}</div>` : "";
+        actif ? "🌸 Masquer la zone de butinage" : "🌸 Voir la zone de butinage"}</button>` : "";
+
+  /* Le panneau d'explication reste SOUS la carte : les cercles sont ce que
+     l'apiculteur vient voir, du texte ne doit pas les repousser hors de
+     l'écran. Ce qu'il contient d'urgent — un recouvrement entre ruchers —
+     est annoncé par un message dès l'activation. */
+  const panneauZone = hivesWithGps.length ?
+      `<div id="zoneVolInfo" class="zone-info"${actif ? "" : ' style="display:none"'}>${panneauZonesHTML()}</div>` : "";
 
   return `
     <section class="panel" style="padding-top:0">
+      ${boutonZone}
       <div class="map-global-wrap">
         <div id="globalMap"></div>
       </div>
       ${legendHTML ? `<div class="map-legend">${legendHTML}</div>` : ""}
-      ${zoneHTML}
+      ${panneauZone}
       ${noGpsCount > 0 ? `
         <div class="map-no-gps">
           <strong>${noGpsCount} ruche${noGpsCount > 1 ? "s" : ""} sans coordonnées GPS</strong> —
