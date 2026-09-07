@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v38.5</title>
+  <title>Mes Abeilles 🐝 v38.6</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -1530,6 +1530,22 @@
 /* Légende posée dans le coin de la carte. Le coin bas-gauche est le seul
    libre : Leaflet occupe le haut-gauche avec le zoom et le bas-droit avec
    ses mentions de source. */
+.miel-net{
+  background:#f0fdf4;
+  border:1px solid #bbf7d0;
+  border-radius:14px;
+  padding:13px 14px;
+  margin:4px 0 12px;
+  font-size:16px;font-weight:950;
+  color:#166534;
+  text-align:center;
+}
+.miel-net.miel-net-alerte{
+  background:#fef2f2;border-color:#fecaca;color:#991b1b;
+  font-size:14px;
+}
+.miel-detail{font-size:12px;color:var(--muted);font-weight:700}
+
 .zone-legende{
   position:absolute;
   left:10px;bottom:10px;
@@ -2747,7 +2763,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v38.5";
+const APP_VERSION = "v38.6";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -5077,15 +5093,45 @@ function saveModule(section){
 
   if(section === "miel"){
     const dateRecolte = val("mielDate", todayISO());
-    const item = {
+    const mode = val("mielMode", "direct");
+
+    /* « kilos » reste le miel NET quel que soit le mode : c'est ce que
+       lisent le total de la ruche, le registre et la traçabilité du lot.
+       Le détail de la pesée s'ajoute à côté, il ne le remplace pas. */
+    let kilos = Number(val("mielKilos","0"));
+    const detail = {};
+    if(mode === "brut-tare"){
+      const brut = Number(val("mielBrut","0"));
+      const tare = Number(val("mielTare","0"));
+      const hausses = Number(val("mielHausses","0"));
+      kilos = poidsNetRecolte(brut, tare, hausses);
+      /* Une tare plus lourde que la pesée donne un poids négatif : c'est
+         une erreur de saisie, pas une récolte. L'enregistrer quand même,
+         fût-ce ramené à zéro, ferait entrer une fausse ligne dans le
+         registre d'élevage — avec un numéro de lot attaché. On refuse, et
+         on dit pourquoi ; l'apiculteur garde sa saisie sous les yeux. */
+      if(kilos < 0){
+        showToast("Le poids brut est inférieur à la tare : vérifie ta saisie");
+        majPoidsNet();
+        return;
+      }
+      Object.assign(detail, { mode:"brut-tare", brut, tare, hausses });
+      /* La tare se retient : on ne pèse une hausse vide qu'une fois. */
+      if(tare > 0){
+        state.profil = state.profil || {};
+        state.profil.tareHausse = tare;
+      }
+    }
+
+    const item = Object.assign({
       id:"recolte_" + Date.now(),
       date: dateRecolte,
       lot: val("mielLot", "").trim() || lotSuivant(dateRecolte),
-      kilos: Number(val("mielKilos","0")),
+      kilos,
       type: val("mielType","Miel de printemps"),
       butinage: val("mielButinage","Lavande"),
       notes: val("mielNotes","")
-    };
+    }, detail);
     h.recoltes.unshift(item);
     h.honey = (h.recoltes || []).reduce((s,r)=>s+Number(r.kilos||0),0);
   }
@@ -5939,13 +5985,31 @@ function hiveSectionContent(h){
     ${state.moduleFormOpen === "miel" ? `
       <div class="module-form-card" id="moduleForm">
         ${moduleFormHeader("Nouvelle récolte")}
-        <div class="field"><label>Date récolte</label><input id="mielDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Date récolte</label><input id="mielDate" type="date" value="${todayISO()}" onchange="majHaussesDuJour()"></div>
         <div class="field">
           <label for="mielLot">Numéro de lot</label>
           <input id="mielLot" value="${escapeHtml(lotSuivant(todayISO()))}" maxlength="30">
           <div class="mini-help">À reporter sur l'étiquette des pots. Obligatoire dès que tu vends : il relie le pot à cette récolte.</div>
         </div>
-        <div class="field"><label>Kilos récoltés</label><input id="mielKilos" type="number" step="0.1" placeholder="Ex : 12"></div>
+        <div class="field">
+          <label for="mielMode">Comment tu mesures</label>
+          <select id="mielMode" onchange="majModeRecolte()">
+            <option value="direct">Kilos de miel, directement</option>
+            <option value="brut-tare">Poids brut, moins la tare des hausses</option>
+          </select>
+        </div>
+        <div id="mielChampsDirect" class="field"><label>Kilos récoltés</label><input id="mielKilos" type="number" step="0.1" placeholder="Ex : 12"></div>
+        <div id="mielChampsTare" style="display:none">
+          <div class="field"><label>Poids brut pesé (kg)</label>
+            <input id="mielBrut" type="number" step="0.1" min="0" placeholder="Ex : 46,5" oninput="majPoidsNet()"></div>
+          <div class="field"><label>Nombre de hausses pesées</label>
+            <input id="mielHausses" type="number" step="1" min="0" value="${escapeHtml(haussesRetirees(h, todayISO()))}" oninput="majPoidsNet()">
+            <div class="mini-help">Pré-rempli si tu as noté un retrait de hausses à cette date dans la section Hausses.</div></div>
+          <div class="field"><label>Tare : poids d'une hausse vide (kg)</label>
+            <input id="mielTare" type="number" step="0.1" min="0" value="${escapeHtml(tareMemorisee())}" oninput="majPoidsNet()">
+            <div class="mini-help">Pèse une hausse vide avec ses cadres, une seule fois : l'application s'en souviendra pour les récoltes suivantes.</div></div>
+          <div id="mielNet" class="miel-net">Miel net : —</div>
+        </div>
         <div class="field"><label>Type de miel</label><select id="mielType"><option>Miel de printemps</option><option>Miel d’été</option><option>Miel toutes fleurs</option><option>Miel de lavande</option><option>Miel de châtaignier</option><option>Miel de forêt</option><option>Autre</option></select></div>
         <div class="field"><label>Butinage principal</label><select id="mielButinage"><option>Lavande</option><option>Acacia</option><option>Châtaignier</option><option>Tilleul</option><option>Tournesol</option><option>Colza</option><option>Ronces</option><option>Trèfle</option><option>Bruyère</option><option>Forêt</option><option>Prairie</option><option>Miellat</option></select></div>
         <div class="field"><label>Notes</label><textarea id="mielNotes"></textarea></div>
@@ -5958,7 +6022,10 @@ function hiveSectionContent(h){
         (r.lot
           ? `<strong>Lot ${escapeHtml(r.lot)}</strong> · `
           : `<button class="calendar-inline-btn" onclick="attribuerLot('${escapeJsAttr(h.code)}','${escapeJsAttr(r.id)}')">🏷️ Attribuer un lot</button><br>`)
-        + `Butinage : ${escapeHtml(r.butinage)}` + (r.notes ? ` · ${escapeHtml(r.notes)}` : "")))}
+        + `Butinage : ${escapeHtml(r.butinage)}` + (r.notes ? ` · ${escapeHtml(r.notes)}` : "")
+        + (r.mode === "brut-tare"
+            ? `<br><span class="miel-detail">Pesée : ${escapeHtml(r.brut)} kg brut − ${escapeHtml(r.hausses)} hausse${Number(r.hausses) > 1 ? "s" : ""} × ${escapeHtml(r.tare)} kg</span>`
+            : "")))}
   `;
   
   if(s === "traitements") return `
@@ -7200,6 +7267,85 @@ function attribuerLot(codeRuche, idRecolte){
 /* Nombre de hausses retirées le jour de la récolte, quand l'apiculteur
    l'a noté : c'est l'élément que la traçabilité demande en plus de la
    date et du rucher. */
+/* ── PESÉE BRUT MOINS TARE ──────────────────────────────────────────
+   L'apiculteur pèse ses hausses pleines et soustrait de tête le poids des
+   hausses vides. C'est un calcul fait debout au rucher, les mains prises :
+   l'application peut le porter à sa place.
+
+   RIEN N'EST RETIRÉ. La saisie directe en kilos reste le mode par défaut,
+   et le champ « kilos » de la récolte garde exactement le même sens —
+   c'est toujours le miel net. Le total de la ruche, le registre et la
+   traçabilité du lot continuent donc de le lire sans rien savoir de la
+   manière dont il a été obtenu. */
+
+/* La tare vit dans le profil, qui traverse déjà les trois listes blanches
+   de l'export : aucune nouvelle clé d'état à déclarer, donc aucun risque
+   de la voir se perdre au passage par un fichier de sauvegarde. */
+function tareMemorisee(){
+  const t = Number(state.profil && state.profil.tareHausse);
+  return Number.isFinite(t) && t > 0 ? String(t) : "";
+}
+
+function poidsNetRecolte(brut, tare, hausses){
+  const b = Number(brut) || 0;
+  const t = Number(tare) || 0;
+  const n = Number(hausses) || 0;
+  /* Un dixième de kilo suffit largement, et évite les 12.299999999999999
+     que produit l'arithmétique à virgule flottante. */
+  return Math.round((b - t * n) * 10) / 10;
+}
+
+function majPoidsNet(){
+  const el = document.getElementById("mielNet");
+  if(!el) return;
+  const brut = Number(document.getElementById("mielBrut")?.value || 0);
+  const tare = Number(document.getElementById("mielTare")?.value || 0);
+  const nb   = Number(document.getElementById("mielHausses")?.value || 0);
+
+  if(!brut){
+    el.textContent = "Miel net : —";
+    el.classList.remove("miel-net-alerte");
+    return;
+  }
+  const net = poidsNetRecolte(brut, tare, nb);
+  /* Une tare plus lourde que la pesée est forcément une erreur de saisie.
+     Le dire tout de suite vaut mieux que d'enregistrer une récolte fausse
+     qui partira ensuite dans le registre et sur une étiquette de pot. */
+  if(net < 0){
+    el.textContent = `Miel net : ${net} kg — vérifie le poids brut ou la tare`;
+    el.classList.add("miel-net-alerte");
+  }else{
+    el.textContent = `Miel net : ${net} kg`;
+    el.classList.remove("miel-net-alerte");
+  }
+}
+
+function majModeRecolte(){
+  const mode = document.getElementById("mielMode")?.value || "direct";
+  const direct = document.getElementById("mielChampsDirect");
+  const tare = document.getElementById("mielChampsTare");
+  if(direct) direct.style.display = mode === "direct" ? "" : "none";
+  if(tare) tare.style.display = mode === "direct" ? "none" : "";
+  if(mode !== "direct") majPoidsNet();
+}
+
+/* Le nombre de hausses retirées dépend du jour : changer la date de la
+   récolte doit changer la proposition. */
+function majHaussesDuJour(){
+  const champ = document.getElementById("mielHausses");
+  const date = document.getElementById("mielDate")?.value;
+  const h = state.currentHive;
+  if(!champ || !date || !h) return;
+  const propose = haussesRetirees(h, date);
+  /* On ne remplace que ce que l'application avait elle-même proposé : une
+     valeur saisie à la main n'est jamais écrasée. */
+  if(champ.value === "" || champ.dataset.propose === champ.value){
+    champ.value = propose;
+    champ.dataset.propose = propose;
+    majPoidsNet();
+  }
+}
+
 function haussesRetirees(h, dateISO){
   const jour = String(dateISO || "").slice(0,10);
   if(!jour) return "";
@@ -7360,7 +7506,10 @@ function registreDocumentHTML(){
       registreCell(x.h.code), registreCell(x.h.name),
       registreCell(apiaryNameForHive(x.h)),
       registreCell(x.e.type), registreCell(x.e.kilos),
-      registreCell(haussesRetirees(x.h, x.e.date))
+      /* Le nombre de hausses vient d'abord de la pesée quand elle a été
+         faite : c'est la source la plus sûre. À défaut, on retombe sur le
+         retrait noté dans la section Hausses. Jamais un chiffre inventé. */
+      registreCell(x.e.hausses || haussesRetirees(x.h, x.e.date))
     ]);
 
   const colonies = hives.map(h => [
@@ -8937,6 +9086,14 @@ function rucheDemandeeParUrl(){
    en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
+  {
+    version: "v38.6",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Fini le calcul de tête au rucher : la tare des hausses",
+        texte: "Tu pesais tes hausses pleines puis tu soustrayais de tête le poids des hausses vides, debout devant tes ruches et les mains prises. L'application peut le faire à ta place. Dans une nouvelle récolte, choisis « Poids brut, moins la tare des hausses » : tu donnes le poids pesé, le nombre de hausses et le poids d'une hausse vide, et le miel net s'affiche avant même d'enregistrer. Le nombre de hausses se pré-remplit si tu as noté leur retrait, et la tare est retenue pour les fois suivantes — tu ne pèses une hausse vide qu'une fois. Rien ne change si tu préfères ton habitude : la saisie directe en kilos reste le mode proposé par défaut." }
+    ]
+  },
   {
     version: "v38.5",
     date: "Septembre 2026",
