@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v38.4</title>
+  <title>Mes Abeilles 🐝 v38.5</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -1527,6 +1527,38 @@
   border-color:#fdba74;
   color:#7c2d12;
 }
+/* Légende posée dans le coin de la carte. Le coin bas-gauche est le seul
+   libre : Leaflet occupe le haut-gauche avec le zoom et le bas-droit avec
+   ses mentions de source. */
+.zone-legende{
+  position:absolute;
+  left:10px;bottom:10px;
+  /* #globalMap est en z-index:0 et forme son propre contexte : tout ce qui
+     est dans la carte y reste enfermé, une valeur de 2 suffit à passer
+     au-dessus sans jamais concurrencer les surcouches de l'application. */
+  z-index:2;
+  background:rgba(255,255,255,.93);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  border:1px solid rgba(15,23,42,.13);
+  border-radius:12px;
+  padding:8px 10px 7px;
+  box-shadow:0 4px 14px rgba(15,23,42,.16);
+  /* Elle ne doit JAMAIS gêner le déplacement de la carte : le doigt passe
+     au travers et atteint les tuiles en dessous. */
+  pointer-events:none;
+  max-width:52%;
+}
+.zl-titre{
+  font-size:10px;font-weight:950;
+  text-transform:uppercase;letter-spacing:.06em;
+  color:#64748b;margin-bottom:5px;
+}
+.zl-ligne{display:flex;align-items:center;gap:7px;margin-bottom:3px}
+.zl-ligne:last-child{margin-bottom:0}
+.zl-ligne .zone-ring-line{width:20px;margin-top:0;flex-shrink:0}
+.zl-km{font-size:12px;font-weight:900;color:#0b1328;min-width:32px}
+.zl-quoi{font-size:11px;font-weight:700;color:#64748b}
+
 .zone-info{
   background:var(--card);
   border-radius:18px;
@@ -2715,7 +2747,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v38.4";
+const APP_VERSION = "v38.5";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -8906,6 +8938,14 @@ function rucheDemandeeParUrl(){
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
   {
+    version: "v38.5",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Une légende sur la carte des zones de butinage",
+        texte: "Les trois anneaux se dessinaient sans que rien, sur la carte, ne dise lequel était lequel : l'explication existait, mais dans le panneau sous la carte, hors de vue au moment où tu regardes les cercles. Une petite légende apparaît maintenant dans le coin de la carte, avec les trois rayons et ce qu'ils veulent dire. Le doigt la traverse : elle ne gêne jamais le déplacement de la carte." }
+    ]
+  },
+  {
     version: "v38.4",
     date: "Septembre 2026",
     nouveautes: [
@@ -9466,11 +9506,14 @@ function mapColorForApiary(name){
    Elles sont indicatives, et l'application le dit à l'apiculteur plutôt
    que de les présenter comme une mesure. */
 const ZONES_BUTINAGE = [
-  { cle:"proche", rayon:1000, libelle:"1 km · butinage principal",
+  { cle:"proche", rayon:1000, court:"1 km", resume:"principal",
+    libelle:"1 km · butinage principal",
     detail:"L'essentiel des voyages quand la ressource est proche. Une abeille économise son énergie : elle ne va pas plus loin si elle n'y est pas obligée." },
-  { cle:"habituel", rayon:3000, libelle:"3 km · rayon habituel",
+  { cle:"habituel", rayon:3000, court:"3 km", resume:"habituel",
+    libelle:"3 km · rayon habituel",
     detail:"La référence courante en apiculture, soit près de 2 800 hectares autour du rucher." },
-  { cle:"max", rayon:5000, libelle:"5 km · portée maximale",
+  { cle:"max", rayon:5000, court:"5 km", resume:"maximum",
+    libelle:"5 km · portée maximale",
     detail:"Des vols plus longs existent, mais au-delà le voyage ne rapporte plus assez à la colonie." }
 ];
 
@@ -9590,6 +9633,23 @@ function ruchersQuiSeRecouvrent(){
   return paires.sort((x, y) => x.distance - y.distance);
 }
 
+/* Une légende POSÉE SUR LA CARTE. Le panneau détaillé est sous la carte,
+   donc hors de l'écran au moment précis où l'apiculteur regarde les trois
+   anneaux : rien ne lui disait lequel était lequel. Elle se construit à
+   partir de ZONES_BUTINAGE, seule source de vérité — un rayon modifié se
+   répercute ici, sur les cercles et dans le panneau sans rien réécrire. */
+function legendeZoneHTML(){
+  const lignes = ZONES_BUTINAGE.map(z => `
+    <div class="zl-ligne">
+      <span class="zone-ring-line zr-${z.cle}"></span>
+      <span class="zl-km">${escapeHtml(z.court)}</span>
+      <span class="zl-quoi">${escapeHtml(z.resume)}</span>
+    </div>`).join("");
+  return `<div id="zoneLegende" class="zone-legende"${
+    state.zonesButinage ? "" : ' style="display:none"'}>
+      <div class="zl-titre">Butinage</div>${lignes}</div>`;
+}
+
 function panneauZonesHTML(){
   const anneaux = ZONES_BUTINAGE.map(z => `
     <div class="zone-ring">
@@ -9655,6 +9715,8 @@ function majPanneauZones(){
   }
   const info = document.getElementById("zoneVolInfo");
   if(info) info.style.display = actif ? "" : "none";
+  const leg = document.getElementById("zoneLegende");
+  if(leg) leg.style.display = actif ? "" : "none";
 }
 
 function basculerZonesButinage(){
@@ -9719,6 +9781,7 @@ function mapGlobalPage(){
       ${boutonZone}
       <div class="map-global-wrap">
         <div id="globalMap"></div>
+        ${hivesWithGps.length ? legendeZoneHTML() : ""}
       </div>
       ${legendHTML ? `<div class="map-legend">${legendHTML}</div>` : ""}
       ${panneauZone}

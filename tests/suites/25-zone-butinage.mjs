@@ -466,6 +466,86 @@ export default () => executerSuite('Zone de butinage',
 
   await page.evaluate(d => { state.hives = d.hives; }, donnees);
 
+  /* ── LA LÉGENDE SUR LA CARTE ────────────────────────────────────
+     « cela fonctionne, peut-être mettre une légende ? » Trois anneaux se
+     dessinaient sans que rien, sur la carte, ne dise lequel était lequel :
+     l'explication existait, mais dans le panneau SOUS la carte, donc hors
+     de l'écran au moment précis où l'apiculteur regarde les cercles. */
+  rapport.section("Une légende là où on regarde les cercles");
+
+  await page.evaluate(d => { state.hives = d.hives; state.zonesButinage = false; saveState(); }, donnees);
+  await page.evaluate(() => showPage('mapGlobal'));
+  await page.waitForTimeout(400);
+
+  const eteinte = await page.evaluate(() => {
+    const l = document.getElementById('zoneLegende');
+    return { existe: !!l, visible: l && getComputedStyle(l).display !== 'none' };
+  });
+  rapport.verifier('elle reste cachée tant que les cercles ne sont pas tracés',
+    eteinte.existe && !eteinte.visible);
+
+  await page.click('#btnZoneVol');
+  await page.waitForTimeout(400);
+
+  const leg = await page.evaluate(() => {
+    const l = document.getElementById('zoneLegende');
+    const r = l.getBoundingClientRect();
+    const carte = document.getElementById('globalMap').getBoundingClientRect();
+    return {
+      visible: getComputedStyle(l).display !== 'none',
+      texte: l.innerText,
+      dansLaCarte: r.left >= carte.left - 1 && r.right <= carte.right + 1
+                   && r.top >= carte.top - 1 && r.bottom <= carte.bottom + 1,
+      partDeLaCarte: Math.round(100 * (r.width * r.height) / (carte.width * carte.height)),
+      laisseLeDoigtPasser: getComputedStyle(l).pointerEvents === 'none',
+      /* Leaflet place son zoom en haut-gauche et ses mentions de source en
+         bas-droite. La légende doit donc tenir dans le quart BAS-GAUCHE.
+         Chercher « .leaflet-control-zoom » n'aurait rien prouvé ici : la
+         doublure des tests ne crée aucun contrôle, et l'absence d'élément
+         aurait fait passer le contrôle à vide. La position, elle, se
+         vérifie vraiment. */
+      quartBasGauche: (r.left + r.width/2) < carte.left + carte.width/2
+                   && (r.top + r.height/2) > carte.top + carte.height/2
+    };
+  });
+
+  rapport.verifier('elle apparaît avec les cercles', leg.visible);
+  rapport.verifier('les trois rayons y figurent',
+    /1 km/.test(leg.texte) && /3 km/.test(leg.texte) && /5 km/.test(leg.texte),
+    leg.texte.replace(/\n/g, ' · '));
+  rapport.verifier('chacun est qualifié, pas seulement chiffré',
+    /principal/.test(leg.texte) && /habituel/.test(leg.texte) && /maximum/.test(leg.texte));
+  rapport.verifier('elle est posée dans le cadre de la carte', leg.dansLaCarte);
+  rapport.verifier('elle reste discrète', leg.partDeLaCarte <= 15, `${leg.partDeLaCarte} % de la carte`);
+  rapport.verifier('le doigt la traverse : elle ne bloque pas la carte',
+    leg.laisseLeDoigtPasser);
+  rapport.verifier('elle occupe le coin bas-gauche, le seul que Leaflet laisse libre',
+    leg.quartBasGauche);
+
+  /* Une légende qui contredit les cercles serait pire que pas de légende :
+     les deux doivent naître de la même source. */
+  const accord = await page.evaluate(() => {
+    const surCarte = [...document.querySelectorAll('#zoneLegende .zl-km')].map(e => e.textContent.trim());
+    const rayons = [...new Set(window.__cercles.map(c => c.options.radius))].sort((a, b) => a - b);
+    return { surCarte, rayons, attendus: rayons.map(r => (r / 1000) + ' km') };
+  });
+  rapport.verifier('la légende annonce exactement les rayons dessinés',
+    JSON.stringify(accord.surCarte) === JSON.stringify(accord.attendus),
+    `${accord.surCarte.join('/')} vs ${accord.attendus.join('/')}`);
+
+  const styles = await page.evaluate(() => {
+    const l = [...document.querySelectorAll('#zoneLegende .zone-ring-line')];
+    return l.map(e => getComputedStyle(e).borderTopStyle);
+  });
+  rapport.verifier('le trait plein distingue le rayon de référence',
+    styles[1] === 'solid' && styles[0] === 'dashed' && styles[2] === 'dashed',
+    styles.join(' · '));
+
+  await page.click('#btnZoneVol');
+  await page.waitForTimeout(300);
+  rapport.verifier('elle disparaît avec les cercles',
+    await page.evaluate(() => getComputedStyle(document.getElementById('zoneLegende')).display === 'none'));
+
   rapport.section("Rien d'autre ne doit avoir bougé");
   rapport.verifier('aucune erreur JavaScript sur tout le parcours',
     erreurs.length === 0, erreurs.join(' | '));
