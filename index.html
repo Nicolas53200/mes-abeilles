@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v38.1</title>
+  <title>Mes Abeilles 🐝 v38.2</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -1496,6 +1496,68 @@
   line-height:1.5;
 }
 .map-no-gps strong{color:var(--text)}
+
+/* ── Zone de butinage ── */
+.map-zone-btn{
+  width:100%;
+  border:1px solid var(--line);
+  background:var(--card);
+  color:var(--text);
+  border-radius:18px;
+  padding:15px 14px;
+  font-size:15px;
+  font-weight:900;
+  font-family:inherit;
+  cursor:pointer;
+  box-shadow:var(--shadow);
+  min-height:56px;
+}
+.map-zone-btn.on{
+  background:linear-gradient(135deg,#fff7ed,#fffbeb);
+  border-color:#fdba74;
+  color:#7c2d12;
+}
+.zone-info{
+  background:var(--card);
+  border-radius:18px;
+  padding:16px;
+  margin-top:12px;
+  box-shadow:var(--shadow);
+}
+.zone-ring{display:flex;align-items:flex-start;gap:11px;margin-bottom:12px}
+.zone-ring:last-child{margin-bottom:0}
+.zone-ring-line{
+  width:26px;height:0;flex-shrink:0;margin-top:9px;
+  border-top:3px solid #f97316;
+  border-radius:2px;
+}
+/* Les traits reprennent exactement le tracé des cercles sur la carte :
+   plein pour le rayon de référence, pointillé pour les deux autres. */
+.zone-ring-line.zr-proche{border-top-style:dashed}
+.zone-ring-line.zr-habituel{border-top-style:solid;border-top-width:4px}
+.zone-ring-line.zr-max{border-top-style:dashed;opacity:.55}
+.zone-ring-txt{font-size:13px;line-height:1.5;color:var(--muted)}
+.zone-ring-txt strong{display:block;color:var(--text);font-size:14px;font-weight:900}
+.zone-overlap{
+  background:#fff7ed;
+  border:1px solid #fed7aa;
+  border-radius:14px;
+  padding:13px 14px;
+  margin-top:14px;
+  font-size:13px;
+  line-height:1.5;
+  color:#7c2d12;
+}
+.zone-overlap strong{display:block;font-size:14px;font-weight:900;margin-bottom:7px}
+.zone-overlap ul{margin:0;padding-left:18px}
+.zone-overlap li{margin-bottom:3px}
+.zone-overlap p{margin:9px 0 0}
+.zone-note{
+  margin:14px 0 0;
+  font-size:12.5px;
+  line-height:1.55;
+  color:var(--muted);
+}
 /* Popup Leaflet custom */
 .bee-popup{min-width:190px;font-family:Inter,system-ui,sans-serif}
 .bee-popup-name{font-size:16px;font-weight:950;letter-spacing:-.03em;margin-bottom:4px}
@@ -2643,7 +2705,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v38.1";
+const APP_VERSION = "v38.2";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -2790,7 +2852,11 @@ const state = {
   derniereVersionVue: "",
   // Date du dernier export réussi. Sans elle, l'application ne peut pas
   // savoir si l'apiculteur a une copie de ses données quelque part.
-  derniereSauvegarde: ""
+  derniereSauvegarde: "",
+  // Affichage des cercles de butinage sur la carte. Préférence d'un
+  // apiculteur qui s'intéresse à l'implantation de ses ruchers : elle doit
+  // le suivre d'une ouverture à l'autre, pas se réarmer à chaque visite.
+  zonesButinage: false
 };
 loadState();
 
@@ -6243,6 +6309,7 @@ function mergeLoadedState(saved){
   if(typeof saved.hiveTourDone === "boolean") state.hiveTourDone = saved.hiveTourDone;
   if(typeof saved.derniereVersionVue === "string") state.derniereVersionVue = saved.derniereVersionVue;
   if(typeof saved.derniereSauvegarde === "string") state.derniereSauvegarde = saved.derniereSauvegarde;
+  if(typeof saved.zonesButinage === "boolean") state.zonesButinage = saved.zonesButinage;
   return Array.isArray(saved.hives) || !!saved.profil;
 }
 
@@ -6519,6 +6586,7 @@ function annulerImport(){
   state.complianceDocs = restaure.complianceDocs || {};
   state.alertSettings = {...getAlertSettings(), ...(restaure.alertSettings || {})};
   if(typeof restaure.derniereSauvegarde === "string") state.derniereSauvegarde = restaure.derniereSauvegarde;
+  if(typeof restaure.zonesButinage === "boolean") state.zonesButinage = restaure.zonesButinage;
   try{ localStorage.removeItem(LS_AVANT_IMPORT); }catch(e){}
   normalizeHives();
   saveState();
@@ -6538,7 +6606,7 @@ function importData(input){
       }
 
       // Validation de schéma : vérifier que chaque ruche a les champs requis
-      const ALLOWED_STATE_KEYS = ["hives","profil","complianceDocs","alertSettings","apiaries","onboardingDone","calendarPromptDone","hiveTourDone","derniereVersionVue","derniereSauvegarde"];
+      const ALLOWED_STATE_KEYS = ["hives","profil","complianceDocs","alertSettings","apiaries","onboardingDone","calendarPromptDone","hiveTourDone","derniereVersionVue","derniereSauvegarde","zonesButinage"];
       const sanitizedData = {};
       for(const key of ALLOWED_STATE_KEYS){
         if(key in data) sanitizedData[key] = data[key];
@@ -6594,6 +6662,7 @@ function importData(input){
       state.hiveTourDone = typeof imported.hiveTourDone === "boolean" ? imported.hiveTourDone : state.hiveTourDone;
       state.derniereVersionVue = typeof imported.derniereVersionVue === "string" ? imported.derniereVersionVue : state.derniereVersionVue;
       state.derniereSauvegarde = typeof imported.derniereSauvegarde === "string" ? imported.derniereSauvegarde : state.derniereSauvegarde;
+      state.zonesButinage = typeof imported.zonesButinage === "boolean" ? imported.zonesButinage : state.zonesButinage;
 
       normalizeHives();
       saveState();
@@ -8827,6 +8896,16 @@ function rucheDemandeeParUrl(){
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
   {
+    version: "v38.2",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "Voir la zone de butinage de tes ruchers",
+        texte: "Sur la carte, un bouton « 🌸 Voir la zone de butinage » trace autour de chaque rucher trois cercles : 1 km, où se font l'essentiel des voyages, 3 km, le rayon habituel — près de 2 800 hectares — et 5 km, la portée maximale. Utile pour voir ce qui entoure vraiment un rucher, et pour choisir l'emplacement du prochain." },
+      { titre: "L'application signale les ruchers qui se concurrencent",
+        texte: "Quand deux de tes ruchers sont assez proches pour que leurs zones se recouvrent, l'application le dit et donne la distance qui les sépare. Tes propres colonies puisent alors dans la même ressource : si une floraison est courte, la récolte peut s'en ressentir des deux côtés." }
+    ]
+  },
+  {
     version: "v38.1",
     date: "Septembre 2026",
     nouveautes: [
@@ -9351,6 +9430,165 @@ function mapColorForApiary(name){
   return _mapApiaryColorCache[key];
 }
 
+/* ── ZONES DE BUTINAGE ──────────────────────────────────────────────
+   Le butinage n'a pas de frontière. Un cercle unique laisserait croire à
+   une limite exacte, ce qui serait faux : la distance parcourue dépend de
+   la saison, du paysage et de ce qui fleurit. Trois anneaux disent mieux
+   ce qui se passe réellement — une densité qui décroît avec la distance.
+
+   Les distances retenues sont celles de la pratique apicole courante.
+   Elles sont indicatives, et l'application le dit à l'apiculteur plutôt
+   que de les présenter comme une mesure. */
+const ZONES_BUTINAGE = [
+  { cle:"proche", rayon:1000, libelle:"1 km · butinage principal",
+    detail:"L'essentiel des voyages quand la ressource est proche. Une abeille économise son énergie : elle ne va pas plus loin si elle n'y est pas obligée." },
+  { cle:"habituel", rayon:3000, libelle:"3 km · rayon habituel",
+    detail:"La référence courante en apiculture, soit près de 2 800 hectares autour du rucher." },
+  { cle:"max", rayon:5000, libelle:"5 km · portée maximale",
+    detail:"Des vols plus longs existent, mais au-delà le voyage ne rapporte plus assez à la colonie." }
+];
+
+/* Le rayon qui sert à juger d'un recouvrement : deux ruchers distants de
+   moins de deux fois ce rayon se partagent une partie de leur ressource. */
+const RAYON_RECOUVREMENT = 3000;
+
+/* Distance en mètres entre deux points, formule de haversine. À l'échelle
+   d'un rucher, une approximation plane suffirait ; celle-ci reste juste
+   partout, y compris outre-mer, pour le prix de trois lignes. */
+function distanceMetres(a, b){
+  if(!a || !b) return Infinity;
+  const R = 6371000;
+  const rad = x => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat/2) ** 2
+          + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon/2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function distanceLisible(m){
+  if(!Number.isFinite(m)) return "—";
+  return m < 1000 ? `${Math.round(m)} m`
+                  : `${(m/1000).toFixed(1).replace(".", ",")} km`;
+}
+
+/* Un cercle par RUCHER, pas par ruche : vingt ruches au même emplacement
+   donneraient vingt cercles superposés illisibles. Le centre est le
+   barycentre des ruches géolocalisées du rucher — à quelques dizaines de
+   mètres près, c'est bien l'emplacement du rucher. */
+function centresRuchers(){
+  const groupes = new Map();
+  (state.hives || []).forEach(h => {
+    const gps = getHiveGps(h);
+    if(!gps) return;
+    const nom = apiaryNameForHive(h) || "Sans rucher";
+    if(!groupes.has(nom)) groupes.set(nom, []);
+    groupes.get(nom).push(gps);
+  });
+  return Array.from(groupes.entries()).map(([nom, points]) => ({
+    nom,
+    ruches: points.length,
+    lat: points.reduce((t, p) => t + p.lat, 0) / points.length,
+    lon: points.reduce((t, p) => t + p.lon, 0) / points.length,
+    couleur: mapColorForApiary(nom)
+  })).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+}
+
+/* Les paires de ruchers dont les zones se chevauchent. C'est la raison
+   même pour laquelle un apiculteur veut voir ce cercle : savoir si ses
+   propres colonies se disputent la même ressource. */
+function ruchersQuiSeRecouvrent(){
+  const centres = centresRuchers();
+  const paires = [];
+  for(let i = 0; i < centres.length; i++){
+    for(let j = i + 1; j < centres.length; j++){
+      const d = distanceMetres(centres[i], centres[j]);
+      if(d < RAYON_RECOUVREMENT * 2){
+        paires.push({ a: centres[i].nom, b: centres[j].nom, distance: d });
+      }
+    }
+  }
+  return paires.sort((x, y) => x.distance - y.distance);
+}
+
+function panneauZonesHTML(){
+  const anneaux = ZONES_BUTINAGE.map(z => `
+    <div class="zone-ring">
+      <span class="zone-ring-line zr-${z.cle}"></span>
+      <div class="zone-ring-txt"><strong>${escapeHtml(z.libelle)}</strong>${escapeHtml(z.detail)}</div>
+    </div>`).join("");
+
+  const paires = ruchersQuiSeRecouvrent();
+  const recouvrement = paires.length ? `
+    <div class="zone-overlap">
+      <strong>⚠️ Des ruchers se partagent la même zone</strong>
+      <ul>${paires.map(p => `<li><b>${escapeHtml(p.a)}</b> et <b>${escapeHtml(p.b)}</b> — ${distanceLisible(p.distance)} d'écart</li>`).join("")}</ul>
+      <p>Ce n'est pas une erreur, et beaucoup d'apiculteurs sont dans ce cas. Mais ces colonies puisent en partie dans la même ressource : si une floraison est courte, la récolte peut s'en ressentir des deux côtés.</p>
+    </div>` : "";
+
+  return `
+    <div class="zone-rings">${anneaux}</div>
+    ${recouvrement}
+    <p class="zone-note">Ces distances sont indicatives. Le butinage n'a pas de frontière nette : une ressource abondante à 500 m retient les abeilles, sa disparition les pousse beaucoup plus loin. Le cercle sert à voir ce qu'il y a autour du rucher — cultures, forêt, ville, autre rucher — pas à délimiter un territoire.</p>
+  `;
+}
+
+let _coucheZones = null;
+
+function dessinerZonesButinage(map){
+  if(!map || typeof L === "undefined" || typeof L.circle !== "function") return null;
+  const centres = centresRuchers();
+  if(!centres.length) return null;
+
+  const groupe = L.featureGroup();
+  centres.forEach(c => {
+    /* Du plus grand au plus petit : les remplissages s'additionnent, le
+       centre devient donc naturellement plus dense — ce qui correspond à
+       la réalité du butinage. */
+    ZONES_BUTINAGE.slice().reverse().forEach(z => {
+      L.circle([c.lat, c.lon], {
+        radius: z.rayon,
+        color: c.couleur,
+        weight: z.rayon === RAYON_RECOUVREMENT ? 2.5 : 1.5,
+        opacity: 0.8,
+        dashArray: z.rayon === RAYON_RECOUVREMENT ? null : "5 6",
+        fillColor: c.couleur,
+        fillOpacity: 0.06
+      }).addTo(groupe);
+    });
+  });
+  groupe.addTo(map);
+
+  /* Sans recadrage, un cercle de 5 km est entièrement hors de l'écran au
+     zoom d'un rucher : l'apiculteur appuie sur le bouton et ne voit rien. */
+  try{ map.fitBounds(groupe.getBounds(), { padding:[20, 20] }); }catch(e){}
+  return groupe;
+}
+
+function majPanneauZones(){
+  const actif = !!state.zonesButinage;
+  const btn = document.getElementById("btnZoneVol");
+  if(btn){
+    btn.classList.toggle("on", actif);
+    btn.setAttribute("aria-pressed", actif ? "true" : "false");
+    btn.textContent = actif ? "🌸 Masquer la zone de butinage"
+                            : "🌸 Voir la zone de butinage";
+  }
+  const info = document.getElementById("zoneVolInfo");
+  if(info) info.style.display = actif ? "" : "none";
+}
+
+function basculerZonesButinage(){
+  state.zonesButinage = !state.zonesButinage;
+  saveState();
+  const map = _globalMapInstance;
+  if(map){
+    if(_coucheZones){ try{ map.removeLayer(_coucheZones); }catch(e){} _coucheZones = null; }
+    if(state.zonesButinage) _coucheZones = dessinerZonesButinage(map);
+  }
+  majPanneauZones();
+}
+
 function mapGlobalPage(){
   const apiaries = knownApiaries();
   const legendHTML = apiaries.length
@@ -9363,12 +9601,20 @@ function mapGlobalPage(){
   const hivesWithGps = state.hives.filter(h => getHiveGps(h));
   const noGpsCount = state.hives.length - hivesWithGps.length;
 
+  const actif = !!state.zonesButinage;
+  const zoneHTML = hivesWithGps.length ? `
+      <button id="btnZoneVol" type="button" class="map-zone-btn${actif ? " on" : ""}" style="margin-top:10px"
+              aria-pressed="${actif ? "true" : "false"}" onclick="basculerZonesButinage()">${
+        actif ? "🌸 Masquer la zone de butinage" : "🌸 Voir la zone de butinage"}</button>
+      <div id="zoneVolInfo" class="zone-info"${actif ? "" : ' style="display:none"'}>${panneauZonesHTML()}</div>` : "";
+
   return `
     <section class="panel" style="padding-top:0">
       <div class="map-global-wrap">
         <div id="globalMap"></div>
       </div>
       ${legendHTML ? `<div class="map-legend">${legendHTML}</div>` : ""}
+      ${zoneHTML}
       ${noGpsCount > 0 ? `
         <div class="map-no-gps">
           <strong>${noGpsCount} ruche${noGpsCount > 1 ? "s" : ""} sans coordonnées GPS</strong> —
@@ -9383,6 +9629,7 @@ let _globalMapInstance = null;
 function initGlobalMap(){
   // Nettoyer ancienne instance si on revient sur la page
   if(_globalMapInstance){ _globalMapInstance.remove(); _globalMapInstance = null; }
+  _coucheZones = null;
 
   const el = document.getElementById("globalMap");
   if(!el || typeof L === "undefined") return;
@@ -9479,6 +9726,11 @@ function initGlobalMap(){
     const bounds = L.latLngBounds(hivesWithGps.map(x => [x.gps.lat, x.gps.lon]));
     map.fitBounds(bounds, {padding:[40,40]});
   }
+
+  /* Les zones sont dessinées en dernier : leur recadrage doit primer sur
+     celui des marqueurs, sinon les cercles naissent hors de l'écran. */
+  _coucheZones = null;
+  if(state.zonesButinage) _coucheZones = dessinerZonesButinage(map);
 }
 // ───────────────────────────────────────────────────────────────────
 
