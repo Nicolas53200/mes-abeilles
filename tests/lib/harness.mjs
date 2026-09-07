@@ -79,11 +79,32 @@ export async function servir(dossier){
    pas sur Leaflet ni jsQR. */
 export async function doublerCdn(page){
   const doublures = [
-    [/leaflet.*\.js($|\?)/, 'text/javascript',
-     'window.L={map:()=>({setView(){return this},remove(){},invalidateSize(){},fitBounds(){},on(){return this}}),' +
-     'tileLayer:()=>({addTo(){return this}}),marker:()=>({addTo(){return this},bindPopup(){return this},' +
-     'getLatLng:()=>({lat:0,lng:0})}),divIcon:()=>({}),featureGroup:()=>({getBounds:()=>({}),addTo(){return this}}),' +
-     'latLngBounds:()=>({})};'],
+    /* Doublure de Leaflet. Elle note les cercles demandés : la carte réelle
+       n'est pas joignable depuis les tests, mais ce que l'application
+       DEMANDE à Leaflet — centre, rayon en mètres, couleur — se vérifie. */
+    [/leaflet.*\.js($|\?)/, 'text/javascript', `
+      window.__cercles = [];
+      window.__recadrages = 0;
+      const _couche = () => ({ _c:[], addTo(){ return this; },
+                               getBounds(){ return {}; } });
+      window.L = {
+        map: () => ({ setView(){ return this; }, remove(){}, invalidateSize(){},
+                      fitBounds(){ window.__recadrages++; return this; },
+                      on(){ return this; },
+                      addLayer(){ return this; }, removeLayer(){ return this; } }),
+        tileLayer: () => ({ addTo(){ return this; } }),
+        marker: () => ({ addTo(){ return this; }, bindPopup(){ return this; },
+                         getLatLng: () => ({ lat:0, lng:0 }) }),
+        circle: (latlng, opts) => {
+          const c = { latlng, options: opts || {}, retire:false };
+          window.__cercles.push(c);
+          return { addTo(){ return this; }, remove(){ c.retire = true; } };
+        },
+        divIcon: () => ({}),
+        featureGroup: _couche,
+        layerGroup: _couche,
+        latLngBounds: () => ({})
+      };`],
     [/leaflet.*\.css($|\?)/, 'text/css', ''],
     [/qrcode.*\.js($|\?)/, 'text/javascript', 'window.QRCode={toCanvas:(c,v,o,cb)=>{ if(typeof o==="function") o(null); else if(cb) cb(null); }};'],
     [/jsqr.*\.js($|\?)/i, 'text/javascript', 'window.jsQR=function(){return null;};']
