@@ -390,6 +390,82 @@ export default () => executerSuite('Zone de butinage',
 
   await page.evaluate(d => { state.hives = d.hives; }, donnees);
 
+  /* ── SECOND DÉFAUT SIGNALÉ, CAPTURE À L'APPUI ───────────────────
+     « la zone ne sélectionne pas une ruche ». Sur la carte, les anneaux
+     étaient tracés entre Laval et Château-Gontier, sur AUCUNE des deux
+     ruches. Le regroupement se faisait sur le seul nom du rucher : deux
+     ruches sans rucher renseigné — donc toutes deux « Sans rucher » — mais
+     distantes de 30 km étaient moyennées, et le cercle naissait à
+     mi-chemin, au milieu de la campagne.
+
+     Le butinage est une affaire de lieu, pas d'étiquette. */
+  rapport.section("LE BUG SIGNALÉ : un cercle posé où il n'y a aucune ruche");
+
+  const loin = await page.evaluate(() => {
+    state.hives = [
+      { code:'R-1', name:'Ruche de Laval',           type:'ruche', gps:{ lat:48.07, lon:-0.77 } },
+      { code:'R-2', name:'Ruche de Château-Gontier', type:'ruche', gps:{ lat:47.83, lon:-0.70 } }
+    ];
+    const centres = centresRuchers();
+    return {
+      sites: centres.length,
+      // Chaque centre doit coïncider avec une ruche réelle, pas un milieu.
+      surUneRuche: centres.every(c => state.hives.some(h => {
+        const g = getHiveGps(h);
+        return distanceMetres({ lat:c.lat, lon:c.lon }, { lat:g.lat, lon:g.lon }) < 300;
+      })),
+      ecart: Math.round(distanceMetres(
+        { lat:48.07, lon:-0.77 }, { lat:47.83, lon:-0.70 }) / 1000),
+      paires: ruchersQuiSeRecouvrent().length
+    };
+  });
+  rapport.verifier('deux ruches éloignées font deux sites, pas un',
+    loin.sites === 2, `${loin.sites} site(s) pour ${loin.ecart} km d'écart`);
+  rapport.verifier('chaque cercle est posé SUR une ruche', loin.surUneRuche);
+  rapport.verifier('à 30 km, aucun recouvrement inventé', loin.paires === 0);
+
+  rapport.section("Sans casser ce que le regroupement servait à faire");
+  const memeSite = await page.evaluate(() => {
+    // Vingt ruches d'un même rucher, étalées sur une centaine de mètres.
+    state.hives = Array.from({ length:20 }, (_, i) => ({
+      code:'H'+i, name:'H'+i, apiary:'Verger', type:'ruche',
+      gps:{ lat:48.07 + i*0.00015, lon:-0.77 + i*0.00015 } }));
+    const c = centresRuchers();
+    return { sites:c.length, ruches:c[0]?.ruches, nom:c[0]?.nom };
+  });
+  rapport.verifier('vingt ruches au même endroit ne font toujours qu’un cercle',
+    memeSite.sites === 1 && memeSite.ruches === 20, `${memeSite.sites} site(s)`);
+  rapport.verifier('le site garde le nom du rucher', memeSite.nom === 'Verger', memeSite.nom);
+
+  rapport.section("Deux ruchers différents restent séparés, même côte à côte");
+  const voisins = await page.evaluate(() => {
+    state.hives = [
+      { code:'A', name:'A', apiary:'Verger',  type:'ruche', gps:{ lat:48.07,   lon:-0.77 } },
+      { code:'B', name:'B', apiary:'Prairie', type:'ruche', gps:{ lat:48.0727, lon:-0.77 } }
+    ];
+    return { sites: centresRuchers().map(c => c.nom),
+             alerte: ruchersQuiSeRecouvrent().map(p => `${p.a}+${p.b}`) };
+  });
+  rapport.verifier('à 300 m, ils ne sont pas fusionnés',
+    voisins.sites.length === 2, voisins.sites.join(' · '));
+  rapport.verifier('et l’apiculteur est averti qu’ils se concurrencent',
+    voisins.alerte.length === 1, voisins.alerte.join(' '));
+
+  rapport.section("Un même rucher sur deux sites doit rester lisible");
+  const deuxSites = await page.evaluate(() => {
+    state.hives = [
+      { code:'A', name:'Lavande', apiary:'Verger', type:'ruche', gps:{ lat:48.07, lon:-0.77 } },
+      { code:'B', name:'Tilleul', apiary:'Verger', type:'ruche', gps:{ lat:47.83, lon:-0.70 } }
+    ];
+    return centresRuchers().map(c => c.nom);
+  });
+  rapport.verifier('les deux sites portent des noms distincts',
+    deuxSites.length === 2 && deuxSites[0] !== deuxSites[1], deuxSites.join(' · '));
+  rapport.verifier('le nom du rucher reste reconnaissable',
+    deuxSites.every(n => n.startsWith('Verger')), deuxSites.join(' · '));
+
+  await page.evaluate(d => { state.hives = d.hives; }, donnees);
+
   rapport.section("Rien d'autre ne doit avoir bougé");
   rapport.verifier('aucune erreur JavaScript sur tout le parcours',
     erreurs.length === 0, erreurs.join(' | '));

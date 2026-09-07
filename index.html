@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v38.3</title>
+  <title>Mes Abeilles 🐝 v38.4</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -2715,7 +2715,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v38.3";
+const APP_VERSION = "v38.4";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -8906,6 +8906,14 @@ function rucheDemandeeParUrl(){
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
   {
+    version: "v38.4",
+    date: "Septembre 2026",
+    nouveautes: [
+      { titre: "La zone de butinage se pose enfin sur tes ruches",
+        texte: "Les cercles étaient tracés au milieu de tes ruches au lieu d'être posés dessus : deux ruches éloignées portant le même nom de rucher — ou aucun — étaient moyennées, et la zone naissait à mi-chemin, là où il n'y a aucune abeille. Chaque emplacement reçoit maintenant ses propres cercles. Vingt ruches posées au même endroit n'en font toujours qu'un seul, et deux ruchers différents restent distincts même côte à côte, pour que l'alerte de concurrence puisse te prévenir." }
+    ]
+  },
+  {
     version: "v38.3",
     date: "Septembre 2026",
     nouveautes: [
@@ -9490,26 +9498,79 @@ function distanceLisible(m){
                   : `${(m/1000).toFixed(1).replace(".", ",")} km`;
 }
 
-/* Un cercle par RUCHER, pas par ruche : vingt ruches au même emplacement
-   donneraient vingt cercles superposés illisibles. Le centre est le
-   barycentre des ruches géolocalisées du rucher — à quelques dizaines de
-   mètres près, c'est bien l'emplacement du rucher. */
+/* Deux ruches au-delà de cette distance ne sont pas au même endroit, même
+   si elles portent le même nom de rucher. Un rucher réel tient dans
+   quelques dizaines de mètres ; 500 m laisse largement la marge. */
+const DISTANCE_MEME_SITE = 500;
+
+/* Un cercle par SITE : vingt ruches au même emplacement donneraient vingt
+   cercles superposés illisibles.
+
+   LE PIÈGE, SIGNALÉ PAR UNE CAPTURE : le regroupement se faisait sur le
+   seul nom du rucher, et le cercle était posé au barycentre du groupe.
+   Deux ruches sans rucher renseigné — donc toutes deux « Sans rucher » —
+   mais distantes de 30 km étaient moyennées : les anneaux naissaient à
+   mi-chemin, sur aucune des deux, au milieu de la campagne. Le butinage
+   est une affaire de LIEU, pas d'étiquette.
+
+   Le regroupement se fait donc en deux temps : par rucher d'abord, puis
+   par proximité à l'intérieur de chaque rucher. Deux ruchers DIFFÉRENTS
+   restent toujours séparés, même côte à côte — c'est justement le cas où
+   l'apiculteur a besoin d'être averti qu'ils se concurrencent. */
 function centresRuchers(){
-  const groupes = new Map();
+  const parNom = new Map();
   (state.hives || []).forEach(h => {
     const gps = getHiveGps(h);
     if(!gps) return;
     const nom = apiaryNameForHive(h) || "Sans rucher";
-    if(!groupes.has(nom)) groupes.set(nom, []);
-    groupes.get(nom).push(gps);
+    if(!parNom.has(nom)) parNom.set(nom, []);
+    parNom.get(nom).push({ gps, ruche: h.name || h.code });
   });
-  return Array.from(groupes.entries()).map(([nom, points]) => ({
-    nom,
-    ruches: points.length,
-    lat: points.reduce((t, p) => t + p.lat, 0) / points.length,
-    lon: points.reduce((t, p) => t + p.lon, 0) / points.length,
-    couleur: mapColorForApiary(nom)
-  })).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+
+  const sites = [];
+  parNom.forEach((membres, nom) => {
+    /* Liaison simple : deux ruches assez proches appartiennent au même
+       site, et la proximité se propage de proche en proche. */
+    const appartenance = membres.map((_, i) => i);
+    const unir = (a, b) => {
+      const va = appartenance[a], vb = appartenance[b];
+      if(va === vb) return;
+      for(let k = 0; k < appartenance.length; k++){
+        if(appartenance[k] === vb) appartenance[k] = va;
+      }
+    };
+    for(let i = 0; i < membres.length; i++){
+      for(let j = i + 1; j < membres.length; j++){
+        if(distanceMetres(membres[i].gps, membres[j].gps) <= DISTANCE_MEME_SITE) unir(i, j);
+      }
+    }
+
+    const paquets = new Map();
+    appartenance.forEach((g, i) => {
+      if(!paquets.has(g)) paquets.set(g, []);
+      paquets.get(g).push(membres[i]);
+    });
+
+    paquets.forEach(paquet => sites.push({
+      nom,
+      ruches: paquet.length,
+      premiereRuche: paquet[0].ruche,
+      lat: paquet.reduce((t, m) => t + m.gps.lat, 0) / paquet.length,
+      lon: paquet.reduce((t, m) => t + m.gps.lon, 0) / paquet.length,
+      couleur: mapColorForApiary(nom)
+    }));
+  });
+
+  /* Un même rucher peut occuper deux sites. Sans distinction, l'alerte de
+     recouvrement dirait « Verger et Verger », ce qui n'apprend rien : on
+     ajoute alors le nom d'une ruche du site pour les départager. */
+  const combien = {};
+  sites.forEach(s => { combien[s.nom] = (combien[s.nom] || 0) + 1; });
+  sites.forEach(s => {
+    if(combien[s.nom] > 1 && s.premiereRuche) s.nom = `${s.nom} · ${s.premiereRuche}`;
+  });
+
+  return sites.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 }
 
 /* Les paires de ruchers dont les zones se chevauchent. C'est la raison
