@@ -280,6 +280,116 @@ export default () => executerSuite('Zone de butinage',
     !sansGps.bouton && sansGps.centres === 0);
   rapport.verifier('le message habituel sur les coordonnées reste affiché', sansGps.message);
 
+  /* ── LE DÉFAUT SIGNALÉ APRÈS PUBLICATION ────────────────────────
+     « je ne vois pas le bouton voir la zone de butinage ». Il était bien
+     rendu, mais SOUS la carte — laquelle occupe presque toute la hauteur
+     utile. Mesuré sur iPhone 13 : carte de 218 à 802 px, barre du bas à
+     744, bouton commençant à 861 sur un écran de 844. Hors de l'écran sur
+     les quatre téléphones testés, et le faire défiler n'était pas une
+     réponse : poser le doigt sur la carte fait glisser la carte.
+
+     Une fonctionnalité que personne ne peut atteindre n'existe pas. Ces
+     contrôles auraient dû être écrits avant la publication. */
+  rapport.section("LE BUG SIGNALÉ : un bouton hors de l'écran n'existe pas");
+
+  await page.evaluate(d => {
+    state.hives = d.hives; state.zonesButinage = false; saveState();
+  }, donnees);
+
+  for(const [nom, w, h] of [['iPhone SE', 375, 667], ['iPhone 13', 390, 844],
+                            ['iPhone 14 Pro Max', 430, 932], ['Android', 412, 915],
+                            ['iPad', 768, 1024]]){
+    await page.setViewportSize({ width:w, height:h });
+    await page.evaluate(() => showPage('mapGlobal'));
+    await page.waitForTimeout(350);
+
+    const vu = await page.evaluate(() => {
+      /* Un apiculteur qui ouvre la page Carte arrive EN HAUT. Mesurer sans
+         remettre le défilement à zéro donnait un faux vert : les clics des
+         sections précédentes avaient descendu la page, et le bouton
+         paraissait à l'écran alors qu'il était sous le pli. */
+      window.scrollTo(0, 0);
+      const b = document.getElementById('btnZoneVol');
+      if(!b) return { absent:true };
+      const r = b.getBoundingClientRect();
+      const barre = document.querySelector('.bottom')?.getBoundingClientRect();
+      const dessus = document.elementFromPoint(r.left + r.width/2, r.top + r.height/2);
+      return {
+        entier: r.top >= 0 && r.bottom <= window.innerHeight,
+        souslaBarre: barre ? r.bottom > barre.top : false,
+        // Ce qui compte vraiment : le doigt tombe-t-il SUR le bouton ?
+        atteignable: !!dessus && (dessus.id === 'btnZoneVol' || b.contains(dessus)),
+        bas: Math.round(r.bottom), ecran: window.innerHeight
+      };
+    });
+    rapport.verifier(`${nom.padEnd(18)} le bouton est visible sans défiler`,
+      !vu.absent && vu.entier && !vu.souslaBarre, `bas ${vu.bas} / écran ${vu.ecran}`);
+    rapport.verifier(`${nom.padEnd(18)} le doigt tombe bien dessus`, vu.atteignable);
+  }
+
+  await page.setViewportSize({ width:390, height:844 });
+  await page.evaluate(() => showPage('mapGlobal'));
+  await page.waitForTimeout(350);
+
+  const ordre = await page.evaluate(() => {
+    const p = document.querySelector('.panel');
+    const rang = sel => [...p.children].findIndex(e => e.matches(sel) || e.querySelector?.(sel));
+    const bouton = [...p.children].findIndex(e => e.id === 'btnZoneVol');
+    const carte  = [...p.children].findIndex(e => e.classList.contains('map-global-wrap'));
+    return { bouton, carte, avant: bouton >= 0 && bouton < carte };
+  });
+  rapport.verifier('le bouton est placé AVANT la carte, pas après', ordre.avant,
+    `bouton ${ordre.bouton} · carte ${ordre.carte}`);
+
+  const carteUtile = await page.evaluate(() => {
+    const c = document.getElementById('globalMap').getBoundingClientRect();
+    const barre = document.querySelector('.bottom').getBoundingClientRect();
+    return { hauteur: Math.round(c.height), depasse: Math.round(Math.max(0, c.bottom - barre.top)) };
+  });
+  rapport.verifier('la carte reste assez grande pour être utile',
+    carteUtile.hauteur >= 300, `${carteUtile.hauteur} px`);
+  rapport.verifier('elle ne passe plus sous la barre du bas',
+    carteUtile.depasse <= 15, `${carteUtile.depasse} px de dépassement`);
+
+  rapport.section("Le recouvrement doit être dit tout de suite, pas seulement plus bas");
+  const alerteImmediate = await page.evaluate(() => {
+    state.zonesButinage = false;
+    showPage('mapGlobal');
+    document.getElementById('toast').textContent = '';
+    basculerZonesButinage();
+    const t = document.getElementById('toast');
+    return { texte: t.textContent, affiche: t.classList.contains('show') };
+  });
+  rapport.verifier('un message annonce le recouvrement dès l’activation',
+    /se partagent une zone/.test(alerteImmediate.texte), alerteImmediate.texte);
+  rapport.verifier('il nomme les deux ruchers et donne la distance',
+    /Prairie/.test(alerteImmediate.texte) && /Verger/.test(alerteImmediate.texte)
+    && /km/.test(alerteImmediate.texte));
+
+  const tronque = await page.evaluate(() => {
+    const t = document.getElementById('toast');
+    const r = t.getBoundingClientRect();
+    return { deborde: r.left < 0 || r.right > window.innerWidth,
+             coupe: t.scrollWidth > t.clientWidth + 1,
+             largeur: Math.round(r.width), ecran: window.innerWidth };
+  });
+  rapport.verifier('le message ne déborde pas de l’écran',
+    !tronque.deborde, `${tronque.largeur} px sur ${tronque.ecran}`);
+  rapport.verifier('il n’est pas tronqué', !tronque.coupe);
+
+  const sansRecouvrement = await page.evaluate(() => {
+    state.hives = [{ code:'A', name:'A', apiary:'Loin', type:'ruche', gps:{lat:48, lon:2} }];
+    state.zonesButinage = false;
+    showPage('mapGlobal');
+    document.getElementById('toast').textContent = '';
+    basculerZonesButinage();
+    return document.getElementById('toast').textContent;
+  });
+  rapport.verifier('aucun message quand il n’y a rien à signaler',
+    sansRecouvrement === '', sansRecouvrement);
+
+  await page.evaluate(d => { state.hives = d.hives; }, donnees);
+
   rapport.section("Rien d'autre ne doit avoir bougé");
   rapport.verifier('aucune erreur JavaScript sur tout le parcours',
     erreurs.length === 0, erreurs.join(' | '));
