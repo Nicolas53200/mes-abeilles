@@ -234,7 +234,11 @@ export default () => executerSuite('Récolte : poids brut moins tare',
     /Traçabilité des lots/.test(registre), `${registre.length} caractères`);
   rapport.verifier('il reprend le miel NET, jamais le poids brut',
     /18\.5/.test(registre) && !/46\.5/.test(registre));
-  const ligneLot = (registre.match(/<tr>(?:(?!<\/tr>).)*L 2026-09-B(?:(?!<\/tr>).)*<\/tr>/s) || [''])[0];
+  /* Le numéro de lot dépend du mois courant (lotSuivant) : on le prend tel
+     qu'il a été attribué plus haut, jamais codé en dur — sinon le test
+     casse au changement de mois. */
+  const motifLot = pesee.lot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const ligneLot = (registre.match(new RegExp('<tr>(?:(?!</tr>).)*' + motifLot + '(?:(?!</tr>).)*</tr>', 's')) || [''])[0];
   rapport.verifier('la ligne du lot pesé porte ses 4 hausses',
     />4</.test(ligneLot), ligneLot.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
 

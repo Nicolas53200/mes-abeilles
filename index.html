@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mes Abeilles" />
-  <title>Mes Abeilles 🐝 v38.6</title>
+  <title>Mes Abeilles 🐝 v38.7</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon192.png">
   <link rel="icon" href="./icon192.png">
@@ -310,6 +310,21 @@
     .hive-status.warn .status-dot{background:#f97316}
     .visit-label{color:#6b768d;font-size:14px;margin-bottom:5px}
     .visit-date{font-weight:900}
+    /* Tournée du jour : la ruche faite le dit, en vert, à la place de la
+       date — aucune ligne ajoutée à une carte déjà dense. */
+    .visit-done{
+      display:flex;align-items:center;gap:6px;
+      font-weight:900;font-size:14px;color:#166534;
+    }
+    .visit-done::before{content:"";}
+    /* La carte faite s'estompe un peu : l'œil va d'abord vers ce qui reste. */
+    .hive-card.hc-done{opacity:.62}
+    .hive-done-banner{
+      display:flex;align-items:center;justify-content:center;gap:8px;
+      background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;
+      border-radius:16px;padding:12px 14px;margin-bottom:14px;
+      font-weight:900;font-size:15px;
+    }
     .arrow{
       position:absolute;right:16px;bottom:86px;
       font-size:32px;font-weight:500;color:#0b1328;
@@ -2763,7 +2778,7 @@
   </div>
 
 <script>
-const APP_VERSION = "v38.6";
+const APP_VERSION = "v38.7";
 /* ── LocalStorage ─────────────────────────────────── */
 const LS_KEY = "mesAbeilles_data_v1";
 const LS_BACKUP_KEY = "mesAbeilles_data_backup_v1";
@@ -2947,6 +2962,45 @@ function trouverRucheParCode(code){
   return liste.find(x => codeCompact(x.code) === compact) || null;
 }
 
+/* ── TOURNÉE DU JOUR ─────────────────────────────────────────────────
+   Un apiculteur qui fait plusieurs ruches d'affilée se perd : laquelle
+   ai-je déjà faite ? L'information existait déjà — chaque visite porte sa
+   date — mais la liste ne la mettait pas en avant.
+
+   « Visitée aujourd'hui » se DÉDUIT des visites, rien n'est stocké : aucune
+   clé d'état nouvelle, aucune liste blanche à tenir, rien à migrer. On
+   balaie toutes les visites plutôt que la première : une visite anti-datée
+   ne doit pas faire croire qu'une ruche a été faite ce jour. */
+function visiteeAujourdhui(h){
+  const today = todayISO();
+  return Array.isArray(h && h.visites)
+      && h.visites.some(v => String(v && v.date || "").slice(0, 10) === today);
+}
+
+/* Les ruches faites aujourd'hui passent en bas ; les autres gardent leur
+   ordre. On ne réordonne QUE pendant une tournée — au moins une ruche faite
+   dans la journée — pour que l'ordre normal revienne de lui-même le
+   lendemain, sans rien à activer ni à refermer.
+
+   Tri STABLE : l'indice de départ départage, sinon les ruches non faites
+   sembleraient se mélanger à chaque rendu. (Array.prototype.sort est stable
+   depuis longtemps, mais la clé d'indice le garantit quoi qu'il arrive.) */
+function ordonnerPourTournee(list){
+  const faites = list.filter(visiteeAujourdhui).length;
+  if(!faites) return list.slice();
+  return list
+    .map((h, i) => ({ h, i, fait: visiteeAujourdhui(h) ? 1 : 0 }))
+    .sort((a, b) => (a.fait - b.fait) || (a.i - b.i))
+    .map(x => x.h);
+}
+
+/* Suffixe d'avancement, calculé au même endroit pour le libellé initial et
+   pour le re-rendu : les deux ne peuvent donc pas diverger. */
+function suffixeTournee(visibles){
+  const faites = visibles.filter(visiteeAujourdhui).length;
+  return faites > 0 ? ` · ${faites} faite${faites>1?'s':''} aujourd'hui` : "";
+}
+
 function hiveCard(h){
   const warn = h.alerts > 0;
   const isRuchette = h.type === "ruchette";
@@ -2955,7 +3009,7 @@ function hiveCard(h){
   const imageClass = isRuchette ? "" : "apiary-gradient";
   const imageStyle = isRuchette ? "" : `style="--hive-c1:${colors[0]};--hive-c2:${colors[1]}"`;
   return `
-    <article class="hive-card ${isRuchette ? 'is-ruchette' : ''}" onclick="openHive('${escapeJsAttr(h.code)}')" role="button" tabindex="0" aria-label="Ouvrir ${isRuchette ? 'la ruchette' : 'la ruche'} ${escapeHtml(h.name)}">
+    <article class="hive-card ${isRuchette ? 'is-ruchette' : ''}${visiteeAujourdhui(h) ? ' hc-done' : ''}" onclick="openHive('${escapeJsAttr(h.code)}')" role="button" tabindex="0" aria-label="Ouvrir ${isRuchette ? 'la ruchette' : 'la ruche'} ${escapeHtml(h.name)}">
       <div class="hive-image ${imageClass}" ${imageStyle}>
         <div class="flower-texture"></div>
         <div class="code-tag ${h.tag === 'orange' ? 'orange' : ''}">${h.code}</div>
@@ -2967,8 +3021,10 @@ function hiveCard(h){
         <div class="hive-status ${warn ? 'warn' : ''}">
           <span class="status-dot"></span>${h.statusIcon ? h.statusIcon + " " : ""}${h.status || latestVisitScore(h).status.label}
         </div>
-        <div class="visit-label">Dernière visite</div>
-        <div class="visit-date">📅 ${h.date}</div>
+        ${visiteeAujourdhui(h)
+          ? `<div class="visit-done">✓ Visite faite aujourd'hui</div>`
+          : `<div class="visit-label">Dernière visite</div>
+             <div class="visit-date">📅 ${h.date}</div>`}
       </div>
       <div class="arrow">›</div>
     </article>
@@ -3253,9 +3309,10 @@ function apiaryDashboardHTML(){
   const selected = getSelectedApiaryFilter();
   const total = state.hives.length;
   const selectedStats = selected ? stats.find(r=>r.name===selected) : null;
-  const title = selectedStats
+  const visibles = selected ? state.hives.filter(h => (apiaryNameForHive(h) || "Sans rucher") === selected) : state.hives;
+  const title = (selectedStats
     ? `${escapeHtml(selectedStats.name)} · ${selectedStats.count} ruche${selectedStats.count>1?'s':''}`
-    : `Toutes les ruches · ${total} ruche${total>1?'s':''}`;
+    : `Toutes les ruches · ${total} ruche${total>1?'s':''}`) + suffixeTournee(visibles);
   if(!stats.length){
     return `<div class="notice">Aucun rucher pour le moment. Crée un rucher, puis associe-y les ruches que tu veux.</div>`;
   }
@@ -3300,7 +3357,7 @@ function ruchers(){
         <input id="ruchersSearch" placeholder="Rechercher par nom, code, rucher…" oninput="renderRuchers()">
       </div>
       <div id="ruchersGrid" style="display:flex;flex-wrap:wrap;gap:14px">
-        ${state.hives.map(hiveCard).join("")}
+        ${ordonnerPourTournee(state.hives).map(hiveCard).join("")}
       </div>
       <div id="ruchersEmpty" style="display:none;padding:24px;text-align:center;color:#64748b">Aucune ruche trouvée.</div>
     </section>
@@ -3320,10 +3377,14 @@ function renderRuchers(){
   const empty = document.getElementById("ruchersEmpty");
   const label = document.getElementById("apiaryFilterLabel");
   const clearBtn = document.getElementById("apiaryClearBtn");
-  if(grid) grid.innerHTML = list.map(hiveCard).join("");
+  const ordonnee = ordonnerPourTournee(list);
+  if(grid) grid.innerHTML = ordonnee.map(hiveCard).join("");
   if(empty) empty.style.display = list.length ? "none" : "block";
   if(label){
-    label.textContent = selected ? `${selected} · ${list.length} ruche${list.length>1?'s':''}` : `Toutes les ruches · ${state.hives.length} ruche${state.hives.length>1?'s':''}`;
+    /* Pendant une tournée, le libellé déjà présent au-dessus de la liste
+       annonce l'avancement — sans rien ajouter à l'écran. */
+    const base = selected ? `${selected} · ${list.length} ruche${list.length>1?'s':''}` : `Toutes les ruches · ${state.hives.length} ruche${state.hives.length>1?'s':''}`;
+    label.textContent = base + suffixeTournee(list);
   }
   if(clearBtn) clearBtn.classList.toggle("active", !selected);
   document.querySelectorAll(".apiary-card").forEach(btn=>{
@@ -3968,6 +4029,7 @@ function hiveDetail(code){
     return `
       <div class="hive-content-wrap">
         <section class="detail-panel">
+          ${visiteeAujourdhui(h) ? `<div class="hive-done-banner">✓ Visite faite aujourd'hui</div>` : ""}
           <div class="hive-grid-nav">
             ${gridBtn("resume","🏠","Résumé","",true)}
             ${gridBtn("visites","📅","Visites", visitCount > 0 ? visitCount : "")}
@@ -9086,6 +9148,14 @@ function rucheDemandeeParUrl(){
    en TÊTE de JOURNAL_VERSIONS. Seules les entrées plus récentes que la
    version déjà vue par l'utilisateur lui sont présentées. */
 const JOURNAL_VERSIONS = [
+  {
+    version: "v38.7",
+    date: "Octobre 2026",
+    nouveautes: [
+      { titre: "Tournée du jour : vois d'un coup d'œil ce qu'il te reste",
+        texte: "Quand tu enchaînes plusieurs ruches, facile de ne plus savoir laquelle tu as déjà faite. Désormais, une ruche visitée dans la journée l'affiche en vert — « Visite faite aujourd'hui » — s'estompe, et passe en bas de la liste : le haut de l'écran montre toujours ce qu'il te reste. Un compteur discret annonce l'avancement (« 4 faites aujourd'hui »), et la fiche de chaque ruche le rappelle dès l'ouverture, utile quand tu l'ouvres en scannant son QR code. Rien n'est masqué, rien n'est stocké : tout se remet à zéro de lui-même le lendemain." }
+    ]
+  },
   {
     version: "v38.6",
     date: "Septembre 2026",
