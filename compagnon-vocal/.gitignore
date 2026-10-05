@@ -1,0 +1,7 @@
+# Dépendances et projet natif générés sur le PC (non versionnés)
+node_modules/
+android/
+ios/
+# Copies générées par « npm run build:web »
+www/src/
+www/platform/

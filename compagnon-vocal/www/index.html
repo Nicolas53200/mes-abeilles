@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mes Abeilles Vocal</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main id="ecran" class="etat-terminé">
+    <div class="bandeau" id="bandeau">
+      <div class="pastille" id="pastille"></div>
+      <div class="libelle" id="libelle">Prêt</div>
+      <div class="sous" id="sous">Charge tes ruches, puis démarre le Mode Rucher.</div>
+      <div class="chrono" id="chrono" hidden>00:00</div>
+    </div>
+
+    <div class="zone-actions" id="zoneActions">
+      <button class="gros" id="btnCharger">📋 Charger mes ruches de test</button>
+      <button class="gros primaire" id="btnDemarrer" disabled>🐝 Démarrer le Mode Rucher</button>
+      <button class="gros danger" id="btnTerminer" hidden>⏹ Terminer la tournée</button>
+    </div>
+
+    <div class="aide" id="aide">
+      <p><strong>Au rucher, sans toucher le téléphone :</strong></p>
+      <p>« Mes Abeilles » · <em>bip</em> · « Ruche 12 »</p>
+      <p>Dictez vos observations, puis « Terminer cette ruche ».</p>
+      <p>Pause : « Mes Abeilles, pause » — Reprise : « Mes Abeilles, reprendre »</p>
+      <p>Fin : « Mes Abeilles, terminer la tournée »</p>
+    </div>
+
+    <div class="journal" id="journal" aria-live="polite"></div>
+  </main>
+
+  <!-- Capacitor fournit window.Capacitor dans la WebView. Absent dans un
+       navigateur simple : l'app bascule alors sur des adaptateurs de
+       démonstration (clavier) pour un aperçu grossier. -->
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+/* Interface terrain : gros éléments, très lisible en extérieur, portrait
+   d'abord. Identité Mes Abeilles (ruche sombre + miel). Chaque état a sa
+   couleur de fond, pour un repère visuel immédiat même de loin. */
+:root{
+  --miel:#ff7a18; --nuit:#0b1328; --ivoire:#f6f2e9;
+  --vert:#2f7d43; --rouge:#c3352b; --jaune:#d8a200; --gris:#3a4254;
+  --display: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+*{box-sizing:border-box} html,body{height:100%}
+body{margin:0;font-family:var(--display);color:#fff;background:var(--nuit);
+  padding: env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);}
+main{min-height:100%;display:flex;flex-direction:column;gap:18px;padding:22px 18px;transition:background .3s}
+
+/* Couleurs d'état */
+.etat-en_attente{background:linear-gradient(160deg,#143a22,#0b1328)}
+.etat-enregistrement{background:linear-gradient(160deg,#5a1410,#0b1328)}
+.etat-pause{background:linear-gradient(160deg,#5a4410,#0b1328)}
+.etat-terminé{background:linear-gradient(160deg,#1a2030,#0b1328)}
+
+.bandeau{text-align:center;padding:26px 16px;border-radius:24px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.12)}
+.pastille{width:74px;height:74px;border-radius:50%;margin:0 auto 14px;background:var(--gris);
+  box-shadow:0 0 0 8px rgba(255,255,255,.06)}
+.etat-en_attente .pastille{background:var(--vert)}
+.etat-enregistrement .pastille{background:var(--rouge);animation:pulse 1.3s infinite}
+.etat-pause .pastille{background:var(--jaune)}
+.etat-terminé .pastille{background:var(--gris)}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 8px rgba(195,53,43,.18)}50%{box-shadow:0 0 0 20px rgba(195,53,43,0)}}
+@media (prefers-reduced-motion: reduce){ .etat-enregistrement .pastille{animation:none} }
+
+.libelle{font-size:30px;font-weight:900;letter-spacing:-.01em;line-height:1.1}
+.sous{font-size:16px;opacity:.82;margin-top:8px}
+.chrono{font-variant-numeric:tabular-nums;font-size:44px;font-weight:900;margin-top:10px}
+
+.zone-actions{display:flex;flex-direction:column;gap:14px}
+.gros{min-height:72px;border:0;border-radius:20px;font-size:21px;font-weight:900;color:#0b1328;
+  background:#fff;cursor:pointer;padding:0 18px}
+.gros:disabled{opacity:.45}
+.gros.primaire{background:linear-gradient(135deg,#ff7a18,#ffd24a)}
+.gros.danger{background:#c3352b;color:#fff}
+
+.aide{font-size:15px;line-height:1.55;opacity:.85;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:16px}
+.aide p{margin:0 0 7px} .aide p:last-child{margin:0}
+
+.journal{font-size:13px;opacity:.7;line-height:1.5;white-space:pre-wrap}

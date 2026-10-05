@@ -1,0 +1,14 @@
+{
+  "appId": "fr.mesabeilles.vocal",
+  "appName": "Mes Abeilles Vocal",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": false }
+  }
+}

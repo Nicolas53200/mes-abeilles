@@ -1,0 +1,45 @@
+<!-- EXTRAITS à intégrer dans android/app/src/main/AndroidManifest.xml APRÈS
+     « npx cap add android ». Ne pas remplacer tout le fichier : ajouter
+     seulement les permissions et le service ci-dessous.
+
+     Principe de permissions minimales (§10/§24) :
+       - RECORD_AUDIO : indispensable au Mode Rucher.
+       - FOREGROUND_SERVICE + FOREGROUND_SERVICE_MICROPHONE : exigés par
+         Android 14+ pour capter le micro écran éteint/verrouillé.
+       - PAS de permission INTERNET : garantie forte qu'aucun audio ne sort.
+         (Si une dépendance l'exigeait, la retirer explicitement — voir la
+         ligne tools:node="remove" ci-dessous.)
+-->
+
+<!-- 1) Permissions, juste sous la balise <manifest ...> -->
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<!-- Bluetooth : nécessaire seulement pour détecter/choisir un micro BT selon
+     l'appareil. À n'ajouter que si les essais le réclament. -->
+<!-- <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" /> -->
+
+<!-- Retrait explicite d'INTERNET (Capacitor peut l'ajouter par défaut) :
+     le compagnon ne communique avec aucun serveur. -->
+<uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+<!-- (penser à xmlns:tools="http://schemas.android.com/tools" sur <manifest>) -->
+
+<!-- 2) Service de premier plan « microphone », dans <application> ...>
+     Le plugin d'enregistrement en arrière-plan fournit en général sa propre
+     classe de service ; adapter android:name au plugin réellement retenu. -->
+<service
+    android:name="com.mesabeilles.vocal.RucherForegroundService"
+    android:foregroundServiceType="microphone"
+    android:exported="false" />
+
+<!--
+  RAPPEL DE COMPORTEMENT (vérifié, developer.android.com) :
+  Sur Android 14+, un service de premier plan de type « microphone » ne peut
+  PAS être démarré alors que l'app est en arrière-plan (SecurityException).
+  → Il DOIT être lancé pendant que l'app est au premier plan.
+  C'est exactement le déroulé prévu : l'apiculteur appuie sur « Démarrer le
+  Mode Rucher » (app au premier plan), PUIS range le téléphone. Une fois
+  démarrée, la captation continue écran éteint / verrouillé.
+  Une notification permanente « Mode Rucher actif » accompagne le service
+  (obligatoire, et utile pour rassurer l'apiculteur).
+-->
